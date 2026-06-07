@@ -97,11 +97,13 @@ Any mock mode must be clearly named in UI/dev logs or environment config.
 
 Do not start story implementation directly on `main`.
 
-Before making changes for a new story:
+Before making changes for a new story or a new tech-lead spec:
 
 - run `git status --short --branch`
-- if you are on `main`, create a story branch before editing, for example `git switch -c story/1-phone-recording-spike`
-- if there are existing uncommitted changes, inspect them before branching and do not overwrite or discard work you did not create
+- if the worktree is not clean, inspect the changes before doing anything else and do not overwrite or discard work you did not create
+- switch back to `main`: `git switch main`
+- pull the latest remote main: `git pull --ff-only`
+- create a new story branch from updated `main`, for example `git switch -c story/5-transcript-visibility`
 - if the existing changes appear to belong to another story or agent, stop and ask the tech lead how to split them
 
 Keep each branch scoped to one story or one explicitly assigned story group. Do not mix frontend story groups unless the tech lead has accepted that scope.

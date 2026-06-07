@@ -1,4 +1,4 @@
-import type { Job, LocalNote } from './types'
+import type { Job, LocalNote, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -31,6 +31,25 @@ export async function getCurrentJob(): Promise<Job> {
   if (!res.ok) throw new Error(`GET /api/jobs/current → ${res.status}`)
   return res.json() as Promise<Job>
 }
+
+// GET /api/jobs/:jobId/notes/:noteId/transcript
+export interface TranscriptResponse {
+  noteId: string
+  status: TranscriptStatus
+  text: string | null
+  errorCode: string | null
+}
+
+export async function getNoteTranscript(jobId: string, serverNoteId: string): Promise<TranscriptResponse> {
+  if (USE_MOCK) {
+    await delay(300)
+    return { noteId: serverNoteId, status: 'waiting', text: null, errorCode: null }
+  }
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/notes/${serverNoteId}/transcript`)
+  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/notes/${serverNoteId}/transcript → ${res.status}`)
+  return res.json() as Promise<TranscriptResponse>
+}
+
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
   if (USE_MOCK) {
