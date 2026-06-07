@@ -6,6 +6,7 @@ export type LocalNoteState =
   | 'upload_needs_attention'
 
 export type TranscriptStatus = 'waiting' | 'transcribing' | 'ready' | 'failed'
+export type ExtractionStatus = 'waiting' | 'extracting' | 'ready' | 'failed'
 
 export interface LocalNote {
   clientNoteId: string
@@ -23,6 +24,7 @@ export interface LocalNote {
   transcriptStatus: TranscriptStatus | null
   transcriptText: string | null
   transcriptErrorCode: string | null
+  extractionStatus: ExtractionStatus | null
 }
 
 export interface Job {
@@ -30,4 +32,36 @@ export interface Job {
   title: string
   roughLocationOrLabel: string
   status: 'active' | 'completed' | 'archived'
+}
+
+export type FactType =
+  | 'ordered_material'
+  | 'used_material'
+  | 'leftover_material'
+  | 'supplier_delivery_note'
+  | 'customer_change'
+  | 'watch_out'
+  | 'unclear'
+
+export type ConfidenceLabel = 'high' | 'medium' | 'low'
+
+export interface CandidateFact {
+  id: string
+  jobId: string
+  sourceNoteIds: string[]
+  sourceTranscriptIds: string[]
+  factType: FactType
+  status: 'draft' | 'confirmed' | 'corrected' | 'rejected' | 'superseded' | 'unclear'
+  summary: string
+  materialName: string | null
+  quantity: number | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+  confidenceLabel: ConfidenceLabel
+  confidenceReason: string | null
+  uncertaintyFlags: string[]
+  createdAt: string
+  updatedAt: string
 }
