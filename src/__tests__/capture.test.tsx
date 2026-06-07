@@ -12,6 +12,8 @@ import type { UploadNoteResponse } from '../api'
 vi.mock('../api', () => ({
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
+  getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+  getNoteTranscript: vi.fn(),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -94,7 +96,7 @@ describe('CaptureScreen', () => {
   it('shows the storage explainer on first visit and hides it after dismissal', async () => {
     const user = userEvent.setup()
     render(<CaptureScreen job={JOB} />)
-    expect(screen.getByText(/saved on this phone/i)).toBeInTheDocument()
+    expect(screen.getByText(/save the recording during the pilot/i)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /got it/i }))
     expect(screen.queryByRole('button', { name: /got it/i })).not.toBeInTheDocument()
   })

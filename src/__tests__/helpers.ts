@@ -17,6 +17,9 @@ export function makeNote(overrides: Partial<LocalNote> = {}): LocalNote {
     lastUploadAttemptAt: null,
     serverNoteId: null,
     lastErrorCode: null,
+    transcriptStatus: null,
+    transcriptText: null,
+    transcriptErrorCode: null,
     ...overrides,
   }
 }

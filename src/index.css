@@ -335,6 +335,65 @@ button { cursor: pointer; font-family: inherit; }
   font-weight: 600;
 }
 
+/* ── Notes heading row (with refresh button) ── */
+
+.notes-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 0.6rem;
+}
+
+.notes-heading-row .notes-heading {
+  margin: 0;
+}
+
+.btn-refresh-transcripts {
+  background: none;
+  border: none;
+  color: #1a6f38;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* ── Transcript section inside note card ── */
+
+.transcript-section {
+  border-top: 1px solid #f0f0ec;
+  margin-top: 0.4rem;
+  padding-top: 0.45rem;
+}
+
+.transcript-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin: 0 0 0.25rem;
+}
+
+.transcript-text {
+  font-size: 0.875rem;
+  color: #222;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.transcript-pending {
+  font-size: 0.75rem;
+  color: #888;
+  margin: 0.25rem 0 0;
+}
+
+.transcript-failed {
+  font-size: 0.75rem;
+  color: #92400e;
+  margin: 0.25rem 0 0;
+}
+
 /* ── Recording spike page (kept for reference) ── */
 
 .spike-page {

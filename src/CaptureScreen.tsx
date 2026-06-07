@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
+import { useTranscriptPoll } from './useTranscriptPoll'
 import type { Job, LocalNote } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
@@ -63,7 +64,37 @@ function NoteCard({
           </button>
         )}
       </div>
+      {note.localState === 'uploaded' && note.serverNoteId && (
+        <TranscriptSection note={note} />
+      )}
     </div>
+  )
+}
+
+function TranscriptSection({ note }: { note: LocalNote }) {
+  const { transcriptStatus, transcriptText } = note
+  if (transcriptStatus === 'ready' && transcriptText) {
+    return (
+      <div className="transcript-section">
+        <p className="transcript-label">What the system heard</p>
+        <p className="transcript-text">{transcriptText}</p>
+      </div>
+    )
+  }
+  if (transcriptStatus === 'failed') {
+    return (
+      <p className="transcript-failed">
+        Transcription failed — recording is still saved
+      </p>
+    )
+  }
+  if (transcriptStatus === 'transcribing') {
+    return (
+      <p className="transcript-pending">Transcribing…</p>
+    )
+  }
+  return (
+    <p className="transcript-pending">Waiting for transcript</p>
   )
 }
 
@@ -71,9 +102,7 @@ function StorageExplainer({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="explainer" role="region" aria-label="About your recordings">
       <p className="explainer-text">
-        Your notes are saved on this phone as soon as you stop recording.
-        They upload when you have a signal. We keep the original audio during
-        the pilot to help improve transcriptions — it is not shared.
+        We save the recording during the pilot so we can check what was captured and improve the job memory.
       </p>
       <button className="explainer-dismiss" onClick={onDismiss}>Got it</button>
     </div>
@@ -107,6 +136,7 @@ export default function CaptureScreen({ job }: { job: Job }) {
   }, [])
 
   const { syncAll, retryNote } = useSync(refreshNotes)
+  const { refreshNow: refreshTranscripts } = useTranscriptPoll(notes, job.id, refreshNotes)
   const recorder = useRecorder()
 
   const handleRecord = useCallback(async () => {
@@ -125,6 +155,9 @@ export default function CaptureScreen({ job }: { job: Job }) {
         lastUploadAttemptAt: null,
         serverNoteId: null,
         lastErrorCode: null,
+        transcriptStatus: null,
+        transcriptText: null,
+        transcriptErrorCode: null,
       }
       await saveNote(note)
       await refreshNotes()
@@ -209,7 +242,14 @@ export default function CaptureScreen({ job }: { job: Job }) {
       </div>
 
       <section className="notes-section">
-        <h2 className="notes-heading">Recent notes</h2>
+        <div className="notes-heading-row">
+          <h2 className="notes-heading">Recent notes</h2>
+          {notes.some(n => n.localState === 'uploaded' && n.serverNoteId) && (
+            <button className="btn-refresh-transcripts" onClick={refreshTranscripts}>
+              Refresh
+            </button>
+          )}
+        </div>
         {notes.length === 0 ? (
           <p className="notes-empty">No notes yet. Tap Record to add one.</p>
         ) : (

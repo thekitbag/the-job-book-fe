@@ -5,6 +5,8 @@ export type LocalNoteState =
   | 'upload_failed'
   | 'upload_needs_attention'
 
+export type TranscriptStatus = 'waiting' | 'transcribing' | 'ready' | 'failed'
+
 export interface LocalNote {
   clientNoteId: string
   jobId: string
@@ -18,6 +20,9 @@ export interface LocalNote {
   lastUploadAttemptAt: string | null
   serverNoteId: string | null
   lastErrorCode: string | null
+  transcriptStatus: TranscriptStatus | null
+  transcriptText: string | null
+  transcriptErrorCode: string | null
 }
 
 export interface Job {
