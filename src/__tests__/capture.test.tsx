@@ -12,7 +12,8 @@ import type { UploadNoteResponse } from '../api'
 vi.mock('../api', () => ({
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
-  getNoteTranscript: vi.fn().mockResolvedValue({ noteId: '', status: 'waiting', text: null, errorCode: null }),
+  getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+  getNoteTranscript: vi.fn(),
 }))
 
 vi.mock('../useRecorder', () => {

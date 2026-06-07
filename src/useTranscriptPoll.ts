@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { getNoteTranscript } from './api'
+import { getJobNoteStatuses, getNoteTranscript } from './api'
 import { patchNote } from './db'
 import type { LocalNote, TranscriptStatus } from './types'
 
 const POLL_INTERVAL_MS = 10_000
 const FINAL: Set<TranscriptStatus> = new Set(['ready', 'failed'])
 
-function isPollable(note: LocalNote): note is LocalNote & { serverNoteId: string } {
+function isPollable(note: LocalNote): boolean {
   return (
     note.localState === 'uploaded' &&
     note.serverNoteId !== null &&
@@ -31,29 +31,43 @@ export function useTranscriptPoll(
     if (eligible.length === 0) return
     polling.current = true
     try {
+      // One list call for lightweight status across all notes.
+      // BE field is `id`, not `noteId`.
+      const rows = await getJobNoteStatuses(jobId)
       let changed = false
+
       await Promise.all(
-        eligible.map(async (note) => {
+        rows.map(async (row) => {
+          if (!row.transcript) return
+          const local = eligible.find(n => n.serverNoteId === row.id)
+          if (!local) return
+
+          const newStatus = row.transcript.status
+          if (newStatus === local.transcriptStatus) return
+
           try {
-            const result = await getNoteTranscript(jobId, note.serverNoteId)
-            if (
-              result.status !== note.transcriptStatus ||
-              result.text !== note.transcriptText ||
-              result.errorCode !== note.transcriptErrorCode
-            ) {
-              await patchNote(note.clientNoteId, {
-                transcriptStatus: result.status,
-                transcriptText: result.text,
-                transcriptErrorCode: result.errorCode,
+            if (FINAL.has(newStatus)) {
+              // Fetch full text and errorCode only when the note has reached a final state.
+              const detail = await getNoteTranscript(jobId, row.id)
+              await patchNote(local.clientNoteId, {
+                transcriptStatus: detail.status,
+                transcriptText: detail.text,
+                transcriptErrorCode: detail.errorCode,
               })
-              changed = true
+            } else {
+              // waiting / transcribing — status-only update, no text call needed.
+              await patchNote(local.clientNoteId, { transcriptStatus: newStatus })
             }
+            changed = true
           } catch {
             // swallow per-note errors — will retry on next interval
           }
         }),
       )
+
       if (changed) onChangedRef.current()
+    } catch {
+      // swallow list-fetch errors — will retry on next interval
     } finally {
       polling.current = false
     }

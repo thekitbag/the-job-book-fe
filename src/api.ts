@@ -32,7 +32,25 @@ export async function getCurrentJob(): Promise<Job> {
   return res.json() as Promise<Job>
 }
 
-// GET /api/jobs/:jobId/notes/:noteId/transcript
+// GET /api/jobs/:jobId/notes — lightweight status poll, one call per cycle.
+// BE field is `id`, not `noteId`. transcript carries status only; no text here.
+export interface NoteListRow {
+  id: string
+  clientNoteId: string
+  transcript: { status: TranscriptStatus } | null
+}
+
+export async function getJobNoteStatuses(jobId: string): Promise<NoteListRow[]> {
+  if (USE_MOCK) {
+    await delay(300)
+    return []
+  }
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/notes`)
+  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/notes → ${res.status}`)
+  return res.json() as Promise<NoteListRow[]>
+}
+
+// GET /api/jobs/:jobId/notes/:noteId/transcript — fetched only when status is ready or failed.
 export interface TranscriptResponse {
   noteId: string
   status: TranscriptStatus

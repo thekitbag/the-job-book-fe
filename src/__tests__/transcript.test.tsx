@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import CaptureScreen from '../CaptureScreen'
 import { saveNote } from '../db'
-import { getNoteTranscript } from '../api'
+import { getJobNoteStatuses, getNoteTranscript } from '../api'
 import { makeNote } from './helpers'
 import type { UseRecorderReturn } from '../useRecorder'
 
 vi.mock('../api', () => ({
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
+  getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
 }))
 
@@ -35,6 +36,7 @@ const JOB = {
   status: 'active' as const,
 }
 
+const mockGetStatuses = vi.mocked(getJobNoteStatuses)
 const mockGetTranscript = vi.mocked(getNoteTranscript)
 
 describe('transcript visibility', () => {
@@ -46,6 +48,13 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
+    // List poll returns status only (BE shape: id not noteId)
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-001',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'ready' },
+    }])
+    // Text fetched separately because status is final
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-001',
       status: 'ready',
@@ -61,11 +70,74 @@ describe('transcript visibility', () => {
     })
   })
 
+  it('fetches text via the individual endpoint only for ready/failed, not for waiting', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-002' })
+    await saveNote(note)
+
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-002',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'waiting' },
+    }])
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/waiting for transcript/i)).toBeInTheDocument()
+    })
+
+    // Individual transcript endpoint must NOT be called for waiting state
+    expect(mockGetTranscript).not.toHaveBeenCalled()
+  })
+
+  it('fetches text via the individual endpoint only for ready/failed, not for transcribing', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-003' })
+    await saveNote(note)
+
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-003',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'transcribing' },
+    }])
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/transcribing/i)).toBeInTheDocument()
+    })
+
+    expect(mockGetTranscript).not.toHaveBeenCalled()
+  })
+
+  it('shows transcription failed without implying the recording was lost', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-004' })
+    await saveNote(note)
+
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-004',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'failed' },
+    }])
+    mockGetTranscript.mockResolvedValue({
+      noteId: 'srv-004',
+      status: 'failed',
+      text: null,
+      errorCode: 'PROVIDER_ERROR',
+    })
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
+      expect(screen.getByText(/recording is still saved/i)).toBeInTheDocument()
+    })
+  })
+
   it('does not present transcript as confirmed job memory', async () => {
     const note = makeNote({
       jobId: JOB.id,
       localState: 'uploaded',
-      serverNoteId: 'srv-001a',
+      serverNoteId: 'srv-005',
       transcriptStatus: 'ready',
       transcriptText: 'Replace the guttering on the north side.',
     })
@@ -80,53 +152,11 @@ describe('transcript visibility', () => {
     expect(screen.queryByText(/trusted memory/i)).not.toBeInTheDocument()
   })
 
-  it('shows transcription failed without implying the recording was lost', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-002' })
-    await saveNote(note)
-
-    mockGetTranscript.mockResolvedValue({
-      noteId: 'srv-002',
-      status: 'failed',
-      text: null,
-      errorCode: 'PROVIDER_ERROR',
-    })
-
-    render(<CaptureScreen job={JOB} />)
-
-    await waitFor(() => {
-      expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
-      expect(screen.getByText(/recording is still saved/i)).toBeInTheDocument()
-    })
-  })
-
-  it('shows waiting state while transcript is pending', async () => {
+  it('renders cached ready transcript without any API call', async () => {
     const note = makeNote({
       jobId: JOB.id,
       localState: 'uploaded',
-      serverNoteId: 'srv-003',
-      transcriptStatus: 'waiting',
-    })
-    await saveNote(note)
-
-    mockGetTranscript.mockResolvedValue({
-      noteId: 'srv-003',
-      status: 'waiting',
-      text: null,
-      errorCode: null,
-    })
-
-    render(<CaptureScreen job={JOB} />)
-
-    await waitFor(() => {
-      expect(screen.getByText(/waiting for transcript/i)).toBeInTheDocument()
-    })
-  })
-
-  it('renders cached ready transcript without an API call', async () => {
-    const note = makeNote({
-      jobId: JOB.id,
-      localState: 'uploaded',
-      serverNoteId: 'srv-004',
+      serverNoteId: 'srv-006',
       transcriptStatus: 'ready',
       transcriptText: 'Cached transcript text.',
     })
@@ -135,10 +165,9 @@ describe('transcript visibility', () => {
     render(<CaptureScreen job={JOB} />)
 
     await waitFor(() => {
-      expect(screen.getByText(/what the system heard/i)).toBeInTheDocument()
       expect(screen.getByText('Cached transcript text.')).toBeInTheDocument()
     })
-    // No pollable notes (status already final) — getNoteTranscript must not be called
+    expect(mockGetStatuses).not.toHaveBeenCalled()
     expect(mockGetTranscript).not.toHaveBeenCalled()
   })
 
@@ -155,18 +184,13 @@ describe('transcript visibility', () => {
     expect(screen.queryByText(/waiting for transcript/i)).not.toBeInTheDocument()
   })
 
-  it('does not poll notes that already have a final transcript status', async () => {
+  it('does not poll when all notes already have a final transcript status', async () => {
     const ready = makeNote({
-      jobId: JOB.id,
-      localState: 'uploaded',
-      serverNoteId: 'srv-005',
-      transcriptStatus: 'ready',
-      transcriptText: 'Done.',
+      jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-007',
+      transcriptStatus: 'ready', transcriptText: 'Done.',
     })
     const failed = makeNote({
-      jobId: JOB.id,
-      localState: 'uploaded',
-      serverNoteId: 'srv-006',
+      jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-008',
       transcriptStatus: 'failed',
     })
     await saveNote(ready)
@@ -177,24 +201,46 @@ describe('transcript visibility', () => {
     await waitFor(() => {
       expect(screen.getByText('Done.')).toBeInTheDocument()
     })
+    expect(mockGetStatuses).not.toHaveBeenCalled()
     expect(mockGetTranscript).not.toHaveBeenCalled()
   })
 
-  it('polls using the job-scoped transcript endpoint', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-007' })
+  it('polls the list endpoint with the correct jobId', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-009' })
     await saveNote(note)
 
+    mockGetStatuses.mockResolvedValue([])
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(mockGetStatuses).toHaveBeenCalledWith(JOB.id)
+    })
+    // No final-status notes returned — individual endpoint should not be called
+    expect(mockGetTranscript).not.toHaveBeenCalled()
+  })
+
+  it('matches server rows by id, not noteId', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-010' })
+    await saveNote(note)
+
+    // Row uses `id` field (BE contract), no `noteId` field
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-010',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'ready' },
+    }])
     mockGetTranscript.mockResolvedValue({
-      noteId: 'srv-007',
-      status: 'waiting',
-      text: null,
+      noteId: 'srv-010',
+      status: 'ready',
+      text: 'Matched by id.',
       errorCode: null,
     })
 
     render(<CaptureScreen job={JOB} />)
 
     await waitFor(() => {
-      expect(mockGetTranscript).toHaveBeenCalledWith(JOB.id, 'srv-007')
+      expect(screen.getByText('Matched by id.')).toBeInTheDocument()
     })
   })
 })

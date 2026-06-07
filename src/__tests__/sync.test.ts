@@ -9,6 +9,7 @@ import type { UploadNoteResponse } from '../api'
 vi.mock('../api', () => ({
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
+  getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
 }))
 
