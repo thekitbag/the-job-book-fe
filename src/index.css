@@ -1,0 +1,422 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  background: #f4f4f0;
+  color: #1a1a1a;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root { min-height: 100svh; }
+
+button { cursor: pointer; font-family: inherit; }
+
+/* ── Loading / error states ── */
+
+.app-loading,
+.app-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100svh;
+  padding: 2rem;
+  text-align: center;
+  gap: 0.5rem;
+}
+
+.app-error-detail { font-size: 0.85rem; color: #666; }
+
+.app-error button {
+  margin-top: 1rem;
+  padding: 0.6rem 1.5rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+/* ── Capture page layout ── */
+
+.capture-page {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 2rem;
+}
+
+/* ── Header ── */
+
+.capture-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e5e0;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.capture-app-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a6f38;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.offline-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+
+/* ── Job info ── */
+
+.capture-job {
+  padding: 1rem 1rem 0;
+}
+
+.capture-job-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 0.2rem;
+  line-height: 1.2;
+}
+
+.capture-job-label {
+  font-size: 0.875rem;
+  color: #555;
+  margin: 0 0 1rem;
+}
+
+/* ── Storage explainer ── */
+
+.explainer {
+  margin: 0 1rem 1rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.explainer-text {
+  font-size: 0.875rem;
+  color: #78350f;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.explainer-dismiss {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid #d97706;
+  color: #b45309;
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* ── Recording controls ── */
+
+.capture-controls {
+  padding: 0 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Large record button — thumb-friendly */
+.record-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid #1a6f38;
+  background: #fff;
+  color: #1a6f38;
+  font-size: 0.9rem;
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.record-btn:active {
+  background: #1a6f38;
+  color: #fff;
+}
+
+.record-btn-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #b91c1c;
+}
+
+/* Active recording area */
+.recording-active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: #b91c1c;
+  font-size: 0.95rem;
+}
+
+.dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #b91c1c;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.recording-elapsed {
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.recording-max {
+  font-size: 1rem;
+  color: #888;
+  font-weight: 400;
+}
+
+.stop-btn {
+  min-width: 120px;
+  min-height: 52px;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stop-btn:disabled {
+  opacity: 0.5;
+}
+
+.permission-error {
+  font-size: 0.85rem;
+  color: #b91c1c;
+  text-align: center;
+  margin: 0;
+  max-width: 280px;
+}
+
+.unsupported-msg {
+  padding: 2rem 1rem;
+  font-size: 0.95rem;
+  color: #555;
+  text-align: center;
+}
+
+/* ── Notes list ── */
+
+.notes-section {
+  flex: 1;
+  padding: 0 1rem;
+}
+
+.notes-heading {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin: 0 0 0.6rem;
+}
+
+.notes-empty {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin: 0;
+}
+
+.notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Note card ── */
+
+.note-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.note-card-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: #444;
+}
+
+.note-time { font-weight: 600; }
+
+.note-duration, .note-size { color: #888; }
+
+.note-card-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* State badges */
+.note-state {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.note-state--local  { background: #e0f2fe; color: #0c4a6e; }
+.note-state--waiting { background: #fef9c3; color: #713f12; }
+.note-state--uploading { background: #e0f2fe; color: #0c4a6e; }
+.note-state--synced { background: #d1fae5; color: #14532d; }
+.note-state--failed { background: #fef3c7; color: #92400e; }
+.note-state--attention { background: #fee2e2; color: #7f1d1d; }
+
+.btn-retry {
+  background: none;
+  border: 1px solid #ef4444;
+  color: #b91c1c;
+  border-radius: 5px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Recording spike page (kept for reference) ── */
+
+.spike-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+.spike-page h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 0.25rem; }
+.subtitle { color: #666; margin: 0 0 1.5rem; font-size: 0.9rem; }
+.spike-page h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
+.spike-page h3 { font-size: 0.9rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.card-info { background: #f9f9f6; }
+
+.status-box {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.status-ok      { background: #d4edda; color: #155724; }
+.status-error   { background: #f8d7da; color: #721c24; }
+.status-neutral { background: #e2e3e5; color: #383d41; }
+
+.error-text { color: #721c24; font-size: 0.85rem; margin: 0.5rem 0 0; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 1.5rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-record   { background: #1a6f38; color: #fff; min-width: 200px; min-height: 64px; font-size: 1.1rem; }
+.btn-stop     { background: #b91c1c; color: #fff; min-width: 140px; min-height: 64px; font-size: 1.1rem; }
+.btn-secondary { background: #e5e7eb; color: #1a1a1a; }
+.btn-download  { background: #1e40af; color: #fff; }
+
+.recording-controls { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+.mime-info { font-size: 0.85rem; color: #555; margin-bottom: 0.75rem; }
+
+dl.result-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+}
+dt { color: #666; font-weight: 500; }
+dd { margin: 0; word-break: break-all; }
+
+code {
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 0.8em;
+  background: #f0f0f0;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.audio-player { width: 100%; margin-bottom: 0.75rem; }
+
+@media (max-width: 360px) {
+  .capture-page,
+  .spike-page { padding-left: 0.75rem; padding-right: 0.75rem; }
+}
