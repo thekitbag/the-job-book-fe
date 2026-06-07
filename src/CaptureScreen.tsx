@@ -61,16 +61,27 @@ function TranscriptSection({ note }: { note: LocalNote }) {
 }
 
 function FactCard({ fact }: { fact: CandidateFact }) {
-  const isUnclear = fact.factType === 'unclear' || fact.status === 'unclear' || fact.uncertaintyFlags.length > 0
-  const showLow = fact.confidenceLabel === 'low' && !isUnclear
-  const showMedium = fact.confidenceLabel === 'medium' && !isUnclear
+  // Badge precedence (tech lead steer 2025-06-07):
+  // unclear type/status → Unclear
+  // low confidence → Low confidence
+  // medium confidence OR any uncertainty flags → Needs checking
+  // high with no flags → no badge
+  const isUnclear = fact.factType === 'unclear' || fact.status === 'unclear'
+  let badge: 'unclear' | 'low' | 'medium' | null = null
+  if (isUnclear) {
+    badge = 'unclear'
+  } else if (fact.confidenceLabel === 'low') {
+    badge = 'low'
+  } else if (fact.confidenceLabel === 'medium' || fact.uncertaintyFlags.length > 0) {
+    badge = 'medium'
+  }
   return (
     <div className={`fact-card fact-card--${fact.confidenceLabel}`}>
       <p className="fact-summary">{fact.summary}</p>
       <div className="fact-meta">
-        {isUnclear && <span className="fact-badge fact-badge--unclear">Unclear</span>}
-        {showLow && <span className="fact-badge fact-badge--low">Low confidence</span>}
-        {showMedium && <span className="fact-badge fact-badge--medium">Needs checking</span>}
+        {badge === 'unclear' && <span className="fact-badge fact-badge--unclear">Unclear</span>}
+        {badge === 'low' && <span className="fact-badge fact-badge--low">Low confidence</span>}
+        {badge === 'medium' && <span className="fact-badge fact-badge--medium">Needs checking</span>}
         <span className="fact-source">From what the system heard</span>
       </div>
     </div>
@@ -80,9 +91,11 @@ function FactCard({ fact }: { fact: CandidateFact }) {
 function DraftFactsSection({
   note,
   facts,
+  factsLoadFailed,
 }: {
   note: LocalNote
   facts: CandidateFact[]
+  factsLoadFailed: boolean
 }) {
   // Extraction only starts after transcript succeeds — don't show section before that.
   if (note.transcriptStatus !== 'ready') return null
@@ -97,6 +110,10 @@ function DraftFactsSection({
 
   if (note.extractionStatus !== 'ready') {
     return <p className="extraction-pending">Looking for job facts…</p>
+  }
+
+  if (factsLoadFailed) {
+    return <p className="extraction-failed">Could not load facts — try refreshing</p>
   }
 
   const noteFacts = facts.filter(f => f.sourceNoteIds.includes(note.serverNoteId!))
@@ -124,11 +141,13 @@ function NoteCard({
   online,
   onRetry,
   facts,
+  factsLoadFailed,
 }: {
   note: LocalNote
   online: boolean
   onRetry: (id: string) => void
   facts: CandidateFact[]
+  factsLoadFailed: boolean
 }) {
   return (
     <div className="note-card">
@@ -148,7 +167,7 @@ function NoteCard({
       {note.localState === 'uploaded' && note.serverNoteId && (
         <>
           <TranscriptSection note={note} />
-          <DraftFactsSection note={note} facts={facts} />
+          <DraftFactsSection note={note} facts={facts} factsLoadFailed={factsLoadFailed} />
         </>
       )}
     </div>
@@ -173,6 +192,7 @@ export default function CaptureScreen({ job }: { job: Job }) {
     () => localStorage.getItem(EXPLAINER_KEY) !== 'true',
   )
   const [facts, setFacts] = useState<CandidateFact[]>([])
+  const [factsLoadFailed, setFactsLoadFailed] = useState(false)
 
   const refreshNotes = useCallback(async () => {
     const fresh = await getNotesForJob(job.id)
@@ -198,21 +218,25 @@ export default function CaptureScreen({ job }: { job: Job }) {
     n => n.localState === 'uploaded' && n.extractionStatus === 'ready',
   ).length
 
+  const fetchFacts = useCallback(() => {
+    getDraftFacts(job.id)
+      .then(data => { setFacts(data); setFactsLoadFailed(false) })
+      .catch(() => setFactsLoadFailed(true))
+  }, [job.id])
+
   useEffect(() => {
     if (readyExtractionCount === 0) return
-    getDraftFacts(job.id).then(setFacts).catch(() => {})
-  }, [readyExtractionCount, job.id])
+    fetchFacts()
+  }, [readyExtractionCount, fetchFacts])
 
   const { syncAll, retryNote } = useSync(refreshNotes)
   const { refreshNow: refreshStatus } = useTranscriptPoll(notes, job.id, refreshNotes)
   const recorder = useRecorder()
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(() => {
     refreshStatus()
-    if (readyExtractionCount > 0) {
-      getDraftFacts(job.id).then(setFacts).catch(() => {})
-    }
-  }, [refreshStatus, readyExtractionCount, job.id])
+    if (readyExtractionCount > 0) fetchFacts()
+  }, [refreshStatus, readyExtractionCount, fetchFacts])
 
   const handleRecord = useCallback(async () => {
     await recorder.start(async (result) => {
@@ -332,7 +356,7 @@ export default function CaptureScreen({ job }: { job: Job }) {
           <ul className="notes-list">
             {notes.map(note => (
               <li key={note.clientNoteId}>
-                <NoteCard note={note} online={online} onRetry={retryNote} facts={facts} />
+                <NoteCard note={note} online={online} onRetry={retryNote} facts={facts} factsLoadFailed={factsLoadFailed} />
               </li>
             ))}
           </ul>

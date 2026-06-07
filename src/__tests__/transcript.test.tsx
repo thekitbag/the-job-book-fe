@@ -53,12 +53,11 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
-    // List poll returns status only (BE shape: id not noteId)
+    // List poll returns status only (BE shape: id not noteId; extractionStatus nested inside transcript)
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-001',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready' },
-      extraction: null,
+      transcript: { status: 'ready', extractionStatus: null },
     }])
     // Text fetched separately because status is final
     mockGetTranscript.mockResolvedValue({
@@ -83,8 +82,7 @@ describe('transcript visibility', () => {
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-002',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'waiting' },
-      extraction: null,
+      transcript: { status: 'waiting', extractionStatus: null },
     }])
 
     render(<CaptureScreen job={JOB} />)
@@ -104,8 +102,7 @@ describe('transcript visibility', () => {
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-003',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'transcribing' },
-      extraction: null,
+      transcript: { status: 'transcribing', extractionStatus: null },
     }])
 
     render(<CaptureScreen job={JOB} />)
@@ -124,8 +121,7 @@ describe('transcript visibility', () => {
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-004',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'failed' },
-      extraction: null,
+      transcript: { status: 'failed', extractionStatus: null },
     }])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-004',
@@ -235,12 +231,11 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-010' })
     await saveNote(note)
 
-    // Row uses `id` field (BE contract), no `noteId` field
+    // Row uses `id` field (BE contract); extractionStatus nested inside transcript
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-010',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready' },
-      extraction: null,
+      transcript: { status: 'ready', extractionStatus: null },
     }])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-010',

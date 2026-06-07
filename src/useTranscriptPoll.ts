@@ -7,6 +7,7 @@ const POLL_INTERVAL_MS = 10_000
 const TRANSCRIPT_FINAL: Set<TranscriptStatus> = new Set(['ready', 'failed'])
 const EXTRACTION_FINAL: Set<ExtractionStatus> = new Set(['ready', 'failed'])
 
+
 function isPollable(note: LocalNote): boolean {
   if (note.localState !== 'uploaded' || !note.serverNoteId) return false
   const transcriptDone = note.transcriptStatus !== null && TRANSCRIPT_FINAL.has(note.transcriptStatus)
@@ -62,13 +63,15 @@ export function useTranscriptPoll(
             }
 
             // ── Extraction status ────────────────────────────────────────────
+            // BE nests extractionStatus inside the transcript summary object.
             // Only process once transcript is ready (extraction depends on it).
+            const beExtractionStatus = row.transcript?.extractionStatus ?? null
             if (
               local.transcriptStatus === 'ready' &&
-              row.extraction &&
-              row.extraction.status !== local.extractionStatus
+              beExtractionStatus !== null &&
+              beExtractionStatus !== local.extractionStatus
             ) {
-              await patchNote(local.clientNoteId, { extractionStatus: row.extraction.status })
+              await patchNote(local.clientNoteId, { extractionStatus: beExtractionStatus })
               changed = true
             }
           } catch {

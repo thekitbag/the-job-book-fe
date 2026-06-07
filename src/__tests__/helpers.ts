@@ -38,7 +38,7 @@ export function makeFact(overrides: Partial<CandidateFact> = {}): CandidateFact 
     status: 'draft',
     summary: 'Used 3 bags of cement',
     materialName: 'cement',
-    quantity: 3,
+    quantity: '3',
     unit: 'bags',
     supplierName: null,
     deliveryTiming: null,

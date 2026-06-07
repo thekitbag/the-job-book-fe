@@ -33,12 +33,11 @@ export async function getCurrentJob(): Promise<Job> {
 }
 
 // GET /api/jobs/:jobId/notes — lightweight status poll, one call per cycle.
-// BE field is `id`, not `noteId`. transcript/extraction carry status only; no text here.
+// BE field is `id`, not `noteId`. Extraction status is nested inside transcript, not a separate key.
 export interface NoteListRow {
   id: string
   clientNoteId: string
-  transcript: { status: TranscriptStatus } | null
-  extraction: { status: ExtractionStatus } | null
+  transcript: { status: TranscriptStatus; extractionStatus: ExtractionStatus | null } | null
 }
 
 export async function getJobNoteStatuses(jobId: string): Promise<NoteListRow[]> {
@@ -51,14 +50,14 @@ export async function getJobNoteStatuses(jobId: string): Promise<NoteListRow[]> 
   return res.json() as Promise<NoteListRow[]>
 }
 
-// GET /api/jobs/:jobId/candidate-facts — all draft facts for the job, matched to notes by sourceNoteIds.
+// GET /api/jobs/:jobId/facts — all draft facts for the job, matched to notes by sourceNoteIds.
 export async function getDraftFacts(jobId: string): Promise<CandidateFact[]> {
   if (USE_MOCK) {
     await delay(300)
     return []
   }
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/candidate-facts`)
-  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/candidate-facts → ${res.status}`)
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/facts`)
+  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/facts → ${res.status}`)
   return res.json() as Promise<CandidateFact[]>
 }
 

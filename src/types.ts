@@ -54,7 +54,7 @@ export interface CandidateFact {
   status: 'draft' | 'confirmed' | 'corrected' | 'rejected' | 'superseded' | 'unclear'
   summary: string
   materialName: string | null
-  quantity: number | null
+  quantity: string | null
   unit: string | null
   supplierName: string | null
   deliveryTiming: string | null

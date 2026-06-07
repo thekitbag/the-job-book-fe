@@ -286,11 +286,11 @@ describe('draft facts visibility', () => {
     })
     await saveNote(note)
 
+    // BE shape: extractionStatus nested inside transcript
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-010',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'transcribing' },
-      extraction: null,
+      transcript: { status: 'transcribing', extractionStatus: null },
     }])
     mockGetDraftFacts.mockResolvedValue([])
 
@@ -304,7 +304,7 @@ describe('draft facts visibility', () => {
     expect(screen.queryByText(/looking for job facts/i)).not.toBeInTheDocument()
   })
 
-  it('polls extraction status via the note list endpoint', async () => {
+  it('polls extraction status via the note list endpoint using BE shape', async () => {
     const note = makeNote({
       jobId: JOB.id,
       localState: 'uploaded',
@@ -315,11 +315,11 @@ describe('draft facts visibility', () => {
     })
     await saveNote(note)
 
+    // BE shape: extractionStatus is nested inside transcript, not a separate extraction key
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-011',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready' },
-      extraction: { status: 'ready' },
+      transcript: { status: 'ready', extractionStatus: 'ready' },
     }])
     mockGetDraftFacts.mockResolvedValue([
       makeFact({ sourceNoteIds: ['srv-011'], summary: 'Installed 4 floor joists' }),
@@ -333,5 +333,60 @@ describe('draft facts visibility', () => {
 
     expect(mockGetStatuses).toHaveBeenCalledWith(JOB.id)
     expect(mockGetDraftFacts).toHaveBeenCalledWith(JOB.id)
+  })
+
+  it('shows fetch error message rather than "No facts found" when the facts endpoint fails', async () => {
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-012',
+      transcriptStatus: 'ready',
+      transcriptText: 'Ordered timber.',
+      extractionStatus: 'ready',
+    })
+    await saveNote(note)
+
+    mockGetStatuses.mockResolvedValue([])
+    mockGetDraftFacts.mockRejectedValue(new Error('GET /api/jobs/job-test-001/facts → 404'))
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not load facts/i)).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/no facts found/i)).not.toBeInTheDocument()
+  })
+
+  it('shows "Needs checking" badge for a high-confidence fact with uncertainty flags', async () => {
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-013',
+      transcriptStatus: 'ready',
+      transcriptText: 'Roughly 10 bags.',
+      extractionStatus: 'ready',
+    })
+    await saveNote(note)
+
+    const fact = makeFact({
+      sourceNoteIds: ['srv-013'],
+      factType: 'used_material',
+      status: 'draft',
+      summary: 'Roughly 10 bags of sand',
+      confidenceLabel: 'high',
+      uncertaintyFlags: ['approximate_quantity'],
+    })
+
+    mockGetStatuses.mockResolvedValue([])
+    mockGetDraftFacts.mockResolvedValue([fact])
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/needs checking/i)).toBeInTheDocument()
+    })
+    // High-confidence + flags should NOT show "Low confidence" or "Unclear"
+    expect(screen.queryByText(/low confidence/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^unclear$/i)).not.toBeInTheDocument()
   })
 })
