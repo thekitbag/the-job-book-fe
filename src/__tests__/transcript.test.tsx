@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import CaptureScreen from '../CaptureScreen'
 import { saveNote } from '../db'
-import { getJobNoteStatuses, getNoteTranscript } from '../api'
+import { getJobNoteStatuses, getNoteTranscript, getDraftFacts } from '../api'
 import { makeNote } from './helpers'
 import type { UseRecorderReturn } from '../useRecorder'
 
@@ -11,6 +11,7 @@ vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
+  getDraftFacts: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -38,21 +39,25 @@ const JOB = {
 
 const mockGetStatuses = vi.mocked(getJobNoteStatuses)
 const mockGetTranscript = vi.mocked(getNoteTranscript)
+const mockGetDraftFacts = vi.mocked(getDraftFacts)
 
 describe('transcript visibility', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    // getDraftFacts is called whenever any note has extractionStatus === 'ready'.
+    // Provide a default to avoid unhandled "undefined.then" errors after vi.resetAllMocks().
+    mockGetDraftFacts.mockResolvedValue([])
   })
 
   it('shows ready transcript text with "what the system heard" label', async () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
-    // List poll returns status only (BE shape: id not noteId)
+    // List poll returns status only (BE shape: id not noteId; extractionStatus nested inside transcript)
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-001',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready' },
+      transcript: { status: 'ready', extractionStatus: null },
     }])
     // Text fetched separately because status is final
     mockGetTranscript.mockResolvedValue({
@@ -77,7 +82,7 @@ describe('transcript visibility', () => {
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-002',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'waiting' },
+      transcript: { status: 'waiting', extractionStatus: null },
     }])
 
     render(<CaptureScreen job={JOB} />)
@@ -97,7 +102,7 @@ describe('transcript visibility', () => {
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-003',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'transcribing' },
+      transcript: { status: 'transcribing', extractionStatus: null },
     }])
 
     render(<CaptureScreen job={JOB} />)
@@ -116,7 +121,7 @@ describe('transcript visibility', () => {
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-004',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'failed' },
+      transcript: { status: 'failed', extractionStatus: null },
     }])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-004',
@@ -140,6 +145,7 @@ describe('transcript visibility', () => {
       serverNoteId: 'srv-005',
       transcriptStatus: 'ready',
       transcriptText: 'Replace the guttering on the north side.',
+      extractionStatus: 'ready',
     })
     await saveNote(note)
 
@@ -159,6 +165,7 @@ describe('transcript visibility', () => {
       serverNoteId: 'srv-006',
       transcriptStatus: 'ready',
       transcriptText: 'Cached transcript text.',
+      extractionStatus: 'ready',
     })
     await saveNote(note)
 
@@ -187,11 +194,11 @@ describe('transcript visibility', () => {
   it('does not poll when all notes already have a final transcript status', async () => {
     const ready = makeNote({
       jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-007',
-      transcriptStatus: 'ready', transcriptText: 'Done.',
+      transcriptStatus: 'ready', transcriptText: 'Done.', extractionStatus: 'ready',
     })
     const failed = makeNote({
       jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-008',
-      transcriptStatus: 'failed',
+      transcriptStatus: 'failed', extractionStatus: null,
     })
     await saveNote(ready)
     await saveNote(failed)
@@ -224,11 +231,11 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-010' })
     await saveNote(note)
 
-    // Row uses `id` field (BE contract), no `noteId` field
+    // Row uses `id` field (BE contract); extractionStatus nested inside transcript
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-010',
       clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready' },
+      transcript: { status: 'ready', extractionStatus: null },
     }])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-010',

@@ -6,6 +6,7 @@ import { saveNote, getNotesForJob } from '../db'
 import { makeNote } from './helpers'
 import type { RecordingResult, UseRecorderReturn } from '../useRecorder'
 import type { UploadNoteResponse } from '../api'
+import { getDraftFacts } from '../api'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn().mockResolvedValue([]),
   getNoteTranscript: vi.fn(),
+  getDraftFacts: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -77,6 +79,7 @@ describe('CaptureScreen', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     // localStorage is cleared between tests by setup.ts
+    vi.mocked(getDraftFacts).mockResolvedValue([])
   })
 
   it('shows the job title and location', async () => {
