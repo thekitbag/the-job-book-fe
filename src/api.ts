@@ -1,4 +1,4 @@
-import type { CandidateFact, ExtractionStatus, Job, LocalNote, TranscriptStatus } from './types'
+import type { CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, LocalNote, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -79,6 +79,153 @@ export async function getNoteTranscript(jobId: string, serverNoteId: string): Pr
   return res.json() as Promise<TranscriptResponse>
 }
 
+
+// Raw BE response types for /api/jobs/:jobId/review-draft — mapped before returning to callers.
+interface RawReviewItem {
+  candidateFact: {
+    id: string
+    factType: FactType
+    status: 'draft' | 'unclear'
+    summary: string
+    confidenceLabel: ConfidenceLabel
+    confidenceReason: string | null
+    uncertaintyFlags: string[]
+    materialName: string | null
+    quantity: string | null
+    unit: string | null
+    supplierName: string | null
+    deliveryTiming: string | null
+    locationOrUse: string | null
+  }
+  source: {
+    transcriptText: string | null
+    noteId: string
+    transcriptId: string
+  } | null
+}
+
+interface RawReviewGroup {
+  key: string
+  label: string
+  items: RawReviewItem[]
+}
+
+interface RawReviewDraftResponse {
+  jobId: string
+  groups: RawReviewGroup[]
+}
+
+function mapReviewDraft(raw: RawReviewDraftResponse): ReviewDraftSection[] {
+  return raw.groups.map(group => ({
+    key: group.key,
+    label: group.label,
+    items: group.items.map(item => ({
+      id: item.candidateFact.id,
+      factType: item.candidateFact.factType,
+      status: item.candidateFact.status,
+      summary: item.candidateFact.summary,
+      confidenceLabel: item.candidateFact.confidenceLabel,
+      confidenceReason: item.candidateFact.confidenceReason,
+      uncertaintyFlags: item.candidateFact.uncertaintyFlags,
+      materialName: item.candidateFact.materialName,
+      quantity: item.candidateFact.quantity,
+      unit: item.candidateFact.unit,
+      supplierName: item.candidateFact.supplierName,
+      deliveryTiming: item.candidateFact.deliveryTiming,
+      locationOrUse: item.candidateFact.locationOrUse,
+      sourceTranscript: item.source?.transcriptText ?? null,
+      sourceNoteIds: item.source ? [item.source.noteId] : [],
+    })),
+  }))
+}
+
+// GET /api/jobs/:jobId/review-draft — grouped draft facts ready for Mike to confirm/edit/reject.
+export async function getReviewDraft(jobId: string): Promise<ReviewDraftSection[]> {
+  if (USE_MOCK) {
+    await delay(400)
+    return mapReviewDraft({
+      jobId,
+      groups: [
+        {
+          key: 'ordered_material',
+          label: 'Ordered materials',
+          items: [
+            {
+              candidateFact: {
+                id: 'mock-fact-001',
+                factType: 'ordered_material',
+                status: 'draft',
+                summary: 'Ordered 12 sheets of plasterboard from Jewson',
+                confidenceLabel: 'high',
+                confidenceReason: null,
+                uncertaintyFlags: [],
+                materialName: 'plasterboard',
+                quantity: '12',
+                unit: 'sheets',
+                supplierName: 'Jewson',
+                deliveryTiming: 'tomorrow morning',
+                locationOrUse: null,
+              },
+              source: {
+                transcriptText: 'Ordered another 12 sheets of plasterboard from Jewson, coming tomorrow morning.',
+                noteId: 'mock-note-001',
+                transcriptId: 'mock-trans-001',
+              },
+            },
+          ],
+        },
+        {
+          key: 'unclear',
+          label: 'Unclear items',
+          items: [
+            {
+              candidateFact: {
+                id: 'mock-fact-002',
+                factType: 'unclear',
+                status: 'unclear',
+                summary: 'Possibly around 3 insulation packs left',
+                confidenceLabel: 'low',
+                confidenceReason: null,
+                uncertaintyFlags: ['approximate_quantity'],
+                materialName: 'insulation',
+                quantity: '3',
+                unit: 'packs',
+                supplierName: null,
+                deliveryTiming: null,
+                locationOrUse: null,
+              },
+              source: {
+                transcriptText: 'Probably got three insulation packs left.',
+                noteId: 'mock-note-001',
+                transcriptId: 'mock-trans-001',
+              },
+            },
+          ],
+        },
+      ],
+    })
+  }
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/review-draft`)
+  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/review-draft → ${res.status}`)
+  const raw = await res.json() as RawReviewDraftResponse
+  return mapReviewDraft(raw)
+}
+
+// POST /api/jobs/:jobId/review-decisions — submit a single review action.
+// Returns { confirmed, skipped } for confirm_section; empty object for other actions.
+export async function submitReviewDecision(jobId: string, decision: ReviewDecision): Promise<ReviewDecisionResponse> {
+  if (USE_MOCK) {
+    await delay(300)
+    return {}
+  }
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/review-decisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(decision),
+  })
+  if (!res.ok) throw new Error(`POST /api/jobs/${jobId}/review-decisions → ${res.status}`)
+  return res.json() as Promise<ReviewDecisionResponse>
+}
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
   if (USE_MOCK) {

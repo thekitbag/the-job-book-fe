@@ -185,7 +185,7 @@ function StorageExplainer({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
-export default function CaptureScreen({ job }: { job: Job }) {
+export default function CaptureScreen({ job, onOpenReview }: { job: Job; onOpenReview?: () => void }) {
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [showExplainer, setShowExplainer] = useState(
@@ -340,6 +340,14 @@ export default function CaptureScreen({ job }: { job: Job }) {
           </p>
         )}
       </div>
+
+      {onOpenReview && readyExtractionCount > 0 && (
+        <div className="review-entry">
+          <button className="btn-open-review" onClick={onOpenReview}>
+            Review draft facts
+          </button>
+        </div>
+      )}
 
       <section className="notes-section">
         <div className="notes-heading-row">
