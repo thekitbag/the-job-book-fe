@@ -4,6 +4,17 @@ import CaptureScreen from './CaptureScreen'
 import ReviewScreen from './ReviewScreen'
 import type { Job } from './types'
 
+const CACHED_JOB_KEY = 'job-book-cached-job'
+
+function loadCachedJob(): Job | null {
+  try {
+    const raw = localStorage.getItem(CACHED_JOB_KEY)
+    return raw ? (JSON.parse(raw) as Job) : null
+  } catch {
+    return null
+  }
+}
+
 type AppState = 'loading' | 'ready' | 'error'
 type AppView = 'capture' | 'review'
 
@@ -15,8 +26,18 @@ export default function App() {
 
   useEffect(() => {
     getCurrentJob()
-      .then(j => { setJob(j); setAppState('ready') })
+      .then(j => {
+        localStorage.setItem(CACHED_JOB_KEY, JSON.stringify(j))
+        setJob(j)
+        setAppState('ready')
+      })
       .catch((err: unknown) => {
+        const cached = loadCachedJob()
+        if (cached) {
+          setJob(cached)
+          setAppState('ready')
+          return
+        }
         setErrorMsg(err instanceof Error ? err.message : 'Could not load job')
         setAppState('error')
       })

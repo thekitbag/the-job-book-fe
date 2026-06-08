@@ -49,8 +49,16 @@ const PILOT_JOB = {
 // ── PWA asset and manifest config ─────────────────────────────────────────────
 
 describe('PWA assets and manifest config', () => {
-  it('icon file is present in public dir', () => {
+  it('SVG icon file is present in public dir', () => {
     expect(existsSync(resolve(PUBLIC_DIR, 'icon.svg'))).toBe(true)
+  })
+
+  it('192x192 PNG icon is present in public dir', () => {
+    expect(existsSync(resolve(PUBLIC_DIR, 'icon-192.png'))).toBe(true)
+  })
+
+  it('512x512 PNG icon is present in public dir', () => {
+    expect(existsSync(resolve(PUBLIC_DIR, 'icon-512.png'))).toBe(true)
   })
 
   it('vite config declares correct app name and short name', () => {
@@ -69,15 +77,16 @@ describe('PWA assets and manifest config', () => {
     expect(config).toContain("start_url: '/'")
   })
 
-  it('vite config references icon asset in manifest', () => {
+  it('vite config references PNG icons in manifest', () => {
     const config = readFileSync(CONFIG_PATH, 'utf-8')
-    expect(config).toContain('icon.svg')
+    expect(config).toContain('icon-192.png')
+    expect(config).toContain('icon-512.png')
   })
 
-  it('workbox glob patterns are configured for offline app shell', () => {
+  it('workbox glob patterns cover PNG icons for offline precache', () => {
     const config = readFileSync(CONFIG_PATH, 'utf-8')
-    expect(config).toContain('workbox')
     expect(config).toContain('globPatterns')
+    expect(config).toContain('png')
   })
 })
 
