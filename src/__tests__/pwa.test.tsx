@@ -1,0 +1,149 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { existsSync, readFileSync } from 'fs'
+import { resolve } from 'path'
+import CaptureScreen from '../CaptureScreen'
+import { saveNote } from '../db'
+import { makeNote } from './helpers'
+import type { UseRecorderReturn } from '../useRecorder'
+
+// ── Mocks ─────────────────────────────────────────────────────────────────────
+
+vi.mock('../api', () => ({
+  getCurrentJob: vi.fn(),
+  uploadNote: vi.fn(),
+  getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+  getNoteTranscript: vi.fn(),
+  getDraftFacts: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('../useRecorder', () => {
+  const mockRecorder: UseRecorderReturn = {
+    state: 'idle',
+    elapsedMs: 0,
+    mimeType: 'audio/webm;codecs=opus',
+    permissionError: null,
+    start: vi.fn(),
+    stop: vi.fn(),
+  }
+  return {
+    isRecordingSupported: true,
+    getSupportedMimeType: () => 'audio/webm;codecs=opus',
+    useRecorder: () => mockRecorder,
+  }
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const PROJECT_ROOT = resolve(__dirname, '../..')
+const PUBLIC_DIR = resolve(PROJECT_ROOT, 'public')
+const CONFIG_PATH = resolve(PROJECT_ROOT, 'vite.config.ts')
+
+const PILOT_JOB = {
+  id: 'job-pilot-001',
+  title: 'Garden Room',
+  roughLocationOrLabel: 'Mrs Patel – back garden',
+  status: 'active' as const,
+}
+
+// ── PWA asset and manifest config ─────────────────────────────────────────────
+
+describe('PWA assets and manifest config', () => {
+  it('icon file is present in public dir', () => {
+    expect(existsSync(resolve(PUBLIC_DIR, 'icon.svg'))).toBe(true)
+  })
+
+  it('vite config declares correct app name and short name', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    expect(config).toContain("name: 'Job Book'")
+    expect(config).toContain("short_name: 'Job Book'")
+  })
+
+  it('vite config sets standalone display mode', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    expect(config).toContain("display: 'standalone'")
+  })
+
+  it('vite config sets start URL to root', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    expect(config).toContain("start_url: '/'")
+  })
+
+  it('vite config references icon asset in manifest', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    expect(config).toContain('icon.svg')
+  })
+
+  it('workbox glob patterns are configured for offline app shell', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    expect(config).toContain('workbox')
+    expect(config).toContain('globPatterns')
+  })
+})
+
+// ── CaptureScreen pilot requirements ─────────────────────────────────────────
+
+describe('CaptureScreen — pilot field requirements', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+  })
+
+  it('shows approved audio-storage explainer copy on first launch', () => {
+    render(<CaptureScreen job={PILOT_JOB} />)
+    expect(screen.getByText(
+      'We save the recording during the pilot so we can check what was captured and improve the job memory.'
+    )).toBeInTheDocument()
+  })
+
+  it('renders the record button as the default capture entry point', () => {
+    render(<CaptureScreen job={PILOT_JOB} />)
+    expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
+  })
+
+  it('shows the current pilot job title', () => {
+    render(<CaptureScreen job={PILOT_JOB} />)
+    expect(screen.getByText('Garden Room')).toBeInTheDocument()
+  })
+
+  it('shows "Saved on phone" label for a locally-saved note', async () => {
+    const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
+    await saveNote(note)
+
+    render(<CaptureScreen job={PILOT_JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Saved on phone')).toBeInTheDocument()
+    })
+  })
+
+  it('shows "Synced" label after a note is uploaded', async () => {
+    const note = makeNote({ jobId: PILOT_JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
+    await saveNote(note)
+
+    render(<CaptureScreen job={PILOT_JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Synced')).toBeInTheDocument()
+    })
+  })
+
+  it('shows "Waiting for signal" when offline and a note is saved locally', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
+    await saveNote(note)
+
+    render(<CaptureScreen job={PILOT_JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Waiting for signal')).toBeInTheDocument()
+    })
+  })
+
+  it('shows offline badge in the header when network is unavailable', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    render(<CaptureScreen job={PILOT_JOB} />)
+
+    expect(screen.getByText('No signal')).toBeInTheDocument()
+  })
+})
