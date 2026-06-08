@@ -491,6 +491,393 @@ button { cursor: pointer; font-family: inherit; }
   padding-top: 0.45rem;
 }
 
+/* ── Review entry button on capture screen ── */
+
+.review-entry {
+  padding: 0 1rem 0.75rem;
+}
+
+.btn-open-review {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Review screen ── */
+
+.review-page {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: #f4f4f0;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e5e0;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.review-back-btn {
+  background: none;
+  border: none;
+  color: #1a6f38;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.2rem 0;
+  white-space: nowrap;
+}
+
+.review-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.review-body {
+  flex: 1;
+  padding: 0 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.review-trust-note {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.review-loading,
+.review-empty {
+  font-size: 0.9rem;
+  color: #aaa;
+  padding: 1rem 1rem;
+}
+
+.review-fetch-error {
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.btn-retry-fetch {
+  background: none;
+  border: 1px solid #1a6f38;
+  color: #1a6f38;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* ── Review section ── */
+
+.review-section {
+  margin-top: 1.25rem;
+}
+
+.review-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin: 0 0 0.5rem;
+}
+
+.review-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Review item card ── */
+
+.review-item {
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.review-item--confirmed {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.review-item-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
+  align-self: flex-start;
+}
+
+.review-item-summary {
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.review-item-source {
+  border-top: 1px solid #f0f0ec;
+  padding-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.review-item-source-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #bbb;
+}
+
+.review-item-source-text {
+  font-size: 0.8rem;
+  color: #666;
+  margin: 0;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.review-item-source-unavailable {
+  font-size: 0.8rem;
+  color: #bbb;
+  margin: 0;
+}
+
+.review-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.1rem;
+}
+
+.btn-confirm {
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-edit {
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-reject {
+  background: none;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 7px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-confirm:disabled,
+.btn-edit:disabled,
+.btn-reject:disabled {
+  opacity: 0.4;
+}
+
+.review-item-error {
+  font-size: 0.78rem;
+  color: #b91c1c;
+  margin: 0;
+}
+
+.memory-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #14532d;
+  margin: 0;
+}
+
+/* ── Section confirm row ── */
+
+.section-confirm-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.btn-confirm-section {
+  background: none;
+  border: 1px solid #1a6f38;
+  color: #1a6f38;
+  border-radius: 7px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.btn-confirm-section:disabled {
+  opacity: 0.4;
+}
+
+.section-error {
+  font-size: 0.78rem;
+  color: #b91c1c;
+  margin: 0;
+}
+
+/* ── Edit form ── */
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.edit-field-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+.edit-field input,
+.edit-summary {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  background: #fafafa;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.edit-summary {
+  resize: vertical;
+  min-height: 48px;
+}
+
+.edit-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-save {
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 0.45rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.btn-cancel {
+  background: none;
+  border: 1px solid #ccc;
+  color: #555;
+  border-radius: 7px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.btn-save:disabled,
+.btn-cancel:disabled {
+  opacity: 0.4;
+}
+
+.form-error {
+  font-size: 0.78rem;
+  color: #b91c1c;
+  margin: 0;
+}
+
+/* ── Add missing section ── */
+
+.add-missing-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e5e0;
+}
+
+.btn-add-missing {
+  background: none;
+  border: 1px dashed #ccc;
+  color: #555;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  width: 100%;
+}
+
+.add-missing-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.add-missing-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 0;
+}
+
 /* ── Recording spike page (kept for reference) ── */
 
 .spike-page {

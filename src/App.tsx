@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { getCurrentJob } from './api'
 import CaptureScreen from './CaptureScreen'
+import ReviewScreen from './ReviewScreen'
 import type { Job } from './types'
 
 type AppState = 'loading' | 'ready' | 'error'
+type AppView = 'capture' | 'review'
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
   const [job, setJob] = useState<Job | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [view, setView] = useState<AppView>('capture')
 
   useEffect(() => {
     getCurrentJob()
@@ -37,5 +40,9 @@ export default function App() {
     )
   }
 
-  return <CaptureScreen job={job} />
+  if (view === 'review') {
+    return <ReviewScreen job={job} onClose={() => setView('capture')} />
+  }
+
+  return <CaptureScreen job={job} onOpenReview={() => setView('review')} />
 }

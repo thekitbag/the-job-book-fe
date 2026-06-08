@@ -45,6 +45,52 @@ export type FactType =
 
 export type ConfidenceLabel = 'high' | 'medium' | 'low'
 
+// ── Review types (Story 7) ───────────────────────────────────────────────────
+
+export type ReviewDecisionAction = 'confirm' | 'correct' | 'reject' | 'confirm_section' | 'add_missing'
+
+export interface CorrectionFields {
+  summary?: string
+  materialName?: string | null
+  quantity?: string | null
+  unit?: string | null
+  supplierName?: string | null
+  deliveryTiming?: string | null
+  locationOrUse?: string | null
+}
+
+export interface ReviewDecision {
+  action: ReviewDecisionAction
+  factId?: string
+  sectionKey?: string
+  sectionItemIds?: string[]
+  correction?: CorrectionFields
+}
+
+export interface ReviewDraftItem {
+  id: string
+  factType: FactType
+  status: 'draft' | 'unclear'
+  summary: string
+  confidenceLabel: ConfidenceLabel
+  confidenceReason: string | null
+  uncertaintyFlags: string[]
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+  sourceTranscript: string | null
+  sourceNoteIds: string[]
+}
+
+export interface ReviewDraftSection {
+  key: string
+  label: string
+  items: ReviewDraftItem[]
+}
+
 export interface CandidateFact {
   id: string
   jobId: string

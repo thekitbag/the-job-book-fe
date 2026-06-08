@@ -1,4 +1,4 @@
-import type { CandidateFact, ExtractionStatus, Job, LocalNote, TranscriptStatus } from './types'
+import type { CandidateFact, ExtractionStatus, Job, LocalNote, ReviewDecision, ReviewDraftSection, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -79,6 +79,78 @@ export async function getNoteTranscript(jobId: string, serverNoteId: string): Pr
   return res.json() as Promise<TranscriptResponse>
 }
 
+
+// GET /api/jobs/:jobId/review-draft — grouped draft facts ready for Mike to confirm/edit/reject.
+export async function getReviewDraft(jobId: string): Promise<ReviewDraftSection[]> {
+  if (USE_MOCK) {
+    await delay(400)
+    return [
+      {
+        key: 'ordered_material',
+        label: 'Ordered materials',
+        items: [
+          {
+            id: 'mock-fact-001',
+            factType: 'ordered_material',
+            status: 'draft',
+            summary: 'Ordered 12 sheets of plasterboard from Jewson',
+            confidenceLabel: 'high',
+            confidenceReason: null,
+            uncertaintyFlags: [],
+            materialName: 'plasterboard',
+            quantity: '12',
+            unit: 'sheets',
+            supplierName: 'Jewson',
+            deliveryTiming: 'tomorrow morning',
+            locationOrUse: null,
+            sourceTranscript: 'Ordered another 12 sheets of plasterboard from Jewson, coming tomorrow morning.',
+            sourceNoteIds: [],
+          },
+        ],
+      },
+      {
+        key: 'unclear',
+        label: 'Unclear items',
+        items: [
+          {
+            id: 'mock-fact-002',
+            factType: 'unclear',
+            status: 'unclear',
+            summary: 'Possibly around 3 insulation packs left',
+            confidenceLabel: 'low',
+            confidenceReason: null,
+            uncertaintyFlags: ['approximate_quantity'],
+            materialName: 'insulation',
+            quantity: '3',
+            unit: 'packs',
+            supplierName: null,
+            deliveryTiming: null,
+            locationOrUse: null,
+            sourceTranscript: 'Probably got three insulation packs left.',
+            sourceNoteIds: [],
+          },
+        ],
+      },
+    ]
+  }
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/review-draft`)
+  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/review-draft → ${res.status}`)
+  return res.json() as Promise<ReviewDraftSection[]>
+}
+
+// POST /api/jobs/:jobId/review-decisions — submit a single review action.
+export async function submitReviewDecision(jobId: string, decision: ReviewDecision): Promise<void> {
+  if (USE_MOCK) {
+    await delay(300)
+    return
+  }
+  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/review-decisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(decision),
+  })
+  if (!res.ok) throw new Error(`POST /api/jobs/${jobId}/review-decisions → ${res.status}`)
+}
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
   if (USE_MOCK) {
