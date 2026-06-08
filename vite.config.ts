@@ -19,6 +19,18 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
             src: 'icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
@@ -27,8 +39,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Cache app shell and static assets for offline load
-        globPatterns: ['**/*.{js,css,html,svg}'],
+        // Cache app shell, static assets, and icon PNGs for offline load
+        globPatterns: ['**/*.{js,css,html,svg,png}'],
       },
     }),
   ],
