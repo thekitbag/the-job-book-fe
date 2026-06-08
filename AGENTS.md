@@ -110,21 +110,15 @@ Keep each branch scoped to one story or one explicitly assigned story group. Do 
 
 When handing work back, report the branch name, commit status, and whether any files remain uncommitted.
 
-## Story Sequencing
+## Working From Briefs
 
-Product owns the story order. Tech decomposition lives at:
+Product owns the story order. Tech decomposition and active briefs live in the tech repo:
 
-- `/Users/markgray/projects/the-job-book/the-job-book-project/tech/03-technical-specs/mvp-story-led-technical-decomposition.md`
+- `/Users/markgray/projects/the-job-book/the-job-book-project/tech`
 
-Frontend briefs should normally be handled in this order:
+Before starting implementation, identify the current tech-lead brief assigned for this repo and story. If no current brief is clear, stop and ask the tech lead rather than choosing from old briefs.
 
-1. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-1-phone-recording-spike-brief.md`
-2. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-stories-2-4-10-local-capture-brief.md`
-3. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-5-transcript-visibility-brief.md`
-4. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-6-draft-facts-visibility-brief.md`
-5. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-7-review-confirm-memory-brief.md`
-
-Do not use superseded bundled briefs unless the tech lead explicitly reactivates them. Do not jump ahead to review/AI UI before the current narrow story is complete or the tech lead explicitly accepts the risk.
+Do not use superseded briefs unless the tech lead explicitly reactivates them. Do not jump ahead beyond the assigned brief before the current narrow story is complete or the tech lead explicitly accepts the risk.
 
 ## Implementation Standards
 
