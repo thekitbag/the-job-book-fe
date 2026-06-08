@@ -60,6 +60,24 @@ const UNCLEAR_ITEM = {
   sourceNoteIds: ['srv-001'],
 }
 
+const SECOND_ITEM = {
+  id: 'fact-003',
+  factType: 'ordered_material' as const,
+  status: 'draft' as const,
+  summary: 'Ordered 5 boxes of ceramic tiles from BuildBase',
+  confidenceLabel: 'high' as const,
+  confidenceReason: null,
+  uncertaintyFlags: [],
+  materialName: 'ceramic tiles',
+  quantity: '5',
+  unit: 'boxes',
+  supplierName: 'BuildBase',
+  deliveryTiming: null,
+  locationOrUse: null,
+  sourceTranscript: 'Got 5 boxes of tiles from BuildBase.',
+  sourceNoteIds: ['srv-002'],
+}
+
 const MOCK_DRAFT: ReviewDraftSection[] = [
   { key: 'ordered_material', label: 'Ordered materials', items: [ORDERED_ITEM] },
   { key: 'unclear', label: 'Unclear items', items: [UNCLEAR_ITEM] },
@@ -72,7 +90,7 @@ const mockOnClose = vi.fn()
 describe('ReviewScreen', () => {
   beforeEach(() => {
     mockGetReviewDraft.mockResolvedValue(MOCK_DRAFT)
-    mockSubmitDecision.mockResolvedValue(undefined)
+    mockSubmitDecision.mockResolvedValue({})
   })
 
   // ── Loading and error ───────────────────────────────────────────────────────
@@ -171,7 +189,7 @@ describe('ReviewScreen', () => {
     })
     expect(mockSubmitDecision).toHaveBeenCalledWith(JOB.id, {
       action: 'confirm',
-      factId: 'fact-001',
+      candidateFactId: 'fact-001',
     })
   })
 
@@ -207,8 +225,8 @@ describe('ReviewScreen', () => {
     await waitFor(() => {
       expect(mockSubmitDecision).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
         action: 'correct',
-        factId: 'fact-001',
-        correction: expect.objectContaining({
+        candidateFactId: 'fact-001',
+        corrected: expect.objectContaining({
           summary: 'Ordered 14 sheets of plasterboard from Jewson',
         }),
       }))
@@ -244,7 +262,7 @@ describe('ReviewScreen', () => {
     await waitFor(() => {
       expect(mockSubmitDecision).toHaveBeenCalledWith(JOB.id, {
         action: 'reject',
-        factId: 'fact-001',
+        candidateFactId: 'fact-001',
       })
     })
     await waitFor(() => {
@@ -265,12 +283,47 @@ describe('ReviewScreen', () => {
       expect(mockSubmitDecision).toHaveBeenCalledWith(JOB.id, {
         action: 'confirm_section',
         sectionKey: 'ordered_material',
-        sectionItemIds: ['fact-001'],
+        candidateFactIds: ['fact-001'],
       })
     })
     await waitFor(() => {
       expect(screen.getByText(/saved to trusted memory/i)).toBeInTheDocument()
     })
+  })
+
+  it('marks only confirmed items and shows section error when BE skips some', async () => {
+    const DRAFT_TWO_ITEMS: ReviewDraftSection[] = [
+      { key: 'ordered_material', label: 'Ordered materials', items: [ORDERED_ITEM, SECOND_ITEM] },
+      { key: 'unclear', label: 'Unclear items', items: [UNCLEAR_ITEM] },
+    ]
+    const DRAFT_AFTER_REFRESH: ReviewDraftSection[] = [
+      { key: 'ordered_material', label: 'Ordered materials', items: [SECOND_ITEM] },
+      { key: 'unclear', label: 'Unclear items', items: [UNCLEAR_ITEM] },
+    ]
+    mockGetReviewDraft
+      .mockResolvedValueOnce(DRAFT_TWO_ITEMS)
+      .mockResolvedValueOnce(DRAFT_AFTER_REFRESH)
+    mockSubmitDecision.mockResolvedValueOnce({
+      confirmed: [{ candidateFactId: 'fact-001', memoryItemId: 'mem-001' }],
+      skipped: [{ candidateFactId: 'fact-003', reason: 'already_reviewed' }],
+    })
+
+    const user = userEvent.setup()
+    render(<ReviewScreen job={JOB} onClose={mockOnClose} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /confirm section/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /confirm section/i }))
+
+    // Skipped item (fact-003) should remain visible after re-fetch
+    await waitFor(() => {
+      expect(screen.getByText('Ordered 5 boxes of ceramic tiles from BuildBase')).toBeInTheDocument()
+    })
+    // Confirmed item (fact-001) removed by re-fetch, no longer in DOM
+    expect(screen.queryByText('Ordered 12 sheets of plasterboard from Jewson')).not.toBeInTheDocument()
+    // Section error about skipped item
+    expect(screen.getByText(/1 item\(s\) could not be confirmed/i)).toBeInTheDocument()
+    // getReviewDraft called twice: initial load + re-fetch after partial confirm
+    expect(mockGetReviewDraft).toHaveBeenCalledTimes(2)
   })
 
   it('does not show a "Confirm section" button for the unclear section', async () => {
@@ -304,7 +357,8 @@ describe('ReviewScreen', () => {
     await waitFor(() => {
       expect(mockSubmitDecision).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
         action: 'add_missing',
-        correction: expect.objectContaining({
+        memoryType: expect.any(String),
+        memory: expect.objectContaining({
           summary: 'Used 3 bags of cement',
         }),
       }))

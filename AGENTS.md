@@ -120,9 +120,11 @@ Frontend briefs should normally be handled in this order:
 
 1. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-1-phone-recording-spike-brief.md`
 2. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-stories-2-4-10-local-capture-brief.md`
-3. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-stories-5-8-transcript-review-brief.md`
+3. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-5-transcript-visibility-brief.md`
+4. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-6-draft-facts-visibility-brief.md`
+5. `/Users/markgray/projects/the-job-book/the-job-book-project/tech/06-agent-briefs/frontend-story-7-review-confirm-memory-brief.md`
 
-Do not jump ahead to review/AI UI before the phone recording spike is complete or the tech lead explicitly accepts the risk.
+Do not use superseded bundled briefs unless the tech lead explicitly reactivates them. Do not jump ahead to review/AI UI before the current narrow story is complete or the tech lead explicitly accepts the risk.
 
 ## Implementation Standards
 
@@ -164,5 +166,21 @@ When you finish a task, report:
 - browser/device recording behaviour observed
 - API assumptions or mismatches
 - any product-risk issue that should go back to tech/product
+
+When the active tech-lead brief has a `Handoff Back` section, answer every item in that section. A story is not ready for review with only a status line such as "tests pass" or "ready for PR".
+
+Your handoff must include, at minimum:
+
+- branch name
+- commit/push status
+- what changed
+- how to run it locally
+- exact test/build commands run and results
+- API contract assumptions or mismatches
+- manual/mobile checks performed, or explicitly state not performed
+- anything deliberately left out of scope
+- any risks or follow-up needed
+
+If the brief asks for an example payload, browser/device evidence, provider configuration, or PWA/offline status, include it explicitly.
 
 For Story 1 specifically, report the actual phone/browser, permission behaviour, MIME type, playback result, and whether mobile web remains viable.

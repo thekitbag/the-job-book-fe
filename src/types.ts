@@ -61,10 +61,17 @@ export interface CorrectionFields {
 
 export interface ReviewDecision {
   action: ReviewDecisionAction
-  factId?: string
+  candidateFactId?: string
   sectionKey?: string
-  sectionItemIds?: string[]
-  correction?: CorrectionFields
+  candidateFactIds?: string[]
+  corrected?: CorrectionFields
+  memoryType?: FactType
+  memory?: CorrectionFields
+}
+
+export interface ReviewDecisionResponse {
+  confirmed?: Array<{ candidateFactId: string; memoryItemId: string }>
+  skipped?: Array<{ candidateFactId: string; reason: string }>
 }
 
 export interface ReviewDraftItem {

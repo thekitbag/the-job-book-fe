@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { getReviewDraft, submitReviewDecision } from './api'
-import type { CorrectionFields, Job, ReviewDraftItem, ReviewDraftSection } from './types'
+import type { CorrectionFields, FactType, Job, ReviewDraftItem, ReviewDraftSection } from './types'
 
 type ItemOutcome = 'confirmed' | 'rejected'
 
@@ -90,17 +90,27 @@ function EditForm({
 
 // ── Add missing form ─────────────────────────────────────────────────────────
 
+const MEMORY_TYPE_OPTIONS: { value: FactType; label: string }[] = [
+  { value: 'used_material', label: 'Used material' },
+  { value: 'ordered_material', label: 'Ordered material' },
+  { value: 'leftover_material', label: 'Leftover / excess' },
+  { value: 'supplier_delivery_note', label: 'Supplier / delivery' },
+  { value: 'customer_change', label: 'Customer change' },
+  { value: 'watch_out', label: 'Watch out for next time' },
+]
+
 function AddMissingForm({
   onSave,
   onCancel,
   submitting,
   error,
 }: {
-  onSave: (c: CorrectionFields) => void
+  onSave: (memoryType: FactType, memory: CorrectionFields) => void
   onCancel: () => void
   submitting: boolean
   error: string | null
 }) {
+  const [memoryType, setMemoryType] = useState<FactType>('used_material')
   const [summary, setSummary] = useState('')
   const [materialName, setMaterialName] = useState('')
   const [quantity, setQuantity] = useState('')
@@ -111,7 +121,7 @@ function AddMissingForm({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    onSave({
+    onSave(memoryType, {
       summary: summary.trim(),
       materialName: materialName.trim() || null,
       quantity: quantity.trim() || null,
@@ -125,6 +135,18 @@ function AddMissingForm({
   return (
     <form className="add-missing-form" onSubmit={handleSubmit} aria-label="Add missing item">
       <h3 className="add-missing-title">Add missing item</h3>
+      <label className="edit-field">
+        <span className="edit-field-label">Type</span>
+        <select
+          className="edit-memory-type"
+          value={memoryType}
+          onChange={e => setMemoryType(e.target.value as FactType)}
+        >
+          {MEMORY_TYPE_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </label>
       <label className="edit-field">
         <span className="edit-field-label">Summary</span>
         <textarea
@@ -375,7 +397,7 @@ export default function ReviewScreen({
     clearItemError(factId)
     markItemSubmitting(factId, true)
     try {
-      await submitReviewDecision(job.id, { action: 'confirm', factId })
+      await submitReviewDecision(job.id, { action: 'confirm', candidateFactId: factId })
       setOutcomes(o => ({ ...o, [factId]: 'confirmed' }))
     } catch {
       setItemError(factId, 'Could not confirm — tap to retry')
@@ -384,11 +406,11 @@ export default function ReviewScreen({
     }
   }, [job.id])
 
-  const handleSaveEdit = useCallback(async (factId: string, correction: CorrectionFields) => {
+  const handleSaveEdit = useCallback(async (factId: string, corrected: CorrectionFields) => {
     clearItemError(factId)
     markItemSubmitting(factId, true)
     try {
-      await submitReviewDecision(job.id, { action: 'correct', factId, correction })
+      await submitReviewDecision(job.id, { action: 'correct', candidateFactId: factId, corrected })
       setOutcomes(o => ({ ...o, [factId]: 'confirmed' }))
       setEditingId(null)
     } catch {
@@ -402,7 +424,7 @@ export default function ReviewScreen({
     clearItemError(factId)
     markItemSubmitting(factId, true)
     try {
-      await submitReviewDecision(job.id, { action: 'reject', factId })
+      await submitReviewDecision(job.id, { action: 'reject', candidateFactId: factId })
       setOutcomes(o => ({ ...o, [factId]: 'rejected' }))
     } catch {
       setItemError(factId, 'Could not reject — tap to retry')
@@ -411,16 +433,34 @@ export default function ReviewScreen({
     }
   }, [job.id])
 
-  const handleConfirmSection = useCallback(async (sectionKey: string, sectionItemIds: string[]) => {
+  const handleConfirmSection = useCallback(async (sectionKey: string, itemIds: string[]) => {
     setSectionErrors(e => { const n = { ...e }; delete n[sectionKey]; return n })
     setSectionSubmitting(s => ({ ...s, [sectionKey]: true }))
     try {
-      await submitReviewDecision(job.id, { action: 'confirm_section', sectionKey, sectionItemIds })
+      const result = await submitReviewDecision(job.id, {
+        action: 'confirm_section',
+        sectionKey,
+        candidateFactIds: itemIds,
+      })
+      const confirmedIds = result.confirmed?.map(x => x.candidateFactId) ?? itemIds
+      const skippedIds = result.skipped?.map(x => x.candidateFactId) ?? []
       setOutcomes(o => {
         const next = { ...o }
-        sectionItemIds.forEach(id => { next[id] = 'confirmed' })
+        confirmedIds.forEach(id => { next[id] = 'confirmed' })
         return next
       })
+      if (skippedIds.length > 0) {
+        try {
+          const fresh = await getReviewDraft(job.id)
+          setSections(fresh)
+        } catch {
+          // silently ignore — sections remain stale but interactions still work
+        }
+        setSectionErrors(e => ({
+          ...e,
+          [sectionKey]: `${skippedIds.length} item(s) could not be confirmed — tap to retry`,
+        }))
+      }
     } catch {
       setSectionErrors(e => ({ ...e, [sectionKey]: 'Could not confirm section — tap to retry' }))
     } finally {
@@ -428,11 +468,11 @@ export default function ReviewScreen({
     }
   }, [job.id])
 
-  const handleAddMissing = useCallback(async (correction: CorrectionFields) => {
+  const handleAddMissing = useCallback(async (memoryType: FactType, memory: CorrectionFields) => {
     setAddMissingError(null)
     setAddMissingSubmitting(true)
     try {
-      await submitReviewDecision(job.id, { action: 'add_missing', correction })
+      await submitReviewDecision(job.id, { action: 'add_missing', memoryType, memory })
       setShowAddMissing(false)
     } catch {
       setAddMissingError('Could not save — tap to retry')
