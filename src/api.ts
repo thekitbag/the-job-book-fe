@@ -4,6 +4,18 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK_API as string | undefined) === 'true'
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+// All real-mode API calls go through apiFetch so credentials are always included.
+async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' })
+}
+
 export interface UploadNoteResponse {
   noteId: string
   clientNoteId: string
@@ -22,13 +34,29 @@ function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
 }
 
+// POST /api/auth/pilot-login — exchange passcode for a session cookie.
+export async function pilotLogin(passcode: string): Promise<void> {
+  if (USE_MOCK) {
+    await delay(300)
+    if (passcode !== 'demo') throw new ApiError('Wrong passcode', 401)
+    return
+  }
+  const res = await apiFetch('/api/auth/pilot-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ passcode }),
+  })
+  if (res.status === 401) throw new ApiError('Wrong passcode', 401)
+  if (!res.ok) throw new ApiError(`POST /api/auth/pilot-login → ${res.status}`, res.status)
+}
+
 export async function getCurrentJob(): Promise<Job> {
   if (USE_MOCK) {
     await delay(200)
     return MOCK_JOB
   }
-  const res = await fetch(`${API_BASE}/api/jobs/current`)
-  if (!res.ok) throw new Error(`GET /api/jobs/current → ${res.status}`)
+  const res = await apiFetch('/api/jobs/current')
+  if (!res.ok) throw new ApiError(`GET /api/jobs/current → ${res.status}`, res.status)
   return res.json() as Promise<Job>
 }
 
@@ -45,8 +73,8 @@ export async function getJobNoteStatuses(jobId: string): Promise<NoteListRow[]> 
     await delay(300)
     return []
   }
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/notes`)
-  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/notes → ${res.status}`)
+  const res = await apiFetch(`/api/jobs/${jobId}/notes`)
+  if (!res.ok) throw new ApiError(`GET /api/jobs/${jobId}/notes → ${res.status}`, res.status)
   return res.json() as Promise<NoteListRow[]>
 }
 
@@ -56,8 +84,8 @@ export async function getDraftFacts(jobId: string): Promise<CandidateFact[]> {
     await delay(300)
     return []
   }
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/facts`)
-  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/facts → ${res.status}`)
+  const res = await apiFetch(`/api/jobs/${jobId}/facts`)
+  if (!res.ok) throw new ApiError(`GET /api/jobs/${jobId}/facts → ${res.status}`, res.status)
   return res.json() as Promise<CandidateFact[]>
 }
 
@@ -74,11 +102,10 @@ export async function getNoteTranscript(jobId: string, serverNoteId: string): Pr
     await delay(300)
     return { noteId: serverNoteId, status: 'waiting', text: null, errorCode: null }
   }
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/notes/${serverNoteId}/transcript`)
-  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/notes/${serverNoteId}/transcript → ${res.status}`)
+  const res = await apiFetch(`/api/jobs/${jobId}/notes/${serverNoteId}/transcript`)
+  if (!res.ok) throw new ApiError(`GET /api/jobs/${jobId}/notes/${serverNoteId}/transcript → ${res.status}`, res.status)
   return res.json() as Promise<TranscriptResponse>
 }
-
 
 // Raw BE response types for /api/jobs/:jobId/review-draft — mapped before returning to callers.
 interface RawReviewItem {
@@ -205,8 +232,8 @@ export async function getReviewDraft(jobId: string): Promise<ReviewDraftSection[
       ],
     })
   }
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/review-draft`)
-  if (!res.ok) throw new Error(`GET /api/jobs/${jobId}/review-draft → ${res.status}`)
+  const res = await apiFetch(`/api/jobs/${jobId}/review-draft`)
+  if (!res.ok) throw new ApiError(`GET /api/jobs/${jobId}/review-draft → ${res.status}`, res.status)
   const raw = await res.json() as RawReviewDraftResponse
   return mapReviewDraft(raw)
 }
@@ -218,12 +245,12 @@ export async function submitReviewDecision(jobId: string, decision: ReviewDecisi
     await delay(300)
     return {}
   }
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/review-decisions`, {
+  const res = await apiFetch(`/api/jobs/${jobId}/review-decisions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decision),
   })
-  if (!res.ok) throw new Error(`POST /api/jobs/${jobId}/review-decisions → ${res.status}`)
+  if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/review-decisions → ${res.status}`, res.status)
   return res.json() as Promise<ReviewDecisionResponse>
 }
 
@@ -244,15 +271,14 @@ export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
   form.append('durationMs', String(note.durationMs))
   form.append('mimeType', note.mimeType)
   form.append('audio', note.blob, `note.${ext}`)
-  const res = await fetch(`${API_BASE}/api/jobs/${note.jobId}/notes`, {
+  const res = await apiFetch(`/api/jobs/${note.jobId}/notes`, {
     method: 'POST',
     body: form,
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { code?: string }
-    const err = new Error('Upload failed') as Error & { code?: string; status?: number }
+    const err = new ApiError('Upload failed', res.status) as ApiError & { code?: string }
     err.code = body.code
-    err.status = res.status
     throw err
   }
   return res.json() as Promise<UploadNoteResponse>

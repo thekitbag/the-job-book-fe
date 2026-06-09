@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { getCurrentJob } from './api'
+import { useCallback, useEffect, useState } from 'react'
+import { getCurrentJob, ApiError } from './api'
 import CaptureScreen from './CaptureScreen'
+import PasscodeScreen from './PasscodeScreen'
 import ReviewScreen from './ReviewScreen'
 import type { Job } from './types'
 
@@ -15,7 +16,7 @@ function loadCachedJob(): Job | null {
   }
 }
 
-type AppState = 'loading' | 'ready' | 'error'
+type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error'
 type AppView = 'capture' | 'review'
 
 export default function App() {
@@ -24,7 +25,8 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('capture')
 
-  useEffect(() => {
+  const fetchJob = useCallback(() => {
+    setAppState('loading')
     getCurrentJob()
       .then(j => {
         localStorage.setItem(CACHED_JOB_KEY, JSON.stringify(j))
@@ -32,6 +34,10 @@ export default function App() {
         setAppState('ready')
       })
       .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 401) {
+          setAppState('unauthenticated')
+          return
+        }
         const cached = loadCachedJob()
         if (cached) {
           setJob(cached)
@@ -43,12 +49,18 @@ export default function App() {
       })
   }, [])
 
+  useEffect(() => { fetchJob() }, [fetchJob])
+
   if (appState === 'loading') {
     return (
       <div className="app-loading">
         <p>Loading…</p>
       </div>
     )
+  }
+
+  if (appState === 'unauthenticated') {
+    return <PasscodeScreen onLoginSuccess={fetchJob} />
   }
 
   if (appState === 'error' || !job) {
