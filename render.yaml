@@ -1,0 +1,27 @@
+# Render Static Site — https://thejobbook.app
+#
+# Required env var to set in Render dashboard (build-time):
+#   VITE_API_BASE=https://api.thejobbook.app
+#
+# Auto-deploy: enabled on push to main (configure in Render service settings).
+
+services:
+  - name: the-job-book-fe
+    type: web
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-store
+      - path: /manifest.webmanifest
+        name: Cache-Control
+        value: no-cache
+    envVars:
+      - key: VITE_API_BASE
+        value: https://api.thejobbook.app
