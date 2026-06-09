@@ -43,6 +43,9 @@ export type FactType =
   | 'watch_out'
   | 'unclear'
 
+// Trusted memory must be a concrete type — unclear items must be corrected or rejected.
+export type MemoryType = Exclude<FactType, 'unclear'>
+
 export type ConfidenceLabel = 'high' | 'medium' | 'low'
 
 // ── Review types (Story 7) ───────────────────────────────────────────────────
@@ -112,7 +115,7 @@ export interface TidyUpSourceContext {
 }
 
 export interface ProposedMemory {
-  memoryType: FactType
+  memoryType: MemoryType
   summary: string
   materialName: string | null
   quantity: string | null
@@ -144,7 +147,7 @@ export interface TidyUpSection {
 export interface AlreadyRememberedItem {
   memoryItemId: string
   summary: string
-  memoryType: FactType
+  memoryType: MemoryType
 }
 
 export interface TidyUpRun {

@@ -9,6 +9,10 @@ vi.mock('../api', async (importOriginal) => {
   return {
     createOrGetTidyUp: vi.fn(),
     submitTidyUpDecision: vi.fn(),
+    getReviewDraft: vi.fn(),
+    getDraftFacts: vi.fn().mockResolvedValue([]),
+    getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+    getNoteTranscript: vi.fn(),
     getTodayLocalDate: actual.getTodayLocalDate,
     ApiError: actual.ApiError,
   }
@@ -157,8 +161,8 @@ const MOCK_RUN: TidyUpRun = {
   status: 'ready' as const,
   createdAt: '2026-06-09T18:00:00.000Z',
   sections: [
-    { key: 'ordered_material', label: 'Ordered materials', items: [SINGLE_ITEM] },
-    { key: 'used_material', label: 'Used materials', items: [DUPLICATE_ITEM, CONTRADICTION_ITEM] },
+    { key: 'ordered_materials', label: 'Ordered materials', items: [SINGLE_ITEM] },
+    { key: 'used_materials', label: 'Used materials', items: [DUPLICATE_ITEM, CONTRADICTION_ITEM] },
   ],
   alreadyRemembered: [
     { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material' as const },
@@ -310,7 +314,7 @@ describe('TidyUpScreen', () => {
 
     await waitFor(() => expect(mockSubmit).toHaveBeenCalledWith(
       'job-001',
-      expect.objectContaining({ tidyUpItemId: 'tidy-item-001', action: 'reject' }),
+      expect.objectContaining({ tidyUpItemId: 'tidy-item-001', action: 'reject', reason: 'Not about this job' }),
     ))
   })
 
@@ -422,12 +426,7 @@ describe('TidyUpScreen', () => {
     expect(cards.length).toBe(MOCK_RUN.sections.flatMap(s => s.items).length)
   })
 
-  it('resolved tidy-up items do not appear as action-required in per-note review on next open', async () => {
-    // This tests the shared-state boundary: after a tidy-up decision the item
-    // is marked resolved in local state. The per-note ReviewScreen re-fetches
-    // on mount from the backend, which will already reflect the resolved state.
-    // We confirm the local tidy-up state is updated so the item is not still shown
-    // as draft after a successful decision.
+  it('item loses action buttons after a successful confirm (local state reflects resolved status)', async () => {
     mockSubmit.mockResolvedValue(makeDecisionResponse('tidy-item-001', 'confirm', 'confirmed') as never)
     const user = userEvent.setup()
 
@@ -438,9 +437,26 @@ describe('TidyUpScreen', () => {
 
     await waitFor(() => {
       const card = screen.getByTestId('tidy-item-tidy-item-001')
-      // Item is resolved — no longer shows action buttons
       expect(within(card).queryByRole('button', { name: /remember this/i })).not.toBeInTheDocument()
       expect(within(card).getByText('Saved to trusted memory')).toBeInTheDocument()
     })
+  })
+
+  it('per-note ReviewScreen re-fetches fresh data on open so tidy-up-resolved facts do not reappear', async () => {
+    // The per-note ReviewScreen calls getReviewDraft on mount. After a tidy-up
+    // decision the backend marks source candidate facts as resolved, so a fresh
+    // fetch will exclude them. We verify the wiring: ReviewScreen receives a
+    // getReviewDraft mock that returns an empty run after the decision.
+    const { getReviewDraft } = await import('../api')
+    const mockGetReviewDraft = vi.mocked(getReviewDraft)
+    // Simulate backend already reflecting resolved state — returns no draft items.
+    mockGetReviewDraft.mockResolvedValue([])
+
+    const { default: ReviewScreen } = await import('../ReviewScreen')
+    render(<ReviewScreen job={MOCK_JOB} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(mockGetReviewDraft).toHaveBeenCalledWith('job-001'))
+    // No draft items visible — consistent with backend having resolved them.
+    expect(screen.queryByRole('button', { name: /confirm/i })).not.toBeInTheDocument()
   })
 })

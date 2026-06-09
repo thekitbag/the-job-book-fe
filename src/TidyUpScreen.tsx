@@ -3,6 +3,7 @@ import { createOrGetTidyUp, getTodayLocalDate, submitTidyUpDecision } from './ap
 import type {
   AlreadyRememberedItem,
   Job,
+  MemoryType,
   ProposedMemory,
   TidyUpDecisionAction,
   TidyUpItem,
@@ -10,15 +11,15 @@ import type {
   TidyUpSection,
 } from './types'
 
-const MEMORY_TYPE_OPTIONS = [
+// 'unclear' is intentionally absent — trusted memory must be a concrete type.
+const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'used_material', label: 'Used material' },
   { value: 'ordered_material', label: 'Ordered material' },
   { value: 'leftover_material', label: 'Leftover material' },
   { value: 'supplier_delivery_note', label: 'Supplier / delivery note' },
   { value: 'customer_change', label: 'Customer change' },
   { value: 'watch_out', label: 'Watch out' },
-  { value: 'unclear', label: 'Unclear' },
-] as const
+]
 
 function SourceContextList({ contexts }: { contexts: TidyUpItem['sourceContext'] }) {
   if (contexts.length === 0) {
@@ -60,8 +61,10 @@ function EditForm({
   submitting: boolean
 }) {
   const [form, setForm] = useState<ProposedMemory>(initial)
-  const set = (k: keyof ProposedMemory, v: string) =>
+  const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
+  const setType = (v: string) =>
+    setForm(f => ({ ...f, memoryType: v as MemoryType }))
 
   return (
     <form
@@ -74,7 +77,7 @@ function EditForm({
         <select
           className="tidy-field-input"
           value={form.memoryType}
-          onChange={e => set('memoryType', e.target.value)}
+          onChange={e => setType(e.target.value)}
         >
           {MEMORY_TYPE_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -86,7 +89,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.summary}
-          onChange={e => set('summary', e.target.value)}
+          onChange={e => setStr('summary', e.target.value)}
           required
         />
       </label>
@@ -95,7 +98,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.materialName ?? ''}
-          onChange={e => set('materialName', e.target.value)}
+          onChange={e => setStr('materialName', e.target.value)}
         />
       </label>
       <label className="tidy-field">
@@ -103,7 +106,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.quantity ?? ''}
-          onChange={e => set('quantity', e.target.value)}
+          onChange={e => setStr('quantity', e.target.value)}
         />
       </label>
       <label className="tidy-field">
@@ -111,7 +114,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.unit ?? ''}
-          onChange={e => set('unit', e.target.value)}
+          onChange={e => setStr('unit', e.target.value)}
         />
       </label>
       <label className="tidy-field">
@@ -119,7 +122,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.supplierName ?? ''}
-          onChange={e => set('supplierName', e.target.value)}
+          onChange={e => setStr('supplierName', e.target.value)}
         />
       </label>
       <label className="tidy-field">
@@ -127,7 +130,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.deliveryTiming ?? ''}
-          onChange={e => set('deliveryTiming', e.target.value)}
+          onChange={e => setStr('deliveryTiming', e.target.value)}
         />
       </label>
       <label className="tidy-field">
@@ -135,7 +138,7 @@ function EditForm({
         <input
           className="tidy-field-input"
           value={form.locationOrUse ?? ''}
-          onChange={e => set('locationOrUse', e.target.value)}
+          onChange={e => setStr('locationOrUse', e.target.value)}
         />
       </label>
       <div className="tidy-edit-actions">
@@ -332,6 +335,7 @@ export default function TidyUpScreen({ job, onClose }: { job: Job; onClose: () =
     itemId: string,
     action: TidyUpDecisionAction,
     corrected?: ProposedMemory,
+    reason?: string,
   ) => {
     if (!run) return
     setSubmittingId(itemId)
@@ -341,6 +345,7 @@ export default function TidyUpScreen({ job, onClose }: { job: Job; onClose: () =
         tidyUpItemId: itemId,
         action,
         corrected,
+        reason,
       })
       setRun(r => {
         if (!r) return r
@@ -423,7 +428,7 @@ export default function TidyUpScreen({ job, onClose }: { job: Job; onClose: () =
               onStartEdit={handleStartEdit}
               onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected)}
               onCancelEdit={handleCancelEdit}
-              onReject={id => handleDecision(id, 'reject')}
+              onReject={id => handleDecision(id, 'reject', undefined, 'Not about this job')}
               onLeave={id => handleDecision(id, 'leave_unconfirmed')}
             />
           ))}

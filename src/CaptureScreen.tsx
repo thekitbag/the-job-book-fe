@@ -394,7 +394,7 @@ export default function CaptureScreen({ job, onOpenTidyUp, onOpenReview }: { job
       {onOpenReview && readyExtractionCount > 0 && (
         <div className="review-entry">
           <button className="btn-open-review btn-open-review--secondary" onClick={onOpenReview}>
-            Review individual note
+            Inspect draft facts
           </button>
         </div>
       )}
