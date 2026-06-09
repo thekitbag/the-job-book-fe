@@ -4,6 +4,7 @@ import { getDraftFacts } from './api'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
 import { useTranscriptPoll } from './useTranscriptPoll'
+import { usePwaInstall } from './usePwaInstall'
 import type { CandidateFact, Job, LocalNote } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
@@ -185,12 +186,45 @@ function StorageExplainer({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
+function InstallBanner({
+  isIosSafari,
+  onInstall,
+  onDismiss,
+}: {
+  isIosSafari: boolean
+  onInstall: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <div className="install-banner" role="region" aria-label="Install app">
+      {isIosSafari ? (
+        <p className="install-banner-text">
+          Add to your home screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>
+        </p>
+      ) : (
+        <p className="install-banner-text">Install Job Book on your phone for quick access</p>
+      )}
+      <div className="install-banner-actions">
+        {!isIosSafari && (
+          <button className="install-banner-btn" onClick={onInstall}>
+            Install
+          </button>
+        )}
+        <button className="install-banner-dismiss" onClick={onDismiss} aria-label="Dismiss install banner">
+          Not now
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function CaptureScreen({ job, onOpenReview }: { job: Job; onOpenReview?: () => void }) {
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [showExplainer, setShowExplainer] = useState(
     () => localStorage.getItem(EXPLAINER_KEY) !== 'true',
   )
+  const { showBanner, isIosSafari, triggerInstall, dismiss: dismissInstall } = usePwaInstall()
   const [facts, setFacts] = useState<CandidateFact[]>([])
   const [factsLoadFailed, setFactsLoadFailed] = useState(false)
 
@@ -298,6 +332,14 @@ export default function CaptureScreen({ job, onOpenReview }: { job: Job; onOpenR
         <h1 className="capture-job-title">{job.title}</h1>
         <p className="capture-job-label">{job.roughLocationOrLabel}</p>
       </div>
+
+      {showBanner && (
+        <InstallBanner
+          isIosSafari={isIosSafari}
+          onInstall={triggerInstall}
+          onDismiss={dismissInstall}
+        />
+      )}
 
       {showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
 
