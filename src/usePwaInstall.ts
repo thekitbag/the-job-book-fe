@@ -37,6 +37,18 @@ export function usePwaInstall(): UsePwaInstallReturn {
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(DISMISSED_KEY) === 'true',
   )
+  const [online, setOnline] = useState(() => navigator.onLine)
+
+  useEffect(() => {
+    const setOn = () => setOnline(true)
+    const setOff = () => setOnline(false)
+    window.addEventListener('online', setOn)
+    window.addEventListener('offline', setOff)
+    return () => {
+      window.removeEventListener('online', setOn)
+      window.removeEventListener('offline', setOff)
+    }
+  }, [])
 
   useEffect(() => {
     if (standalone) return
@@ -48,7 +60,7 @@ export function usePwaInstall(): UsePwaInstallReturn {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [standalone])
 
-  const showBanner = !standalone && !dismissed && (deferredPrompt !== null || iosSafari)
+  const showBanner = online && !standalone && !dismissed && (deferredPrompt !== null || iosSafari)
 
   const triggerInstall = useCallback(async () => {
     if (!deferredPrompt) return

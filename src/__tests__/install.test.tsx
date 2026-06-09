@@ -142,6 +142,18 @@ describe('PWA install banner', () => {
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
   })
 
+  it('hides the install banner when the device is offline', () => {
+    Object.defineProperty(navigator, 'onLine', { writable: true, value: false })
+
+    render(<CaptureScreen job={MOCK_JOB} />)
+    fireInstallPrompt()
+
+    expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
+
+    // restore so other tests are unaffected
+    Object.defineProperty(navigator, 'onLine', { writable: true, value: true })
+  })
+
   it('smoke test: CaptureScreen renders without install banner when no prompt and not iOS', () => {
     render(<CaptureScreen job={MOCK_JOB} />)
 
