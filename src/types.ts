@@ -98,6 +98,82 @@ export interface ReviewDraftSection {
   items: ReviewDraftItem[]
 }
 
+// ── Tidy-up types (Story 8) ──────────────────────────────────────────────────
+
+export type TidyUpItemKind = 'single' | 'duplicate_group' | 'contradiction' | 'unclear_prompt'
+export type TidyUpItemStatus = 'draft' | 'confirmed' | 'corrected' | 'rejected' | 'left_unconfirmed'
+
+export interface TidyUpSourceContext {
+  candidateFactId: string
+  noteId: string
+  transcriptId: string
+  capturedAt: string
+  transcriptText: string | null
+}
+
+export interface ProposedMemory {
+  memoryType: FactType
+  summary: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+}
+
+export interface TidyUpItem {
+  id: string
+  kind: TidyUpItemKind
+  status: TidyUpItemStatus
+  reviewLabel: string
+  summary: string
+  proposedMemory: ProposedMemory
+  confidenceLabel: ConfidenceLabel
+  uncertaintyFlags: string[]
+  sourceCandidateFactIds: string[]
+  sourceContext: TidyUpSourceContext[]
+}
+
+export interface TidyUpSection {
+  key: string
+  label: string
+  items: TidyUpItem[]
+}
+
+export interface AlreadyRememberedItem {
+  memoryItemId: string
+  summary: string
+  memoryType: FactType
+}
+
+export interface TidyUpRun {
+  id: string
+  jobId: string
+  localDate: string
+  status: 'ready' | 'generating' | 'failed'
+  createdAt?: string
+  sections: TidyUpSection[]
+  alreadyRemembered: AlreadyRememberedItem[]
+}
+
+export type TidyUpDecisionAction = 'confirm' | 'correct' | 'reject' | 'leave_unconfirmed'
+
+export interface TidyUpDecision {
+  tidyUpItemId: string
+  action: TidyUpDecisionAction
+  corrected?: ProposedMemory
+  reason?: string
+}
+
+export interface TidyUpDecisionResponse {
+  tidyUpItemId: string
+  action: TidyUpDecisionAction
+  status: TidyUpItemStatus
+  memoryItemId?: string
+  sourceCandidateFactIds: string[]
+}
+
 export interface CandidateFact {
   id: string
   jobId: string

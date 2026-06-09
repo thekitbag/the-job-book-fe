@@ -3,6 +3,7 @@ import { getCurrentJob, ApiError } from './api'
 import CaptureScreen from './CaptureScreen'
 import PasscodeScreen from './PasscodeScreen'
 import ReviewScreen from './ReviewScreen'
+import TidyUpScreen from './TidyUpScreen'
 import type { Job } from './types'
 
 const CACHED_JOB_KEY = 'job-book-cached-job'
@@ -17,7 +18,7 @@ function loadCachedJob(): Job | null {
 }
 
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error'
-type AppView = 'capture' | 'review'
+type AppView = 'capture' | 'review' | 'tidyUp'
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
@@ -77,5 +78,15 @@ export default function App() {
     return <ReviewScreen job={job} onClose={() => setView('capture')} />
   }
 
-  return <CaptureScreen job={job} onOpenReview={() => setView('review')} />
+  if (view === 'tidyUp') {
+    return <TidyUpScreen job={job} onClose={() => setView('capture')} />
+  }
+
+  return (
+    <CaptureScreen
+      job={job}
+      onOpenTidyUp={() => setView('tidyUp')}
+      onOpenReview={() => setView('review')}
+    />
+  )
 }

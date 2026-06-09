@@ -1,4 +1,4 @@
-import type { CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, LocalNote, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, LocalNote, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, TranscriptStatus, TidyUpDecision, TidyUpDecisionResponse, TidyUpRun } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -252,6 +252,124 @@ export async function submitReviewDecision(jobId: string, decision: ReviewDecisi
   })
   if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/review-decisions → ${res.status}`, res.status)
   return res.json() as Promise<ReviewDecisionResponse>
+}
+
+// Returns today's date in YYYY-MM-DD format using the device's local timezone.
+export function getTodayLocalDate(): string {
+  const d = new Date()
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
+const MOCK_TIDY_UP_REMEMBERED: AlreadyRememberedItem[] = [
+  { memoryItemId: 'mem-mock-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material' },
+]
+
+const MOCK_TIDY_UP: TidyUpRun = {
+  id: 'tidy-run-mock-001',
+  jobId: 'job-pilot-garden-room-001',
+  localDate: getTodayLocalDate(),
+  status: 'ready',
+  createdAt: new Date().toISOString(),
+  sections: [
+    {
+      key: 'used_material',
+      label: 'Used materials',
+      items: [
+        {
+          id: 'tidy-item-mock-001',
+          kind: 'duplicate_group',
+          status: 'draft',
+          reviewLabel: 'Looks like the same item',
+          summary: 'Used OSB boards on the back wall',
+          proposedMemory: {
+            memoryType: 'used_material',
+            summary: 'Used OSB boards on the back wall',
+            materialName: 'OSB',
+            quantity: null,
+            unit: 'boards',
+            supplierName: null,
+            deliveryTiming: null,
+            locationOrUse: 'back wall',
+          },
+          confidenceLabel: 'medium',
+          uncertaintyFlags: ['uncertain_quantity'],
+          sourceCandidateFactIds: ['mock-fact-001', 'mock-fact-002'],
+          sourceContext: [
+            {
+              candidateFactId: 'mock-fact-001',
+              noteId: 'mock-note-001',
+              transcriptId: 'mock-trans-001',
+              capturedAt: new Date().toISOString(),
+              transcriptText: 'Used six OSB boards on the back wall.',
+            },
+            {
+              candidateFactId: 'mock-fact-002',
+              noteId: 'mock-note-002',
+              transcriptId: 'mock-trans-002',
+              capturedAt: new Date().toISOString(),
+              transcriptText: 'Put some OSB on the back wall earlier.',
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  alreadyRemembered: MOCK_TIDY_UP_REMEMBERED,
+}
+
+// POST /api/jobs/:jobId/tidy-ups — create or return the existing tidy-up for a given local date.
+export async function createOrGetTidyUp(
+  jobId: string,
+  localDate: string,
+  forceRefresh = false,
+): Promise<TidyUpRun> {
+  if (USE_MOCK) {
+    await delay(600)
+    return { ...MOCK_TIDY_UP, jobId, localDate }
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/tidy-ups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ localDate, forceRefresh }),
+  })
+  if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/tidy-ups → ${res.status}`, res.status)
+  return res.json() as Promise<TidyUpRun>
+}
+
+// POST /api/jobs/:jobId/tidy-up-decisions — confirm, correct, reject, or leave-for-later.
+export async function submitTidyUpDecision(
+  jobId: string,
+  decision: TidyUpDecision,
+): Promise<TidyUpDecisionResponse> {
+  if (USE_MOCK) {
+    await delay(300)
+    const statusMap = {
+      confirm: 'confirmed',
+      correct: 'corrected',
+      reject: 'rejected',
+      leave_unconfirmed: 'left_unconfirmed',
+    } as const
+    return {
+      tidyUpItemId: decision.tidyUpItemId,
+      action: decision.action,
+      status: statusMap[decision.action],
+      memoryItemId: decision.action === 'confirm' || decision.action === 'correct'
+        ? `mem-${decision.tidyUpItemId}`
+        : undefined,
+      sourceCandidateFactIds: [],
+    }
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/tidy-up-decisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(decision),
+  })
+  if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/tidy-up-decisions → ${res.status}`, res.status)
+  return res.json() as Promise<TidyUpDecisionResponse>
 }
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
