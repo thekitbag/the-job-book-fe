@@ -221,9 +221,9 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
   if (item.locationOrUse) details.push(item.locationOrUse)
 
   return (
-    <li className="queue-remembered-card">
+    <li className={`queue-remembered-card queue-remembered-card--${item.memoryType}`}>
       <div className="queue-remembered-card-top">
-        <span className="queue-remembered-type-chip">{typeLabel}</span>
+        <span className={`queue-remembered-type-chip queue-remembered-type-chip--${item.memoryType}`}>{typeLabel}</span>
         {item.timeLabel && <span className="queue-remembered-card-time">{item.timeLabel}</span>}
       </div>
       <p className="queue-remembered-card-summary">{item.summary}</p>

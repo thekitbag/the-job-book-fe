@@ -1359,8 +1359,16 @@ code {
   background: #fff;
   border-radius: 10px;
   padding: 0.7rem 0.85rem;
-  border-left: 3px solid #1a6f38;
+  border-left: 3px solid #6b7280; /* fallback */
 }
+
+/* per-type border colors */
+.queue-remembered-card--ordered_material      { border-left-color: #1d4ed8; }
+.queue-remembered-card--used_material         { border-left-color: #d97706; }
+.queue-remembered-card--leftover_material     { border-left-color: #0d9488; }
+.queue-remembered-card--supplier_delivery_note{ border-left-color: #7c3aed; }
+.queue-remembered-card--customer_change       { border-left-color: #e11d48; }
+.queue-remembered-card--watch_out             { border-left-color: #ea580c; }
 
 .queue-remembered-card-top {
   display: flex;
@@ -1375,8 +1383,16 @@ code {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #1a6f38;
+  color: #6b7280; /* fallback */
 }
+
+/* per-type chip colors */
+.queue-remembered-type-chip--ordered_material      { color: #1d4ed8; }
+.queue-remembered-type-chip--used_material         { color: #92400e; }
+.queue-remembered-type-chip--leftover_material     { color: #0f766e; }
+.queue-remembered-type-chip--supplier_delivery_note{ color: #5b21b6; }
+.queue-remembered-type-chip--customer_change       { color: #be123c; }
+.queue-remembered-type-chip--watch_out             { color: #c2410c; }
 
 .queue-remembered-card-time {
   font-size: 0.72rem;
