@@ -266,7 +266,7 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
 
-    fireEvent.click(screen.getAllByRole('button', { name: /correct/i })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
     const form = screen.getByRole('form', { name: /edit correction/i })
     expect(form).toBeInTheDocument()
@@ -293,7 +293,7 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
 
-    fireEvent.click(screen.getAllByRole('button', { name: /correct/i })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
     expect(screen.getByRole('form', { name: /edit correction/i })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
@@ -305,7 +305,7 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
 
-    fireEvent.click(screen.getAllByRole('button', { name: /correct/i })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
     const select = screen.getByRole('combobox')
     const options = Array.from(select.querySelectorAll('option')).map(o => o.value)

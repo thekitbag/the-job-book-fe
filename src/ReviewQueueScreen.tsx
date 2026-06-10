@@ -187,7 +187,7 @@ function QueueItemCard({
             {submitting ? 'Saving…' : 'Remember this'}
           </button>
           <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>
-            Correct
+            Fix details
           </button>
           <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>
             Dismiss
