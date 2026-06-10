@@ -325,7 +325,30 @@ const MOCK_QUEUE_ITEMS: QueueItem[] = [
 ]
 
 const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
-  { memoryItemId: 'mem-mock-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+  {
+    memoryItemId: 'mem-mock-001',
+    summary: 'Ordered scaffolding from TCS',
+    memoryType: 'ordered_material',
+    timeLabel: 'Yesterday',
+    supplierName: 'TCS',
+    deliveryTiming: 'Friday morning',
+    materialName: 'scaffolding',
+    quantity: null,
+    unit: null,
+    locationOrUse: null,
+  },
+  {
+    memoryItemId: 'mem-mock-002',
+    summary: 'Watch out — uneven floor near back door',
+    memoryType: 'watch_out',
+    timeLabel: 'Earlier',
+    materialName: null,
+    quantity: null,
+    unit: null,
+    supplierName: null,
+    deliveryTiming: null,
+    locationOrUse: 'near back door',
+  },
 ]
 
 // GET /api/jobs/:jobId/review-queue — all unresolved draft items for the job.

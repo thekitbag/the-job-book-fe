@@ -150,6 +150,12 @@ export interface AlreadyRememberedItem {
   summary: string
   memoryType: MemoryType
   timeLabel?: string
+  materialName?: string | null
+  quantity?: string | null
+  unit?: string | null
+  supplierName?: string | null
+  deliveryTiming?: string | null
+  locationOrUse?: string | null
 }
 
 export interface ReviewQueue {

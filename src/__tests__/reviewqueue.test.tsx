@@ -341,6 +341,54 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText(/Yesterday/)).toBeInTheDocument()
   })
 
+  it('shows type chip for each remembered item', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+        { memoryItemId: 'mem-002', summary: 'Watch out near back door', memoryType: 'watch_out' },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('Ordered material')).toBeInTheDocument()
+    expect(screen.getByText('Watch out')).toBeInTheDocument()
+  })
+
+  it('shows structured details for remembered items that have them', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        {
+          memoryItemId: 'mem-001',
+          summary: 'Ordered scaffolding from TCS',
+          memoryType: 'ordered_material',
+          timeLabel: 'Yesterday',
+          supplierName: 'TCS',
+          deliveryTiming: 'Friday morning',
+          materialName: 'scaffolding',
+          quantity: null,
+          unit: null,
+          locationOrUse: null,
+        },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('scaffolding · TCS · Friday morning')).toBeInTheDocument()
+  })
+
+  it('omits details line when no structured fields present', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-001', summary: 'Watch out near back door', memoryType: 'watch_out' },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('Watch out near back door')).toBeInTheDocument()
+    // no details line rendered
+    expect(document.querySelector('.queue-remembered-card-details')).not.toBeInTheDocument()
+  })
+
   it('already-remembered section is hidden when empty', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
