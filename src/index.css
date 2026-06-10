@@ -84,21 +84,56 @@ button { cursor: pointer; font-family: inherit; }
 
 /* ── Job info ── */
 
-.capture-job {
-  padding: 1rem 1rem 0;
+.capture-current-job {
+  padding: 0.75rem 1rem 0;
 }
 
-.capture-job-title {
-  font-size: 1.4rem;
+.capture-current-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.2rem;
+}
+
+.capture-current-job-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+}
+
+.btn-switch-job {
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  color: #1a6f38;
+  font-weight: 500;
+  padding: 0.1rem 0;
+  text-decoration: underline;
+}
+
+.capture-current-job-detail {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.capture-current-job-title {
+  font-size: 1.35rem;
   font-weight: 700;
-  margin: 0 0 0.2rem;
   line-height: 1.2;
+  color: #1a1a1a;
 }
 
-.capture-job-label {
-  font-size: 0.875rem;
+.capture-current-job-type {
+  font-size: 0.78rem;
   color: #555;
-  margin: 0 0 1rem;
+  background: #e9f5ee;
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
 }
 
 /* ── Storage explainer ── */
@@ -1411,4 +1446,245 @@ code {
   font-size: 0.78rem;
   color: #666;
   margin: 0.25rem 0 0;
+}
+
+/* ── No jobs state ── */
+
+.app-no-jobs {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  padding: 2rem 1rem;
+}
+
+.app-no-jobs-heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.app-no-jobs-msg {
+  color: #555;
+  margin: 0 0 1.5rem;
+}
+
+/* ── Job picker screen ── */
+
+.job-picker-page {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1rem 2rem;
+  background: #f4f4f0;
+}
+
+.job-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0 0.75rem;
+}
+
+.btn-job-picker-back {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #1a6f38;
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  font-weight: 500;
+}
+
+.job-picker-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.job-picker-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.job-picker-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: #fff;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  text-align: left;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.job-picker-item--selected {
+  border-color: #1a6f38;
+}
+
+.job-picker-item-title {
+  flex: 1;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.job-picker-item-type {
+  font-size: 0.78rem;
+  color: #666;
+}
+
+.job-picker-item-check {
+  color: #1a6f38;
+  font-weight: 700;
+}
+
+.job-picker-add {
+  padding-top: 0.5rem;
+}
+
+.btn-job-picker-add {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+/* ── Add job form ── */
+
+.add-job-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.add-job-heading {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.add-job-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.add-job-field-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.add-job-field-input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+.add-job-field-input:focus {
+  outline: 2px solid #1a6f38;
+  outline-offset: 1px;
+}
+
+.add-job-type-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.add-job-type-fieldset legend {
+  margin-bottom: 0.4rem;
+}
+
+.add-job-type-options {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.add-job-type-option {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.add-job-type-option--selected {
+  border-color: #1a6f38;
+  background: #f0faf4;
+  font-weight: 600;
+  color: #1a6f38;
+}
+
+.add-job-type-radio {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.add-job-error {
+  font-size: 0.85rem;
+  color: #b91c1c;
+  margin: 0;
+}
+
+.add-job-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-add-job-submit {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.btn-add-job-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-add-job-cancel {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 10px;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.add-job-offline {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.add-job-offline-msg {
+  color: #555;
+  margin: 0;
 }

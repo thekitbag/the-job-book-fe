@@ -218,7 +218,21 @@ function InstallBanner({
   )
 }
 
-export default function CaptureScreen({ job, onOpenReviewQueue }: { job: Job; onOpenReviewQueue?: () => void }) {
+const JOB_TYPE_LABELS: Record<string, string> = {
+  garden_room: 'Garden room',
+  extension: 'Extension',
+  other: 'Other',
+}
+
+export default function CaptureScreen({
+  job,
+  onOpenReviewQueue,
+  onSwitchJob,
+}: {
+  job: Job
+  onOpenReviewQueue?: () => void
+  onSwitchJob?: () => void
+}) {
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [showExplainer, setShowExplainer] = useState(
@@ -328,9 +342,19 @@ export default function CaptureScreen({ job, onOpenReviewQueue }: { job: Job; on
         )}
       </header>
 
-      <div className="capture-job">
-        <h1 className="capture-job-title">{job.title}</h1>
-        <p className="capture-job-label">{job.roughLocationOrLabel}</p>
+      <div className="capture-current-job">
+        <div className="capture-current-job-row">
+          <span className="capture-current-job-label">Current job</span>
+          {onSwitchJob && (
+            <button className="btn-switch-job" onClick={onSwitchJob}>Switch job</button>
+          )}
+        </div>
+        <div className="capture-current-job-detail">
+          <span className="capture-current-job-title">{job.title}</span>
+          {job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
+            <span className="capture-current-job-type">{JOB_TYPE_LABELS[job.jobType]}</span>
+          )}
+        </div>
       </div>
 
       {showBanner && (

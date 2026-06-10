@@ -19,8 +19,11 @@ vi.mock('../api', async (importOriginal) => {
 const MOCK_JOB: Job = {
   id: 'job-001',
   title: 'Garden Room',
+  jobType: 'garden_room',
   roughLocationOrLabel: 'Mrs Patel',
   status: 'active',
+  createdAt: '2026-06-01T08:00:00Z',
+  updatedAt: '2026-06-10T09:00:00Z',
 }
 
 const ITEM_SINGLE: QueueItem = {
