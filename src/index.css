@@ -1009,3 +1009,358 @@ code {
   .capture-page,
   .spike-page { padding-left: 0.75rem; padding-right: 0.75rem; }
 }
+
+/* ── Things to check entry point ── */
+
+.review-queue-entry {
+  padding: 0 1rem 1rem;
+}
+
+.btn-open-review-queue {
+  width: 100%;
+  padding: 0.9rem 1.5rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* ── Review queue page ── */
+
+.queue-page {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1rem 2rem;
+  background: #f4f4f0;
+}
+
+.queue-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0 0.5rem;
+}
+
+.btn-queue-back {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #1a6f38;
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  font-weight: 500;
+}
+
+.queue-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.queue-job-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 1rem;
+}
+
+.queue-loading,
+.queue-empty {
+  text-align: center;
+  color: #555;
+  margin-top: 2rem;
+}
+
+.queue-load-error {
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.btn-queue-retry {
+  margin-top: 0.75rem;
+  padding: 0.6rem 1.5rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+/* ── Section ── */
+
+.queue-section {
+  margin-bottom: 1.5rem;
+}
+
+.queue-section-heading {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.75rem;
+}
+
+/* ── Item card ── */
+
+.queue-item-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.queue-item-card--confirmed,
+.queue-item-card--corrected {
+  opacity: 0.7;
+}
+
+.queue-item-card--dismissed {
+  opacity: 0.5;
+}
+
+.queue-item-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.queue-time-label {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.queue-kind-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2em 0.5em;
+  border-radius: 4px;
+}
+
+.queue-kind-badge--duplicate {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.queue-kind-badge--contradiction {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.queue-kind-badge--unclear {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.queue-item-summary {
+  font-size: 0.95rem;
+  margin: 0 0 0.75rem;
+  line-height: 1.4;
+}
+
+.queue-item-resolved {
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+  font-weight: 500;
+}
+
+.queue-item-resolved--saved { color: #1a6f38; }
+.queue-item-resolved--dismissed { color: #888; }
+
+.queue-item-error {
+  font-size: 0.85rem;
+  color: #b91c1c;
+  margin: 0.5rem 0 0;
+}
+
+/* ── Item actions ── */
+
+.queue-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-queue-remember {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.6rem 1rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-queue-correct,
+.btn-queue-dismiss {
+  padding: 0.6rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.btn-queue-remember:disabled,
+.btn-queue-correct:disabled,
+.btn-queue-dismiss:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Source context ── */
+
+.queue-source-context {
+  margin-bottom: 0.75rem;
+}
+
+.queue-source-toggle {
+  background: none;
+  border: none;
+  font-size: 0.8rem;
+  color: #555;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.queue-source-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.queue-source-item {
+  background: #f8f8f6;
+  border-left: 3px solid #d1d5db;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.queue-source-text {
+  font-size: 0.82rem;
+  color: #555;
+  margin: 0;
+  font-style: italic;
+}
+
+.queue-source-unavailable {
+  font-size: 0.82rem;
+  color: #aaa;
+  margin: 0;
+}
+
+/* ── Edit form ── */
+
+.queue-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.queue-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.queue-field-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.queue-field-input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+.queue-field-input:focus {
+  outline: 2px solid #1a6f38;
+  outline-offset: 1px;
+}
+
+.queue-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.btn-queue-save {
+  flex: 1;
+  padding: 0.55rem 1rem;
+  background: #1a6f38;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-queue-cancel {
+  padding: 0.55rem 1rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.btn-queue-save:disabled,
+.btn-queue-cancel:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Already remembered ── */
+
+.queue-already-remembered {
+  background: #f0faf4;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.queue-remembered-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #1a6f38;
+  margin: 0 0 0.5rem;
+}
+
+.queue-remembered-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.queue-remembered-item {
+  font-size: 0.88rem;
+  color: #374151;
+}
+
+.queue-remembered-time {
+  color: #888;
+}

@@ -98,6 +98,84 @@ export interface ReviewDraftSection {
   items: ReviewDraftItem[]
 }
 
+// ── Review queue types ────────────────────────────────────────────────────────
+
+// Trusted memory must be a concrete type — unclear items must be corrected or dismissed.
+export type MemoryType = Exclude<FactType, 'unclear'>
+
+export interface ProposedMemory {
+  memoryType: MemoryType
+  summary: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+}
+
+export type QueueItemKind = 'single' | 'duplicate_group' | 'contradiction' | 'unclear_prompt'
+export type QueueItemStatus = 'draft' | 'confirmed' | 'corrected' | 'dismissed'
+
+export interface QueueSourceContext {
+  candidateFactId: string
+  noteId: string
+  transcriptId: string
+  capturedAt: string
+  transcriptText: string | null
+}
+
+export interface QueueItem {
+  id: string
+  kind: QueueItemKind
+  status: QueueItemStatus
+  reviewLabel: string
+  timeLabel?: string
+  summary: string
+  proposedMemory: ProposedMemory
+  confidenceLabel: ConfidenceLabel
+  uncertaintyFlags: string[]
+  sourceCandidateFactIds: string[]
+  sourceContext: QueueSourceContext[]
+}
+
+export interface QueueSection {
+  key: string
+  label: string
+  items: QueueItem[]
+}
+
+export interface AlreadyRememberedItem {
+  memoryItemId: string
+  summary: string
+  memoryType: MemoryType
+  timeLabel?: string
+}
+
+export interface ReviewQueue {
+  jobId: string
+  generatedAt: string
+  sections: QueueSection[]
+  alreadyRemembered: AlreadyRememberedItem[]
+}
+
+export type QueueDecisionAction = 'confirm' | 'correct' | 'dismiss'
+
+export interface QueueDecision {
+  queueItemId: string
+  action: QueueDecisionAction
+  corrected?: ProposedMemory
+  reason?: string
+}
+
+export interface QueueDecisionResponse {
+  queueItemId: string
+  action: QueueDecisionAction
+  status: QueueItemStatus
+  memoryItemId?: string
+  sourceCandidateFactIds: string[]
+}
+
 export interface CandidateFact {
   id: string
   jobId: string

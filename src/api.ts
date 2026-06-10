@@ -1,4 +1,4 @@
-import type { CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, LocalNote, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, LocalNote, MemoryType, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -252,6 +252,124 @@ export async function submitReviewDecision(jobId: string, decision: ReviewDecisi
   })
   if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/review-decisions → ${res.status}`, res.status)
   return res.json() as Promise<ReviewDecisionResponse>
+}
+
+const MOCK_QUEUE_ITEMS: QueueItem[] = [
+  {
+    id: 'queue-item-mock-001',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'What I picked up today',
+    timeLabel: 'Today',
+    summary: 'Ordered 12 sheets of plasterboard from Jewson',
+    proposedMemory: {
+      memoryType: 'ordered_material' as MemoryType,
+      summary: 'Ordered 12 sheets of plasterboard from Jewson',
+      materialName: 'plasterboard',
+      quantity: '12',
+      unit: 'sheets',
+      supplierName: 'Jewson',
+      deliveryTiming: 'tomorrow morning',
+      locationOrUse: null,
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-001'],
+    sourceContext: [
+      {
+        candidateFactId: 'mock-fact-001',
+        noteId: 'mock-note-001',
+        transcriptId: 'mock-trans-001',
+        capturedAt: new Date().toISOString(),
+        transcriptText: 'Ordered another 12 sheets of plasterboard from Jewson, coming tomorrow morning.',
+      },
+    ],
+  },
+  {
+    id: 'queue-item-mock-002',
+    kind: 'duplicate_group',
+    status: 'draft',
+    reviewLabel: 'Looks like the same item',
+    timeLabel: 'Today',
+    summary: 'Used OSB boards on the back wall',
+    proposedMemory: {
+      memoryType: 'used_material' as MemoryType,
+      summary: 'Used OSB boards on the back wall',
+      materialName: 'OSB',
+      quantity: null,
+      unit: 'boards',
+      supplierName: null,
+      deliveryTiming: null,
+      locationOrUse: 'back wall',
+    },
+    confidenceLabel: 'medium',
+    uncertaintyFlags: ['uncertain_quantity'],
+    sourceCandidateFactIds: ['mock-fact-002', 'mock-fact-003'],
+    sourceContext: [
+      {
+        candidateFactId: 'mock-fact-002',
+        noteId: 'mock-note-001',
+        transcriptId: 'mock-trans-001',
+        capturedAt: new Date().toISOString(),
+        transcriptText: 'Used six OSB boards on the back wall.',
+      },
+      {
+        candidateFactId: 'mock-fact-003',
+        noteId: 'mock-note-002',
+        transcriptId: 'mock-trans-002',
+        capturedAt: new Date().toISOString(),
+        transcriptText: 'Put some OSB on the back wall earlier.',
+      },
+    ],
+  },
+]
+
+const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
+  { memoryItemId: 'mem-mock-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+]
+
+// GET /api/jobs/:jobId/review-queue — all unresolved draft items for the job.
+export async function getReviewQueue(jobId: string): Promise<ReviewQueue> {
+  if (USE_MOCK) {
+    await delay(500)
+    return {
+      jobId,
+      generatedAt: new Date().toISOString(),
+      sections: [
+        { key: 'ordered_materials', label: 'Ordered materials', items: [MOCK_QUEUE_ITEMS[0]] },
+        { key: 'used_materials', label: 'Used materials', items: [MOCK_QUEUE_ITEMS[1]] },
+      ],
+      alreadyRemembered: MOCK_REMEMBERED,
+    }
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/review-queue`)
+  if (!res.ok) throw new ApiError(`GET /api/jobs/${jobId}/review-queue → ${res.status}`, res.status)
+  return res.json() as Promise<ReviewQueue>
+}
+
+// POST /api/jobs/:jobId/review-queue-decisions — confirm, correct, or dismiss.
+export async function submitQueueDecision(
+  jobId: string,
+  decision: QueueDecision,
+): Promise<QueueDecisionResponse> {
+  if (USE_MOCK) {
+    await delay(300)
+    const statusMap = { confirm: 'confirmed', correct: 'corrected', dismiss: 'dismissed' } as const
+    return {
+      queueItemId: decision.queueItemId,
+      action: decision.action,
+      status: statusMap[decision.action],
+      memoryItemId: decision.action !== 'dismiss' ? `mem-${decision.queueItemId}` : undefined,
+      sourceCandidateFactIds: [],
+    }
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/review-queue-decisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(decision),
+  })
+  if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/review-queue-decisions → ${res.status}`, res.status)
+  return res.json() as Promise<QueueDecisionResponse>
 }
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {

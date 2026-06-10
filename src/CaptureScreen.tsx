@@ -218,7 +218,7 @@ function InstallBanner({
   )
 }
 
-export default function CaptureScreen({ job, onOpenReview }: { job: Job; onOpenReview?: () => void }) {
+export default function CaptureScreen({ job, onOpenReviewQueue }: { job: Job; onOpenReviewQueue?: () => void }) {
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [showExplainer, setShowExplainer] = useState(
@@ -383,10 +383,10 @@ export default function CaptureScreen({ job, onOpenReview }: { job: Job; onOpenR
         )}
       </div>
 
-      {onOpenReview && readyExtractionCount > 0 && (
-        <div className="review-entry">
-          <button className="btn-open-review" onClick={onOpenReview}>
-            Review draft facts
+      {onOpenReviewQueue && (
+        <div className="review-queue-entry">
+          <button className="btn-open-review-queue" onClick={onOpenReviewQueue}>
+            Things to check
           </button>
         </div>
       )}
