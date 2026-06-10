@@ -42,8 +42,11 @@ const CONFIG_PATH = resolve(PROJECT_ROOT, 'vite.config.ts')
 const PILOT_JOB = {
   id: 'job-pilot-001',
   title: 'Garden Room',
+  jobType: 'garden_room' as const,
   roughLocationOrLabel: 'Mrs Patel – back garden',
   status: 'active' as const,
+  createdAt: '2026-06-01T08:00:00Z',
+  updatedAt: '2026-06-10T09:00:00Z',
 }
 
 // ── PWA asset and manifest config ─────────────────────────────────────────────

@@ -27,11 +27,16 @@ export interface LocalNote {
   extractionStatus: ExtractionStatus | null
 }
 
+export type JobType = 'garden_room' | 'extension' | 'other'
+
 export interface Job {
   id: string
   title: string
-  roughLocationOrLabel: string
+  jobType: JobType | string
   status: 'active' | 'completed' | 'archived'
+  roughLocationOrLabel: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type FactType =

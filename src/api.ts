@@ -1,4 +1,4 @@
-import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, LocalNote, MemoryType, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, JobType, LocalNote, MemoryType, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -23,12 +23,26 @@ export interface UploadNoteResponse {
   isDuplicate: boolean
 }
 
-const MOCK_JOB: Job = {
-  id: 'job-pilot-garden-room-001',
-  title: 'Garden Room',
-  roughLocationOrLabel: 'Mrs Patel – back garden',
-  status: 'active',
-}
+const MOCK_JOBS: Job[] = [
+  {
+    id: 'job-pilot-garden-room-001',
+    title: 'Garden Room',
+    jobType: 'garden_room',
+    roughLocationOrLabel: 'Mrs Patel – back garden',
+    status: 'active',
+    createdAt: '2026-06-01T08:00:00Z',
+    updatedAt: '2026-06-10T09:00:00Z',
+  },
+  {
+    id: 'job-pilot-extension-002',
+    title: 'Kitchen Extension',
+    jobType: 'extension',
+    roughLocationOrLabel: null,
+    status: 'active',
+    createdAt: '2026-05-20T08:00:00Z',
+    updatedAt: '2026-06-08T14:00:00Z',
+  },
+]
 
 function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
@@ -53,10 +67,46 @@ export async function pilotLogin(passcode: string): Promise<void> {
 export async function getCurrentJob(): Promise<Job> {
   if (USE_MOCK) {
     await delay(200)
-    return MOCK_JOB
+    return MOCK_JOBS[0]
   }
   const res = await apiFetch('/api/jobs/current')
   if (!res.ok) throw new ApiError(`GET /api/jobs/current → ${res.status}`, res.status)
+  return res.json() as Promise<Job>
+}
+
+// GET /api/jobs — returns Mike's jobs, active/recent first.
+export async function getJobs(): Promise<Job[]> {
+  if (USE_MOCK) {
+    await delay(300)
+    return MOCK_JOBS
+  }
+  const res = await apiFetch('/api/jobs')
+  if (!res.ok) throw new ApiError(`GET /api/jobs → ${res.status}`, res.status)
+  return res.json() as Promise<Job[]>
+}
+
+// POST /api/jobs — create a lightweight job. Requires network.
+export async function createJob(title: string, jobType?: JobType): Promise<Job> {
+  if (USE_MOCK) {
+    await delay(500)
+    const newJob: Job = {
+      id: `job-mock-${Date.now()}`,
+      title: title.trim(),
+      jobType: jobType ?? 'other',
+      roughLocationOrLabel: null,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    MOCK_JOBS.unshift(newJob)
+    return newJob
+  }
+  const res = await apiFetch('/api/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: title.trim(), jobType }),
+  })
+  if (!res.ok) throw new ApiError(`POST /api/jobs → ${res.status}`, res.status)
   return res.json() as Promise<Job>
 }
 

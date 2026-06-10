@@ -39,8 +39,11 @@ vi.mock('../useRecorder', () => {
 const JOB = {
   id: 'job-test-001',
   title: 'Garden Room',
+  jobType: 'garden_room' as const,
   roughLocationOrLabel: 'Test site',
   status: 'active' as const,
+  createdAt: '2026-06-01T08:00:00Z',
+  updatedAt: '2026-06-10T09:00:00Z',
 }
 
 async function getRecorderMock() {
@@ -82,10 +85,10 @@ describe('CaptureScreen', () => {
     vi.mocked(getDraftFacts).mockResolvedValue([])
   })
 
-  it('shows the job title and location', async () => {
+  it('shows the current job title', async () => {
     render(<CaptureScreen job={JOB} />)
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
-    expect(screen.getByText('Test site')).toBeInTheDocument()
+    expect(screen.getByText(/current job/i)).toBeInTheDocument()
   })
 
   it('has no category picker on the capture screen', () => {
@@ -215,5 +218,20 @@ describe('CaptureScreen', () => {
     }, { timeout: 3000 })
 
     expect(mockUpload).toHaveBeenCalledOnce()
+  })
+
+  it('recording saves local note with the selected job id', async () => {
+    const mockUpload = await getUploadMock()
+    mockUpload.mockImplementation(() => new Promise(() => {}))
+
+    const user = userEvent.setup()
+    render(<CaptureScreen job={JOB} />)
+
+    await user.click(screen.getByRole('button', { name: /record/i }))
+    await simulateRecordingComplete(FAKE_RESULT)
+
+    const notes = await getNotesForJob(JOB.id)
+    expect(notes).toHaveLength(1)
+    expect(notes[0].jobId).toBe(JOB.id)
   })
 })

@@ -18,8 +18,11 @@ vi.mock('../api', () => ({
 const JOB = {
   id: 'job-test-001',
   title: 'Garden Room',
+  jobType: 'garden_room' as const,
   roughLocationOrLabel: 'Test site',
   status: 'active' as const,
+  createdAt: '2026-06-01T08:00:00Z',
+  updatedAt: '2026-06-10T09:00:00Z',
 }
 
 // ── Shared mock draft data ────────────────────────────────────────────────────

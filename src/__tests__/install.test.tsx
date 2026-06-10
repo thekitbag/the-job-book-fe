@@ -43,8 +43,11 @@ const DISMISSED_KEY = 'job-book-install-dismissed'
 const MOCK_JOB = {
   id: 'job-001',
   title: 'Garden Room',
+  jobType: 'garden_room' as const,
   roughLocationOrLabel: 'Mrs Patel',
   status: 'active' as const,
+  createdAt: '2026-06-01T08:00:00Z',
+  updatedAt: '2026-06-10T09:00:00Z',
 }
 
 // Helper to fire the beforeinstallprompt event
