@@ -11,13 +11,13 @@ import type {
   ReviewQueue,
 } from './types'
 
-const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
-  { value: 'used_material', label: 'Used material' },
-  { value: 'ordered_material', label: 'Ordered material' },
-  { value: 'leftover_material', label: 'Leftover material' },
-  { value: 'supplier_delivery_note', label: 'Supplier / delivery note' },
-  { value: 'customer_change', label: 'Customer change' },
-  { value: 'watch_out', label: 'Watch out' },
+const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: string }[] = [
+  { value: 'used_material', label: 'Used material', shortLabel: 'Used' },
+  { value: 'ordered_material', label: 'Ordered material', shortLabel: 'Ordered' },
+  { value: 'leftover_material', label: 'Leftover material', shortLabel: 'Leftover' },
+  { value: 'supplier_delivery_note', label: 'Supplier / delivery note', shortLabel: 'Supplier' },
+  { value: 'customer_change', label: 'Customer change', shortLabel: 'Customer' },
+  { value: 'watch_out', label: 'Watch out', shortLabel: 'Watch out' },
 ]
 
 function SourceContext({ contexts }: { contexts: QueueItem['sourceContext'] }) {
@@ -209,18 +209,38 @@ function QueueItemCard({
   )
 }
 
+function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
+  const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.shortLabel ?? item.memoryType
+
+  const details: string[] = []
+  if (item.quantity && item.unit) details.push(`${item.quantity} ${item.unit}`)
+  else if (item.quantity) details.push(item.quantity)
+  if (item.materialName) details.push(item.materialName)
+  if (item.supplierName) details.push(item.supplierName)
+  if (item.deliveryTiming) details.push(item.deliveryTiming)
+  if (item.locationOrUse) details.push(item.locationOrUse)
+
+  return (
+    <li className={`queue-remembered-card queue-remembered-card--${item.memoryType}`}>
+      <div className="queue-remembered-card-top">
+        <span className={`queue-remembered-type-chip queue-remembered-type-chip--${item.memoryType}`}>{typeLabel}</span>
+        {item.timeLabel && <span className="queue-remembered-card-time">{item.timeLabel}</span>}
+      </div>
+      <p className="queue-remembered-card-summary">{item.summary}</p>
+      {details.length > 0 && (
+        <p className="queue-remembered-card-details">{details.join(' · ')}</p>
+      )}
+    </li>
+  )
+}
+
 function AlreadyRememberedSection({ items }: { items: AlreadyRememberedItem[] }) {
   if (items.length === 0) return null
   return (
     <div className="queue-already-remembered" role="region" aria-label="Already remembered">
       <p className="queue-remembered-heading">Already remembered</p>
       <ul className="queue-remembered-list">
-        {items.map(m => (
-          <li key={m.memoryItemId} className="queue-remembered-item">
-            {m.timeLabel && <span className="queue-remembered-time">{m.timeLabel} · </span>}
-            {m.summary}
-          </li>
-        ))}
+        {items.map(m => <RememberedCard key={m.memoryItemId} item={m} />)}
       </ul>
     </div>
   )

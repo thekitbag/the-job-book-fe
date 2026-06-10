@@ -1332,9 +1332,6 @@ code {
 /* ── Already remembered ── */
 
 .queue-already-remembered {
-  background: #f0faf4;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -1343,7 +1340,7 @@ code {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #1a6f38;
+  color: #555;
   margin: 0 0 0.5rem;
 }
 
@@ -1353,14 +1350,65 @@ code {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.5rem;
 }
 
-.queue-remembered-item {
-  font-size: 0.88rem;
-  color: #374151;
+/* ── Individual remembered card ── */
+
+.queue-remembered-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  border-left: 3px solid #6b7280; /* fallback */
 }
 
-.queue-remembered-time {
+/* per-type border colors */
+.queue-remembered-card--ordered_material      { border-left-color: #1d4ed8; }
+.queue-remembered-card--used_material         { border-left-color: #d97706; }
+.queue-remembered-card--leftover_material     { border-left-color: #0d9488; }
+.queue-remembered-card--supplier_delivery_note{ border-left-color: #7c3aed; }
+.queue-remembered-card--customer_change       { border-left-color: #e11d48; }
+.queue-remembered-card--watch_out             { border-left-color: #ea580c; }
+
+.queue-remembered-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.queue-remembered-type-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280; /* fallback */
+}
+
+/* per-type chip colors */
+.queue-remembered-type-chip--ordered_material      { color: #1d4ed8; }
+.queue-remembered-type-chip--used_material         { color: #92400e; }
+.queue-remembered-type-chip--leftover_material     { color: #0f766e; }
+.queue-remembered-type-chip--supplier_delivery_note{ color: #5b21b6; }
+.queue-remembered-type-chip--customer_change       { color: #be123c; }
+.queue-remembered-type-chip--watch_out             { color: #c2410c; }
+
+.queue-remembered-card-time {
+  font-size: 0.72rem;
   color: #888;
+  white-space: nowrap;
+}
+
+.queue-remembered-card-summary {
+  font-size: 0.88rem;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.queue-remembered-card-details {
+  font-size: 0.78rem;
+  color: #666;
+  margin: 0.25rem 0 0;
 }
