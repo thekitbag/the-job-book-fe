@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getCurrentJob, ApiError } from './api'
 import CaptureScreen from './CaptureScreen'
 import PasscodeScreen from './PasscodeScreen'
-import ReviewScreen from './ReviewScreen'
+import ReviewQueueScreen from './ReviewQueueScreen'
 import type { Job } from './types'
 
 const CACHED_JOB_KEY = 'job-book-cached-job'
@@ -17,7 +17,7 @@ function loadCachedJob(): Job | null {
 }
 
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error'
-type AppView = 'capture' | 'review'
+type AppView = 'capture' | 'reviewQueue'
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
@@ -73,9 +73,9 @@ export default function App() {
     )
   }
 
-  if (view === 'review') {
-    return <ReviewScreen job={job} onClose={() => setView('capture')} />
+  if (view === 'reviewQueue') {
+    return <ReviewQueueScreen job={job} onClose={() => setView('capture')} />
   }
 
-  return <CaptureScreen job={job} onOpenReview={() => setView('review')} />
+  return <CaptureScreen job={job} onOpenReviewQueue={() => setView('reviewQueue')} />
 }
