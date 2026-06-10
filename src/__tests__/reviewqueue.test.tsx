@@ -350,7 +350,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
-    expect(screen.getByText('Ordered material')).toBeInTheDocument()
+    expect(screen.getByText('Ordered')).toBeInTheDocument()
     expect(screen.getByText('Watch out')).toBeInTheDocument()
   })
 
@@ -387,6 +387,37 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText('Watch out near back door')).toBeInTheDocument()
     // no details line rendered
     expect(document.querySelector('.queue-remembered-card-details')).not.toBeInTheDocument()
+  })
+
+  it('multiple remembered items are individually scannable as separate elements', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+        { memoryItemId: 'mem-002', summary: 'Watch out near back door', memoryType: 'watch_out', timeLabel: 'Earlier' },
+        { memoryItemId: 'mem-003', summary: 'Used three OSB sheets on the wall', memoryType: 'used_material', timeLabel: 'Today' },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    const cards = document.querySelectorAll('.queue-remembered-card')
+    expect(cards.length).toBe(3)
+    expect(cards[0].textContent).toContain('Ordered scaffolding from TCS')
+    expect(cards[1].textContent).toContain('Watch out near back door')
+    expect(cards[2].textContent).toContain('Used three OSB sheets on the wall')
+  })
+
+  it('remembered cards have no confirm/correct/dismiss action buttons', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [],
+      alreadyRemembered: [
+        { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.queryByRole('button', { name: /remember this/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /fix details/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument()
   })
 
   it('already-remembered section is hidden when empty', async () => {

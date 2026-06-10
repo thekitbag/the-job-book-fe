@@ -11,13 +11,13 @@ import type {
   ReviewQueue,
 } from './types'
 
-const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
-  { value: 'used_material', label: 'Used material' },
-  { value: 'ordered_material', label: 'Ordered material' },
-  { value: 'leftover_material', label: 'Leftover material' },
-  { value: 'supplier_delivery_note', label: 'Supplier / delivery note' },
-  { value: 'customer_change', label: 'Customer change' },
-  { value: 'watch_out', label: 'Watch out' },
+const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: string }[] = [
+  { value: 'used_material', label: 'Used material', shortLabel: 'Used' },
+  { value: 'ordered_material', label: 'Ordered material', shortLabel: 'Ordered' },
+  { value: 'leftover_material', label: 'Leftover material', shortLabel: 'Leftover' },
+  { value: 'supplier_delivery_note', label: 'Supplier / delivery note', shortLabel: 'Supplier' },
+  { value: 'customer_change', label: 'Customer change', shortLabel: 'Customer' },
+  { value: 'watch_out', label: 'Watch out', shortLabel: 'Watch out' },
 ]
 
 function SourceContext({ contexts }: { contexts: QueueItem['sourceContext'] }) {
@@ -210,7 +210,7 @@ function QueueItemCard({
 }
 
 function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
-  const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.label ?? item.memoryType
+  const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.shortLabel ?? item.memoryType
 
   const details: string[] = []
   if (item.quantity && item.unit) details.push(`${item.quantity} ${item.unit}`)
