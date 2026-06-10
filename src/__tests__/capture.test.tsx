@@ -219,4 +219,19 @@ describe('CaptureScreen', () => {
 
     expect(mockUpload).toHaveBeenCalledOnce()
   })
+
+  it('recording saves local note with the selected job id', async () => {
+    const mockUpload = await getUploadMock()
+    mockUpload.mockImplementation(() => new Promise(() => {}))
+
+    const user = userEvent.setup()
+    render(<CaptureScreen job={JOB} />)
+
+    await user.click(screen.getByRole('button', { name: /record/i }))
+    await simulateRecordingComplete(FAKE_RESULT)
+
+    const notes = await getNotesForJob(JOB.id)
+    expect(notes).toHaveLength(1)
+    expect(notes[0].jobId).toBe(JOB.id)
+  })
 })

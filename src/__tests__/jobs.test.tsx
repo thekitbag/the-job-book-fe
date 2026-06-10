@@ -287,3 +287,55 @@ describe('Add job form', () => {
     expect(screen.queryByRole('form', { name: /add job/i })).not.toBeInTheDocument()
   })
 })
+
+// ── First-run / no-jobs mode ───────────────────────────────────────────────
+
+describe('JobPickerScreen — first-run mode (hideBack + custom title)', () => {
+  it('hides the Back button when hideBack is true', () => {
+    render(
+      <JobPickerScreen
+        jobs={[]}
+        selectedJobId={null}
+        online={true}
+        onSelect={vi.fn()}
+        onJobAdded={vi.fn()}
+        onClose={vi.fn()}
+        hideBack={true}
+        title="Add first job"
+      />
+    )
+    expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the custom title instead of "Switch job"', () => {
+    render(
+      <JobPickerScreen
+        jobs={[]}
+        selectedJobId={null}
+        online={true}
+        onSelect={vi.fn()}
+        onJobAdded={vi.fn()}
+        onClose={vi.fn()}
+        hideBack={true}
+        title="Add first job"
+      />
+    )
+    expect(screen.getByRole('heading', { name: /add first job/i })).toBeInTheDocument()
+    expect(screen.queryByText(/switch job/i)).not.toBeInTheDocument()
+  })
+
+  it('shows Back button and "Switch job" title by default', () => {
+    render(
+      <JobPickerScreen
+        jobs={[JOB_A]}
+        selectedJobId={JOB_A.id}
+        online={true}
+        onSelect={vi.fn()}
+        onJobAdded={vi.fn()}
+        onClose={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /switch job/i })).toBeInTheDocument()
+  })
+})

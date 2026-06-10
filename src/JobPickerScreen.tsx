@@ -103,6 +103,8 @@ export default function JobPickerScreen({
   onSelect,
   onJobAdded,
   onClose,
+  title = 'Switch job',
+  hideBack = false,
 }: {
   jobs: Job[]
   selectedJobId: string | null
@@ -110,6 +112,8 @@ export default function JobPickerScreen({
   onSelect: (job: Job) => void
   onJobAdded: (job: Job) => void
   onClose: () => void
+  title?: string
+  hideBack?: boolean
 }) {
   const [showAddForm, setShowAddForm] = useState(false)
 
@@ -121,10 +125,12 @@ export default function JobPickerScreen({
   return (
     <div className="job-picker-page">
       <header className="job-picker-header">
-        <button className="btn-job-picker-back" onClick={onClose} aria-label="Back">
-          ← Back
-        </button>
-        <h1 className="job-picker-title">Switch job</h1>
+        {!hideBack && (
+          <button className="btn-job-picker-back" onClick={onClose} aria-label="Back">
+            ← Back
+          </button>
+        )}
+        <h1 className="job-picker-title">{title}</h1>
       </header>
 
       {showAddForm ? (

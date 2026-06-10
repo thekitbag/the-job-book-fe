@@ -3,6 +3,11 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import App from '../App'
 import { getJobs, ApiError } from '../api'
 
+vi.mock('../db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../db')>()
+  return { ...actual, saveNote: vi.fn(), getNotesForJob: vi.fn().mockResolvedValue([]) }
+})
+
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
   return {
@@ -23,19 +28,26 @@ vi.mock('../api', async (importOriginal) => {
 })
 
 vi.mock('../CaptureScreen', () => ({
-  default: ({ job }: { job: { title: string } }) => (
-    <div data-testid="capture-screen">{job.title}</div>
+  default: ({ job, onOpenReviewQueue, onSwitchJob }: { job: { id: string; title: string }; onOpenReviewQueue?: () => void; onSwitchJob?: () => void }) => (
+    <div data-testid="capture-screen" data-job-id={job.id}>
+      {job.title}
+      {onOpenReviewQueue && <button onClick={onOpenReviewQueue}>mock-open-queue</button>}
+      {onSwitchJob && <button onClick={onSwitchJob}>mock-switch-job</button>}
+    </div>
   ),
 }))
 
 vi.mock('../ReviewQueueScreen', () => ({
-  default: () => <div data-testid="review-queue-screen">Review Queue</div>,
+  default: ({ job }: { job: { id: string; title: string } }) => (
+    <div data-testid="review-queue-screen" data-job-id={job.id}>{job.title}</div>
+  ),
 }))
 
 vi.mock('../JobPickerScreen', () => ({
-  default: ({ onJobAdded }: { onJobAdded: (j: unknown) => void }) => (
+  default: ({ onJobAdded, onSelect }: { onJobAdded: (j: unknown) => void; onSelect: (j: unknown) => void }) => (
     <div data-testid="job-picker-screen">
       <button onClick={() => onJobAdded({ id: 'new-job-001', title: 'New Job', jobType: 'other', roughLocationOrLabel: null, status: 'active', createdAt: '2026-06-10T10:00:00Z', updatedAt: '2026-06-10T10:00:00Z' })}>mock-add-job</button>
+      <button onClick={() => onSelect({ id: 'job-002', title: 'Kitchen Extension', jobType: 'extension', roughLocationOrLabel: null, status: 'active', createdAt: '2026-05-20T08:00:00Z', updatedAt: '2026-06-08T14:00:00Z' })}>mock-select-job-b</button>
     </div>
   ),
 }))
@@ -159,5 +171,70 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('capture-screen')).not.toBeInTheDocument()
+  })
+
+  it('no-jobs state shows "Add first job" and no Back button', async () => {
+    mockGetJobs.mockResolvedValue([])
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    // The JobPickerScreen mock doesn't render header text — test via real component
+    // This is covered by the JobPickerScreen unit test; here we just confirm the picker renders
+    expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+  })
+
+  it('switching job updates the capture context to the new job', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    // Initially shows JOB_A
+    expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_A.id)
+
+    // Open picker then select JOB_B
+    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
+
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_B.id)
+  })
+
+  it('switching job does not call saveNote or update pending notes', async () => {
+    const { saveNote } = await import('../db')
+    const mockSaveNote = vi.mocked(saveNote)
+
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
+
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    // Switching jobs must never write to the note store
+    expect(mockSaveNote).not.toHaveBeenCalled()
+  })
+
+  it('"Things to check" opens ReviewQueueScreen with the selected job id', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
+    await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('review-queue-screen')).toHaveAttribute('data-job-id', JOB_A.id)
+  })
+
+  it('"Things to check" uses the switched-to job id after switching', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+
+    // Switch to JOB_B
+    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
+    await waitFor(() => screen.getByTestId('job-picker-screen'))
+    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_B.id))
+
+    // Open Things to check — must use JOB_B
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
+    await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('review-queue-screen')).toHaveAttribute('data-job-id', JOB_B.id)
   })
 })

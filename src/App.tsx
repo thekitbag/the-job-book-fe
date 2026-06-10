@@ -127,18 +127,16 @@ export default function App() {
 
   if (appState === 'noJobs') {
     return (
-      <div className="app-no-jobs">
-        <h1 className="app-no-jobs-heading">Job Book</h1>
-        <p className="app-no-jobs-msg">No jobs yet. Add your first job to start recording.</p>
-        <JobPickerScreen
-          jobs={[]}
-          selectedJobId={null}
-          online={online}
-          onSelect={handleSelectJob}
-          onJobAdded={handleJobAdded}
-          onClose={() => {}}
-        />
-      </div>
+      <JobPickerScreen
+        jobs={[]}
+        selectedJobId={null}
+        online={online}
+        onSelect={handleSelectJob}
+        onJobAdded={handleJobAdded}
+        onClose={() => {}}
+        title="Add first job"
+        hideBack={true}
+      />
     )
   }
 
