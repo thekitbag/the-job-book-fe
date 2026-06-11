@@ -249,7 +249,7 @@ export interface InspectionNote {
   uploadedAt: string | null
   serverStatus: string
   mimeType: string
-  durationMs: number
+  durationMs: number | null
   sizeBytes: number
   audioStored: boolean
   transcript: InspectionTranscript | null

@@ -10,8 +10,17 @@ vi.mock('../api', async (importOriginal) => {
     ...actual,
     getJobs: vi.fn(),
     getInspectionData: vi.fn(),
+    pilotLogin: vi.fn(),
   }
 })
+
+vi.mock('../PasscodeScreen', () => ({
+  default: ({ onLoginSuccess }: { onLoginSuccess: () => void }) => (
+    <div data-testid="passcode-screen">
+      <button onClick={onLoginSuccess}>mock-login</button>
+    </div>
+  ),
+}))
 
 const mockGetJobs = vi.mocked(api.getJobs)
 const mockGetInspectionData = vi.mocked(api.getInspectionData)
@@ -380,14 +389,12 @@ describe('PilotInspectionPage', () => {
     expect(screen.queryByRole('heading', { name: 'Possible misses' })).toBeNull()
   })
 
-  it('shows retryable error when getInspectionData throws 401', async () => {
+  it('shows PasscodeScreen when getInspectionData returns 401', async () => {
     mockGetJobs.mockResolvedValue([JOB_A])
-    mockGetInspectionData.mockRejectedValue(new api.ApiError('Invalid or missing inspection key', 401))
+    mockGetInspectionData.mockRejectedValue(new api.ApiError('Unauthorized', 401))
     render(<PilotInspectionPage />)
     await enterKeyAndLoad()
-    await waitFor(() => screen.getByRole('alert'))
-    expect(screen.getByText(/Invalid inspection key/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+    await waitFor(() => screen.getByTestId('passcode-screen'))
   })
 
   it('shows retryable error when getInspectionData throws a generic error', async () => {
@@ -417,6 +424,41 @@ describe('PilotInspectionPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear key' }))
     expect(sessionStorage.getItem('job-book-inspection-key')).toBeNull()
     expect(screen.getByPlaceholderText('Enter inspection key')).toBeTruthy()
+  })
+
+  it('shows PasscodeScreen when getJobs returns 401, and retries after login', async () => {
+    mockGetJobs
+      .mockRejectedValueOnce(new api.ApiError('Unauthorized', 401))
+      .mockResolvedValue([JOB_A])
+    mockGetInspectionData.mockResolvedValue(INSPECTION_DATA)
+    render(<PilotInspectionPage />)
+    await enterKeyAndLoad()
+    await waitFor(() => screen.getByTestId('passcode-screen'))
+    fireEvent.click(screen.getByRole('button', { name: 'mock-login' }))
+    await waitFor(() => expect(mockGetJobs).toHaveBeenCalledTimes(2))
+    await waitFor(() => screen.getByRole('combobox', { name: 'Select job' }))
+  })
+
+  it('renders cleanly when durationMs is null', async () => {
+    const nullDuration = {
+      ...INSPECTION_DATA,
+      notesByDay: [
+        {
+          localDate: '2026-06-11',
+          notes: [
+            {
+              ...INSPECTION_DATA.notesByDay[0].notes[0],
+              durationMs: null,
+            },
+          ],
+        },
+      ],
+    }
+    mockGetJobs.mockResolvedValue([JOB_A])
+    mockGetInspectionData.mockResolvedValue(nullDuration)
+    render(<PilotInspectionPage />)
+    await enterKeyAndLoad()
+    await waitFor(() => screen.getByText(/duration unknown/))
   })
 
   it('does not show confirm/correct/dismiss/edit controls', async () => {

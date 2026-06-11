@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getJobs, getInspectionData, ApiError } from './api'
+import PasscodeScreen from './PasscodeScreen'
 import type {
   InspectionCandidateFact,
   InspectionData,
@@ -16,7 +17,8 @@ const INSPECTION_KEY_SESSION = 'job-book-inspection-key'
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
-function formatDuration(ms: number) {
+function formatDuration(ms: number | null) {
+  if (ms === null) return 'duration unknown'
   const s = Math.round(ms / 1000)
   return `${Math.floor(s / 60)}m ${s % 60}s`
 }
@@ -222,6 +224,9 @@ export default function PilotInspectionPage() {
   )
   const [keyDraft, setKeyDraft] = useState('')
 
+  const [needsAuth, setNeedsAuth] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+
   const [jobs, setJobs] = useState<Job[]>([])
   const [jobsState, setJobsState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [jobsError, setJobsError] = useState('')
@@ -231,7 +236,7 @@ export default function PilotInspectionPage() {
   const [dataState, setDataState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [dataError, setDataError] = useState('')
 
-  // Load jobs once we have a key
+  // Load jobs once we have a key; retry after login
   useEffect(() => {
     if (!inspectionKey) return
     setJobsState('loading')
@@ -242,12 +247,17 @@ export default function PilotInspectionPage() {
         if (loaded.length > 0) setSelectedJobId(loaded[0].id)
       })
       .catch((err: unknown) => {
-        setJobsError(err instanceof Error ? err.message : 'Could not load jobs')
-        setJobsState('error')
+        if (err instanceof ApiError && err.status === 401) {
+          setNeedsAuth(true)
+          setJobsState('idle')
+        } else {
+          setJobsError(err instanceof Error ? err.message : 'Could not load jobs')
+          setJobsState('error')
+        }
       })
-  }, [inspectionKey])
+  }, [inspectionKey, retryCount])
 
-  // Load inspection data when job changes
+  // Load inspection data when job changes; retry after login
   useEffect(() => {
     if (!inspectionKey || !selectedJobId) return
     setDataState('loading')
@@ -257,13 +267,19 @@ export default function PilotInspectionPage() {
       .then(d => { setData(d); setDataState('idle') })
       .catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 401) {
-          setDataError('Invalid inspection key. Clear it and try again.')
+          setNeedsAuth(true)
+          setDataState('idle')
         } else {
           setDataError(err instanceof Error ? err.message : 'Could not load inspection data')
+          setDataState('error')
         }
-        setDataState('error')
       })
-  }, [inspectionKey, selectedJobId])
+  }, [inspectionKey, selectedJobId, retryCount])
+
+  function handleLoginSuccess() {
+    setNeedsAuth(false)
+    setRetryCount(c => c + 1)
+  }
 
   function submitKey(e: React.FormEvent) {
     e.preventDefault()
@@ -292,8 +308,11 @@ export default function PilotInspectionPage() {
         )}
       </header>
 
+      {/* Passcode required (session expired or first visit without cookie) */}
+      {needsAuth && <PasscodeScreen onLoginSuccess={handleLoginSuccess} />}
+
       {/* Key prompt */}
-      {!inspectionKey && (
+      {!needsAuth && !inspectionKey && (
         <form className="insp-key-form" aria-label="Inspection key" onSubmit={submitKey}>
           <label className="insp-key-label">
             <span>Inspection key</span>
@@ -313,7 +332,7 @@ export default function PilotInspectionPage() {
       )}
 
       {/* Job selector */}
-      {inspectionKey && (
+      {!needsAuth && inspectionKey && (
         <div className="insp-job-selector">
           {jobsState === 'loading' && <p className="insp-loading">Loading jobs…</p>}
           {jobsState === 'error' && (
@@ -338,7 +357,7 @@ export default function PilotInspectionPage() {
       )}
 
       {/* Inspection data */}
-      {inspectionKey && selectedJobId && (
+      {!needsAuth && inspectionKey && selectedJobId && (
         <>
           {dataState === 'loading' && <p className="insp-loading">Loading inspection data…</p>}
           {dataState === 'error' && (
