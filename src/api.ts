@@ -1,4 +1,4 @@
-import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, Job, JobType, LocalNote, MemoryType, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryType, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -443,6 +443,184 @@ export async function submitQueueDecision(
   })
   if (!res.ok) throw new ApiError(`POST /api/jobs/${jobId}/review-queue-decisions → ${res.status}`, res.status)
   return res.json() as Promise<QueueDecisionResponse>
+}
+
+// GET /api/internal/pilot/jobs/:jobId/inspection
+// Requires X-Internal-Inspection-Key header plus an authenticated session.
+export async function getInspectionData(jobId: string, inspectionKey: string): Promise<InspectionData> {
+  if (USE_MOCK) {
+    await delay(600)
+    return MOCK_INSPECTION_DATA(jobId)
+  }
+  const res = await apiFetch(`/api/internal/pilot/jobs/${jobId}/inspection`, {
+    headers: { 'X-Internal-Inspection-Key': inspectionKey },
+  })
+  if (res.status === 401) throw new ApiError('Invalid or missing inspection key', 401)
+  if (!res.ok) throw new ApiError(`GET inspection → ${res.status}`, res.status)
+  return res.json() as Promise<InspectionData>
+}
+
+function MOCK_INSPECTION_DATA(jobId: string): InspectionData {
+  return {
+    job: MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0],
+    generatedAt: new Date().toISOString(),
+    notesByDay: [
+      {
+        localDate: '2026-06-11',
+        notes: [
+          {
+            id: 'note-inspect-001',
+            clientNoteId: 'client-note-001',
+            capturedAt: '2026-06-11T09:15:00.000Z',
+            uploadedAt: '2026-06-11T09:15:08.000Z',
+            serverStatus: 'transcribed',
+            mimeType: 'audio/webm;codecs=opus',
+            durationMs: 18000,
+            sizeBytes: 240000,
+            audioStored: true,
+            transcript: {
+              id: 'trans-inspect-001',
+              status: 'ready',
+              text: 'Ordered 12 sheets of plasterboard from Jewson, coming tomorrow morning.',
+              language: 'en',
+              provider: 'openai',
+              model: 'whisper-1',
+              errorCode: null,
+              extractionStatus: 'ready',
+              extractionErrorCode: null,
+            },
+            candidateFacts: [
+              {
+                id: 'fact-inspect-001',
+                factType: 'ordered_material',
+                status: 'confirmed',
+                summary: 'Ordered 12 sheets of plasterboard from Jewson',
+                materialName: 'plasterboard',
+                quantity: '12',
+                unit: 'sheets',
+                supplierName: 'Jewson',
+                deliveryTiming: 'tomorrow morning',
+                locationOrUse: null,
+                confidenceLabel: 'high',
+                uncertaintyFlags: [],
+                reviewState: 'confirmed',
+                reviewDecisionIds: ['decision-001'],
+                memoryItemIds: ['memory-001'],
+              },
+            ],
+          },
+          {
+            id: 'note-inspect-002',
+            clientNoteId: 'client-note-002',
+            capturedAt: '2026-06-11T11:30:00.000Z',
+            uploadedAt: '2026-06-11T11:30:05.000Z',
+            serverStatus: 'transcribed',
+            mimeType: 'audio/webm;codecs=opus',
+            durationMs: 9000,
+            sizeBytes: 120000,
+            audioStored: true,
+            transcript: {
+              id: 'trans-inspect-002',
+              status: 'ready',
+              text: 'Watch out for the uneven floor near the back door.',
+              language: 'en',
+              provider: 'openai',
+              model: 'whisper-1',
+              errorCode: null,
+              extractionStatus: 'ready',
+              extractionErrorCode: null,
+            },
+            candidateFacts: [
+              {
+                id: 'fact-inspect-002',
+                factType: 'watch_out',
+                status: 'draft',
+                summary: 'Uneven floor near back door',
+                materialName: null,
+                quantity: null,
+                unit: null,
+                supplierName: null,
+                deliveryTiming: null,
+                locationOrUse: 'near back door',
+                confidenceLabel: 'medium',
+                uncertaintyFlags: [],
+                reviewState: 'waiting',
+                reviewDecisionIds: [],
+                memoryItemIds: [],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        localDate: '2026-06-10',
+        notes: [
+          {
+            id: 'note-inspect-003',
+            clientNoteId: 'client-note-003',
+            capturedAt: '2026-06-10T14:00:00.000Z',
+            uploadedAt: '2026-06-10T14:00:12.000Z',
+            serverStatus: 'transcribed',
+            mimeType: 'audio/webm;codecs=opus',
+            durationMs: 5000,
+            sizeBytes: 65000,
+            audioStored: false,
+            transcript: {
+              id: 'trans-inspect-003',
+              status: 'failed',
+              text: null,
+              language: null,
+              provider: 'openai',
+              model: 'whisper-1',
+              errorCode: 'TRANSCRIPTION_FAILED',
+              extractionStatus: null,
+              extractionErrorCode: null,
+            },
+            candidateFacts: [],
+          },
+        ],
+      },
+    ],
+    queue: {
+      sections: [
+        {
+          key: 'watch_outs',
+          label: 'Watch outs',
+          items: [
+            {
+              id: 'queue-item-inspect-001',
+              kind: 'single',
+              status: 'draft',
+              reviewLabel: 'Watch out',
+              summary: 'Uneven floor near back door',
+            },
+          ],
+        },
+      ],
+    },
+    reviewDecisions: [
+      {
+        id: 'decision-001',
+        action: 'queue_confirm',
+        candidateFactId: null,
+        sourceCandidateFactIds: ['fact-inspect-001'],
+        sectionKey: null,
+        reason: null,
+        createdAt: '2026-06-11T09:25:00.000Z',
+      },
+    ],
+    memoryItems: [
+      {
+        id: 'memory-001',
+        memoryType: 'ordered_material',
+        summary: 'Ordered 12 sheets of plasterboard from Jewson',
+        sourceCandidateFactId: 'fact-inspect-001',
+        reviewDecisionId: 'decision-001',
+        createdAt: '2026-06-11T09:25:00.000Z',
+      },
+    ],
+    possibleMisses: [],
+  }
 }
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
