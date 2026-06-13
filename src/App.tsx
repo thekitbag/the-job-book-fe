@@ -4,6 +4,7 @@ import CaptureScreen from './CaptureScreen'
 import PasscodeScreen from './PasscodeScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import JobPickerScreen from './JobPickerScreen'
+import JobMemoryScreen from './JobMemoryScreen'
 import type { Job } from './types'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
@@ -31,7 +32,7 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 }
 
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
-type AppView = 'capture' | 'reviewQueue' | 'jobPicker'
+type AppView = 'capture' | 'reviewQueue' | 'jobPicker' | 'jobMemory'
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
@@ -165,10 +166,21 @@ export default function App() {
     return <ReviewQueueScreen job={selectedJob} onClose={() => setView('capture')} />
   }
 
+  if (view === 'jobMemory') {
+    return (
+      <JobMemoryScreen
+        job={selectedJob}
+        onClose={() => setView('capture')}
+        onOpenReviewQueue={() => setView('reviewQueue')}
+      />
+    )
+  }
+
   return (
     <CaptureScreen
       job={selectedJob}
       onOpenReviewQueue={() => setView('reviewQueue')}
+      onOpenJobMemory={() => setView('jobMemory')}
       onSwitchJob={() => setView('jobPicker')}
     />
   )

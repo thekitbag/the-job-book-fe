@@ -1,4 +1,4 @@
-import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryType, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryType, MemoryViewResponse, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -620,6 +620,123 @@ function MOCK_INSPECTION_DATA(jobId: string): InspectionData {
       },
     ],
     possibleMisses: [],
+  }
+}
+
+// GET /api/jobs/:jobId/memory-view — trusted memory for the job, grouped by section.
+export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> {
+  if (USE_MOCK) {
+    await delay(500)
+    return MOCK_MEMORY_VIEW(jobId)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-view`)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Job not found', 404)
+  if (!res.ok) throw new ApiError(`GET memory-view → ${res.status}`, res.status)
+  return res.json() as Promise<MemoryViewResponse>
+}
+
+function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
+  const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
+  return {
+    job,
+    generatedAt: new Date().toISOString(),
+    sections: [
+      {
+        key: 'ordered_materials',
+        label: 'Ordered materials',
+        items: [
+          {
+            id: 'mem-view-001',
+            memoryType: 'ordered_material',
+            summary: 'Ordered 12 sheets of plasterboard from Jewson',
+            materialName: 'plasterboard',
+            quantity: '12',
+            unit: 'sheets',
+            supplierName: 'Jewson',
+            deliveryTiming: 'tomorrow morning',
+            locationOrUse: null,
+            sourceCandidateFactId: 'fact-001',
+            reviewDecisionId: 'decision-001',
+            createdAt: '2026-06-13T09:25:00.000Z',
+            updatedAt: '2026-06-13T09:25:00.000Z',
+            source: {
+              candidateFactId: 'fact-001',
+              noteId: 'note-001',
+              transcriptId: 'trans-001',
+              capturedAt: '2026-06-13T09:15:00.000Z',
+              transcriptText: 'Ordered another 12 sheets of plasterboard from Jewson, coming tomorrow morning.',
+            },
+          },
+        ],
+      },
+      {
+        key: 'used_materials',
+        label: 'Used materials',
+        items: [
+          {
+            id: 'mem-view-002',
+            memoryType: 'used_material',
+            summary: 'Used OSB boards on the back wall',
+            materialName: 'OSB',
+            quantity: null,
+            unit: null,
+            supplierName: null,
+            deliveryTiming: null,
+            locationOrUse: 'back wall',
+            sourceCandidateFactId: 'fact-002',
+            reviewDecisionId: 'decision-002',
+            createdAt: '2026-06-13T10:00:00.000Z',
+            updatedAt: '2026-06-13T10:00:00.000Z',
+            source: null,
+          },
+        ],
+      },
+      { key: 'leftovers', label: 'Leftovers', items: [] },
+      { key: 'supplier_delivery_notes', label: 'Supplier delivery notes', items: [] },
+      { key: 'customer_changes', label: 'Customer changes', items: [] },
+      {
+        key: 'watch_outs',
+        label: 'Watch outs',
+        items: [
+          {
+            id: 'mem-view-003',
+            memoryType: 'watch_out',
+            summary: 'Uneven floor near back door',
+            materialName: null,
+            quantity: null,
+            unit: null,
+            supplierName: null,
+            deliveryTiming: null,
+            locationOrUse: 'near back door',
+            sourceCandidateFactId: 'fact-003',
+            reviewDecisionId: 'decision-003',
+            createdAt: '2026-06-13T11:00:00.000Z',
+            updatedAt: '2026-06-13T11:00:00.000Z',
+            source: {
+              candidateFactId: 'fact-003',
+              noteId: 'note-002',
+              transcriptId: 'trans-002',
+              capturedAt: '2026-06-13T10:50:00.000Z',
+              transcriptText: 'Watch out for the uneven floor near the back door, nearly tripped earlier.',
+            },
+          },
+        ],
+      },
+    ],
+    stillToCheck: {
+      count: 2,
+      items: [
+        {
+          id: 'queue-item-stc-001',
+          sectionKey: 'unclear_items',
+          summary: 'Something about extra cable in the workshop',
+          kind: 'unclear_prompt',
+          timeLabel: 'Today',
+        },
+      ],
+    },
   }
 }
 

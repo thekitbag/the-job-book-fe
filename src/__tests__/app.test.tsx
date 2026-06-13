@@ -28,10 +28,11 @@ vi.mock('../api', async (importOriginal) => {
 })
 
 vi.mock('../CaptureScreen', () => ({
-  default: ({ job, onOpenReviewQueue, onSwitchJob }: { job: { id: string; title: string }; onOpenReviewQueue?: () => void; onSwitchJob?: () => void }) => (
+  default: ({ job, onOpenReviewQueue, onOpenJobMemory, onSwitchJob }: { job: { id: string; title: string }; onOpenReviewQueue?: () => void; onOpenJobMemory?: () => void; onSwitchJob?: () => void }) => (
     <div data-testid="capture-screen" data-job-id={job.id}>
       {job.title}
       {onOpenReviewQueue && <button onClick={onOpenReviewQueue}>mock-open-queue</button>}
+      {onOpenJobMemory && <button onClick={onOpenJobMemory}>mock-open-memory</button>}
       {onSwitchJob && <button onClick={onSwitchJob}>mock-switch-job</button>}
     </div>
   ),
@@ -48,6 +49,15 @@ vi.mock('../JobPickerScreen', () => ({
     <div data-testid="job-picker-screen">
       <button onClick={() => onJobAdded({ id: 'new-job-001', title: 'New Job', jobType: 'other', roughLocationOrLabel: null, status: 'active', createdAt: '2026-06-10T10:00:00Z', updatedAt: '2026-06-10T10:00:00Z' })}>mock-add-job</button>
       <button onClick={() => onSelect({ id: 'job-002', title: 'Kitchen Extension', jobType: 'extension', roughLocationOrLabel: null, status: 'active', createdAt: '2026-05-20T08:00:00Z', updatedAt: '2026-06-08T14:00:00Z' })}>mock-select-job-b</button>
+    </div>
+  ),
+}))
+
+vi.mock('../JobMemoryScreen', () => ({
+  default: ({ job, onOpenReviewQueue }: { job: { id: string; title: string }; onOpenReviewQueue: () => void }) => (
+    <div data-testid="job-memory-screen" data-job-id={job.id}>
+      {job.title}
+      <button onClick={onOpenReviewQueue}>mock-memory-open-queue</button>
     </div>
   ),
 }))
@@ -236,5 +246,42 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
     await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
     expect(screen.getByTestId('review-queue-screen')).toHaveAttribute('data-job-id', JOB_B.id)
+  })
+
+  it('"Job memory" action appears on the capture screen', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /mock-open-memory/i })).toBeInTheDocument()
+  })
+
+  it('"Job memory" opens JobMemoryScreen with the selected job id', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-memory/i }))
+    await waitFor(() => expect(screen.getByTestId('job-memory-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('job-memory-screen')).toHaveAttribute('data-job-id', JOB_A.id)
+  })
+
+  it('"Job memory" uses the switched-to job id after switching', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
+    await waitFor(() => screen.getByTestId('job-picker-screen'))
+    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_B.id))
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-memory/i }))
+    await waitFor(() => expect(screen.getByTestId('job-memory-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('job-memory-screen')).toHaveAttribute('data-job-id', JOB_B.id)
+  })
+
+  it('"Review Things to check" from Job memory opens ReviewQueueScreen', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-memory/i }))
+    await waitFor(() => expect(screen.getByTestId('job-memory-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-memory-open-queue/i }))
+    await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
   })
 })

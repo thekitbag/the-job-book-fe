@@ -310,3 +310,56 @@ export interface InspectionData {
   memoryItems: InspectionMemoryItem[]
   possibleMisses: InspectionPossibleMiss[]
 }
+
+// ── Job memory view types (Story 11) ──────────────────────────────────────────
+
+export interface MemoryViewSource {
+  candidateFactId: string
+  noteId: string
+  transcriptId: string
+  capturedAt: string
+  transcriptText: string | null
+}
+
+export interface MemoryViewItem {
+  id: string
+  memoryType: string
+  summary: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+  sourceCandidateFactId: string | null
+  reviewDecisionId: string | null
+  createdAt: string
+  updatedAt: string
+  source: MemoryViewSource | null
+}
+
+export interface MemoryViewSection {
+  key: string
+  label: string
+  items: MemoryViewItem[]
+}
+
+export interface MemoryViewStillToCheckItem {
+  id: string
+  sectionKey: string
+  summary: string
+  kind: string
+  timeLabel?: string
+}
+
+export interface MemoryViewStillToCheck {
+  count: number
+  items: MemoryViewStillToCheckItem[]
+}
+
+export interface MemoryViewResponse {
+  job: Job
+  generatedAt: string
+  sections: MemoryViewSection[]
+  stillToCheck: MemoryViewStillToCheck
+}

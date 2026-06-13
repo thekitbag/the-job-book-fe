@@ -227,10 +227,12 @@ const JOB_TYPE_LABELS: Record<string, string> = {
 export default function CaptureScreen({
   job,
   onOpenReviewQueue,
+  onOpenJobMemory,
   onSwitchJob,
 }: {
   job: Job
   onOpenReviewQueue?: () => void
+  onOpenJobMemory?: () => void
   onSwitchJob?: () => void
 }) {
   const [notes, setNotes] = useState<LocalNote[]>([])
@@ -407,11 +409,18 @@ export default function CaptureScreen({
         )}
       </div>
 
-      {onOpenReviewQueue && (
-        <div className="review-queue-entry">
-          <button className="btn-open-review-queue" onClick={onOpenReviewQueue}>
-            Things to check
-          </button>
+      {(onOpenReviewQueue || onOpenJobMemory) && (
+        <div className="capture-nav-actions">
+          {onOpenReviewQueue && (
+            <button className="btn-open-review-queue" onClick={onOpenReviewQueue}>
+              Things to check
+            </button>
+          )}
+          {onOpenJobMemory && (
+            <button className="btn-open-job-memory" onClick={onOpenJobMemory}>
+              Job memory
+            </button>
+          )}
         </div>
       )}
 
