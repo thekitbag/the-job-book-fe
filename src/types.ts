@@ -207,3 +207,106 @@ export interface CandidateFact {
   createdAt: string
   updatedAt: string
 }
+
+// ── Pilot inspection types ────────────────────────────────────────────────────
+
+export type InspectionReviewState = 'waiting' | 'confirmed' | 'edited' | 'dismissed'
+
+export interface InspectionCandidateFact {
+  id: string
+  factType: FactType
+  status: 'draft' | 'unclear' | 'confirmed' | 'corrected' | 'rejected' | 'superseded'
+  summary: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+  confidenceLabel: ConfidenceLabel
+  uncertaintyFlags: string[]
+  reviewState: InspectionReviewState | string
+  reviewDecisionIds: string[]
+  memoryItemIds: string[]
+}
+
+export interface InspectionTranscript {
+  id: string
+  status: 'waiting' | 'transcribing' | 'ready' | 'failed'
+  text: string | null
+  language: string | null
+  provider: string | null
+  model: string | null
+  errorCode: string | null
+  extractionStatus: 'waiting' | 'extracting' | 'ready' | 'failed' | null
+  extractionErrorCode: string | null
+}
+
+export interface InspectionNote {
+  id: string
+  clientNoteId: string
+  capturedAt: string
+  uploadedAt: string | null
+  serverStatus: string
+  mimeType: string
+  durationMs: number | null
+  sizeBytes: number
+  audioStored: boolean
+  transcript: InspectionTranscript | null
+  candidateFacts: InspectionCandidateFact[]
+}
+
+export interface InspectionNotesByDay {
+  localDate: string
+  notes: InspectionNote[]
+}
+
+export interface InspectionQueueItem {
+  id: string
+  kind: string
+  status: string
+  reviewLabel: string
+  timeLabel?: string
+  summary: string
+}
+
+export interface InspectionQueueSection {
+  key: string
+  label: string
+  items: InspectionQueueItem[]
+}
+
+export interface InspectionReviewDecision {
+  id: string
+  action: string
+  candidateFactId: string | null
+  sourceCandidateFactIds: string[]
+  sectionKey: string | null
+  reason: string | null
+  createdAt: string
+}
+
+export interface InspectionMemoryItem {
+  id: string
+  memoryType: string
+  summary: string
+  sourceCandidateFactId: string | null
+  reviewDecisionId: string | null
+  createdAt: string
+}
+
+export interface InspectionPossibleMiss {
+  noteId: string
+  reason: string
+  transcriptExcerpt: string
+}
+
+export interface InspectionData {
+  job: Job
+  generatedAt: string
+  notesByDay: InspectionNotesByDay[]
+  queue: { sections: InspectionQueueSection[] }
+  reviewDecisions: InspectionReviewDecision[]
+  memoryItems: InspectionMemoryItem[]
+  possibleMisses: InspectionPossibleMiss[]
+}
