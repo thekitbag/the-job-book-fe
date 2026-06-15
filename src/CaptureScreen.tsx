@@ -43,12 +43,20 @@ function NoteStateLabel({ note, online }: { note: LocalNote; online: boolean }) 
 }
 
 function TranscriptSection({ note }: { note: LocalNote }) {
+  const [open, setOpen] = useState(false)
   const { transcriptStatus, transcriptText } = note
   if (transcriptStatus === 'ready' && transcriptText) {
     return (
       <div className="transcript-section">
-        <p className="transcript-label">What the system heard</p>
-        <p className="transcript-text">{transcriptText}</p>
+        <button
+          type="button"
+          className="transcript-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen(o => !o)}
+        >
+          {open ? 'Hide transcript' : 'Show transcript'}
+        </button>
+        {open && <p className="transcript-text">{transcriptText}</p>}
       </div>
     )
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import CaptureScreen from '../CaptureScreen'
 import { saveNote } from '../db'
 import { getJobNoteStatuses, getNoteTranscript, getDraftFacts } from '../api'
@@ -52,17 +52,15 @@ describe('transcript visibility', () => {
     mockGetDraftFacts.mockResolvedValue([])
   })
 
-  it('shows ready transcript text with "what the system heard" label', async () => {
+  it('shows Show transcript toggle when transcript is ready, hides text by default', async () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
-    // List poll returns status only (BE shape: id not noteId; extractionStatus nested inside transcript)
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-001',
       clientNoteId: note.clientNoteId,
       transcript: { status: 'ready', extractionStatus: null },
     }])
-    // Text fetched separately because status is final
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-001',
       status: 'ready',
@@ -73,9 +71,57 @@ describe('transcript visibility', () => {
     render(<CaptureScreen job={JOB} />)
 
     await waitFor(() => {
-      expect(screen.getByText(/what the system heard/i)).toBeInTheDocument()
-      expect(screen.getByText('Two bags of sand and one tonne of gravel.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
     })
+    expect(screen.queryByText('Two bags of sand and one tonne of gravel.')).not.toBeInTheDocument()
+  })
+
+  it('reveals transcript text on Show transcript click', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001b' })
+    await saveNote(note)
+
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-001b',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'ready', extractionStatus: null },
+    }])
+    mockGetTranscript.mockResolvedValue({
+      noteId: 'srv-001b',
+      status: 'ready',
+      text: 'Two bags of sand and one tonne of gravel.',
+      errorCode: null,
+    })
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
+    expect(screen.getByText('Two bags of sand and one tonne of gravel.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /hide transcript/i })).toBeInTheDocument()
+  })
+
+  it('collapses transcript again on Hide transcript click', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001c' })
+    await saveNote(note)
+
+    mockGetStatuses.mockResolvedValue([{
+      id: 'srv-001c',
+      clientNoteId: note.clientNoteId,
+      transcript: { status: 'ready', extractionStatus: null },
+    }])
+    mockGetTranscript.mockResolvedValue({
+      noteId: 'srv-001c',
+      status: 'ready',
+      text: 'Two bags of sand and one tonne of gravel.',
+      errorCode: null,
+    })
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
+    fireEvent.click(screen.getByRole('button', { name: /hide transcript/i }))
+    expect(screen.queryByText('Two bags of sand and one tonne of gravel.')).not.toBeInTheDocument()
   })
 
   it('fetches text via the individual endpoint only for ready/failed, not for waiting', async () => {
@@ -155,13 +201,13 @@ describe('transcript visibility', () => {
     render(<CaptureScreen job={JOB} />)
 
     await waitFor(() => {
-      expect(screen.getByText(/what the system heard/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
     })
     expect(screen.queryByText(/confirmed memory/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/trusted memory/i)).not.toBeInTheDocument()
   })
 
-  it('renders cached ready transcript without any API call', async () => {
+  it('renders cached ready transcript toggle without any API call, text hidden by default', async () => {
     const note = makeNote({
       jobId: JOB.id,
       localState: 'uploaded',
@@ -175,8 +221,9 @@ describe('transcript visibility', () => {
     render(<CaptureScreen job={JOB} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Cached transcript text.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
     })
+    expect(screen.queryByText('Cached transcript text.')).not.toBeInTheDocument()
     expect(mockGetStatuses).not.toHaveBeenCalled()
     expect(mockGetTranscript).not.toHaveBeenCalled()
   })
@@ -208,8 +255,10 @@ describe('transcript visibility', () => {
 
     render(<CaptureScreen job={JOB} />)
 
+    // Both notes have final status; failed note always shows its message without a toggle
     await waitFor(() => {
-      expect(screen.getByText('Done.')).toBeInTheDocument()
+      expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
     })
     expect(mockGetStatuses).not.toHaveBeenCalled()
     expect(mockGetTranscript).not.toHaveBeenCalled()
@@ -234,7 +283,6 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-010' })
     await saveNote(note)
 
-    // Row uses `id` field (BE contract); extractionStatus nested inside transcript
     mockGetStatuses.mockResolvedValue([{
       id: 'srv-010',
       clientNoteId: note.clientNoteId,
@@ -249,8 +297,8 @@ describe('transcript visibility', () => {
 
     render(<CaptureScreen job={JOB} />)
 
-    await waitFor(() => {
-      expect(screen.getByText('Matched by id.')).toBeInTheDocument()
-    })
+    await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
+    expect(screen.getByText('Matched by id.')).toBeInTheDocument()
   })
 })
