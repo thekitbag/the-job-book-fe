@@ -2219,3 +2219,93 @@ code {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ── Card detail fields (shared: Things to check + Job memory cards) ── */
+
+.card-detail-fields {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.card-detail-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.card-detail-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #888;
+  min-width: 4.5rem;
+  flex-shrink: 0;
+}
+
+.card-detail-value {
+  font-size: 0.82rem;
+  color: #333;
+  margin: 0;
+}
+
+.card-uncertainty {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #b45309;
+  margin: 0.15rem 0 0;
+}
+
+/* ── Memory scan view ── */
+
+.mem-scan {
+  margin: 0 1rem 1.25rem;
+  background: #f8f8f4;
+  border: 1px solid #e0e0d8;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mem-scan-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.mem-scan-heading {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin: 0 0 0.2rem;
+}
+
+.mem-scan-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.mem-scan-item-desc { color: #1a1a1a; }
+
+.mem-scan-item-cost {
+  color: #1a6f38;
+  font-weight: 500;
+}
+
+.mem-scan-item-total {
+  color: #555;
+}
+
+.mem-scan-item-uncertain {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b45309;
+}

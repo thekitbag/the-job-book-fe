@@ -32,16 +32,20 @@ const ITEM_SINGLE: QueueItem = {
   status: 'draft',
   reviewLabel: 'What I picked up today',
   timeLabel: 'Today',
-  summary: 'Ordered 12 sheets of plasterboard from Jewson',
+  summary: 'Ordered 8 bags of hardcore from Jewson at £5 each',
   proposedMemory: {
     memoryType: 'ordered_material',
-    summary: 'Ordered 12 sheets of plasterboard from Jewson',
-    materialName: 'plasterboard',
-    quantity: '12',
-    unit: 'sheets',
+    summary: 'Ordered 8 bags of hardcore from Jewson at £5 each',
+    materialName: 'hardcore',
+    quantity: '8',
+    unit: 'bags',
     supplierName: 'Jewson',
-    deliveryTiming: 'tomorrow morning',
+    deliveryTiming: null,
     locationOrUse: null,
+    costAmount: '5',
+    costCurrency: 'GBP',
+    costQualifier: 'each',
+    totalCostAmount: '40',
   },
   confidenceLabel: 'high',
   uncertaintyFlags: [],
@@ -52,7 +56,7 @@ const ITEM_SINGLE: QueueItem = {
       noteId: 'note-001',
       transcriptId: 'trans-001',
       capturedAt: '2026-06-07T09:00:00Z',
-      transcriptText: 'Ordered twelve sheets of plasterboard from Jewson.',
+      transcriptText: 'Bought 8 bags of hardcore from Jewson, five pounds each.',
     },
   ],
 }
@@ -73,6 +77,10 @@ const ITEM_DUPLICATE: QueueItem = {
     supplierName: null,
     deliveryTiming: null,
     locationOrUse: 'back wall',
+    costAmount: null,
+    costCurrency: null,
+    costQualifier: null,
+    totalCostAmount: null,
   },
   confidenceLabel: 'medium',
   uncertaintyFlags: [],
@@ -133,7 +141,7 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     expect(screen.getByText('Loading…')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByText('Ordered 12 sheets of plasterboard from Jewson')).toBeInTheDocument()
+      expect(screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeInTheDocument()
     })
     expect(screen.getByText('Used OSB boards on the back wall')).toBeInTheDocument()
   })
@@ -156,7 +164,7 @@ describe('ReviewQueueScreen', () => {
     mockGetReviewQueue.mockResolvedValue(makeQueue())
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
     await waitFor(() => {
-      expect(screen.getByText('Ordered 12 sheets of plasterboard from Jewson')).toBeInTheDocument()
+      expect(screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeInTheDocument()
     })
   })
 
@@ -185,7 +193,7 @@ describe('ReviewQueueScreen', () => {
   it('source context is collapsed by default and expands on click', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => {
-      expect(screen.getByText('Ordered 12 sheets of plasterboard from Jewson')).toBeInTheDocument()
+      expect(screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeInTheDocument()
     })
 
     const toggles = screen.getAllByText(/this came from your note/i)
@@ -193,7 +201,7 @@ describe('ReviewQueueScreen', () => {
     expect(screen.queryByText(/Ordered twelve sheets of plasterboard from Jewson\./)).not.toBeInTheDocument()
 
     fireEvent.click(toggles[0])
-    expect(screen.getByText('"Ordered twelve sheets of plasterboard from Jewson."')).toBeInTheDocument()
+    expect(screen.getByText('"Bought 8 bags of hardcore from Jewson, five pounds each."')).toBeInTheDocument()
   })
 
   it('collapses source context on second click', async () => {
@@ -202,9 +210,9 @@ describe('ReviewQueueScreen', () => {
 
     const toggle = screen.getAllByText(/this came from your note/i)[0]
     fireEvent.click(toggle)
-    expect(screen.getByText('"Ordered twelve sheets of plasterboard from Jewson."')).toBeInTheDocument()
+    expect(screen.getByText('"Bought 8 bags of hardcore from Jewson, five pounds each."')).toBeInTheDocument()
     fireEvent.click(toggle)
-    expect(screen.queryByText('"Ordered twelve sheets of plasterboard from Jewson."')).not.toBeInTheDocument()
+    expect(screen.queryByText('"Bought 8 bags of hardcore from Jewson, five pounds each."')).not.toBeInTheDocument()
   })
 
   it('confirm action sends confirm decision and shows "Saved to trusted memory"', async () => {
@@ -216,7 +224,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /remember this/i })[0])
 
@@ -241,7 +249,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /dismiss/i })[0])
 
@@ -267,7 +275,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
@@ -276,7 +284,7 @@ describe('ReviewQueueScreen', () => {
 
     // Update summary
     const summaryInput = form.querySelector<HTMLInputElement>('input[required]')!
-    fireEvent.change(summaryInput, { target: { value: 'Ordered 10 sheets of plasterboard from Jewson' } })
+    fireEvent.change(summaryInput, { target: { value: 'Ordered 10 bags of hardcore from Jewson' } })
 
     fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
 
@@ -284,7 +292,7 @@ describe('ReviewQueueScreen', () => {
       expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({
         queueItemId: 'qi-001',
         action: 'correct',
-        corrected: expect.objectContaining({ summary: 'Ordered 10 sheets of plasterboard from Jewson' }),
+        corrected: expect.objectContaining({ summary: 'Ordered 10 bags of hardcore from Jewson' }),
       }))
     })
     await waitFor(() => {
@@ -294,7 +302,7 @@ describe('ReviewQueueScreen', () => {
 
   it('cancel in edit form closes the form without submitting', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
     expect(screen.getByRole('form', { name: /edit correction/i })).toBeInTheDocument()
@@ -306,12 +314,13 @@ describe('ReviewQueueScreen', () => {
 
   it('edit form type selector excludes unclear', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
-    const select = screen.getByRole('combobox')
-    const options = Array.from(select.querySelectorAll('option')).map(o => o.value)
+    // The type combobox is the first select in the form (Type label)
+    const typeSelect = screen.getAllByRole('combobox')[0]
+    const options = Array.from(typeSelect.querySelectorAll('option')).map(o => o.value)
     expect(options).not.toContain('unclear')
     expect(options.length).toBe(6)
   })
@@ -319,7 +328,7 @@ describe('ReviewQueueScreen', () => {
   it('shows item-level error on decision failure with retry possible', async () => {
     mockSubmitQueueDecision.mockRejectedValue(new Error('network'))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /remember this/i })[0])
 
@@ -376,10 +385,12 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
-    expect(screen.getByText('scaffolding · TCS · Friday morning')).toBeInTheDocument()
+    expect(screen.getByText('scaffolding')).toBeInTheDocument()
+    expect(screen.getByText('TCS')).toBeInTheDocument()
+    expect(screen.getByText('Friday morning')).toBeInTheDocument()
   })
 
-  it('omits details line when no structured fields present', async () => {
+  it('omits details dl when no structured fields present', async () => {
     mockGetReviewQueue.mockResolvedValue(makeQueue({
       alreadyRemembered: [
         { memoryItemId: 'mem-001', summary: 'Watch out near back door', memoryType: 'watch_out' },
@@ -388,8 +399,78 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
     expect(screen.getByText('Watch out near back door')).toBeInTheDocument()
-    // no details line rendered
-    expect(document.querySelector('.queue-remembered-card-details')).not.toBeInTheDocument()
+    const rememberedRegion = screen.getByRole('region', { name: /already remembered/i })
+    expect(rememberedRegion.querySelector('.card-detail-fields')).not.toBeInTheDocument()
+  })
+
+  it('remembered card shows labelled cost and total rows', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [],
+      alreadyRemembered: [
+        {
+          memoryItemId: 'mem-001',
+          summary: 'Ordered 8 bags of hardcore from Jewson at £5 each',
+          memoryType: 'ordered_material',
+          materialName: 'hardcore',
+          quantity: '8',
+          unit: 'bags',
+          supplierName: 'Jewson',
+          costAmount: '5',
+          costCurrency: 'GBP',
+          costQualifier: 'each' as const,
+          totalCostAmount: '40',
+          uncertaintyFlags: [],
+        },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('£5 each')).toBeInTheDocument()
+    expect(screen.getByText('£40')).toBeInTheDocument()
+  })
+
+  it('remembered card shows Worth checking when uncertaintyFlags is non-empty', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        {
+          memoryItemId: 'mem-001',
+          summary: 'Ordered something uncertain',
+          memoryType: 'ordered_material',
+          materialName: 'timber',
+          uncertaintyFlags: ['quantity_ambiguous'],
+        },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('Worth checking')).toBeInTheDocument()
+  })
+
+  it('corrected summary and cost appear on card after saving a correction', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-001',
+      action: 'correct',
+      status: 'corrected',
+      memoryItemId: 'mem-001',
+      sourceCandidateFactIds: ['cf-001'],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    const summaryInput = form.querySelector<HTMLInputElement>('input[required]')!
+    fireEvent.change(summaryInput, { target: { value: 'Ordered 10 bags of hardcore from Jewson' } })
+
+    const costInput = form.querySelector<HTMLInputElement>('input[placeholder="e.g. 5.00"]')!
+    fireEvent.change(costInput, { target: { value: '4.50' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+
+    await waitFor(() => screen.getAllByText('Saved to trusted memory'))
+    expect(screen.getByText('Ordered 10 bags of hardcore from Jewson')).toBeInTheDocument()
+    expect(screen.getByText('£4.50 each')).toBeInTheDocument()
   })
 
   it('multiple remembered items are individually scannable as separate elements', async () => {
@@ -425,7 +506,7 @@ describe('ReviewQueueScreen', () => {
 
   it('already-remembered section is hidden when empty', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
     expect(screen.queryByRole('region', { name: /already remembered/i })).not.toBeInTheDocument()
   })
 
@@ -494,7 +575,7 @@ describe('ReviewQueueScreen', () => {
       sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [itemNoCtx] }],
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
     expect(screen.getByText('Source unavailable')).toBeInTheDocument()
     expect(screen.queryByText(/this came from your note/i)).not.toBeInTheDocument()
   })
@@ -525,7 +606,7 @@ describe('ReviewQueueScreen', () => {
       new Promise(res => { resolveDecision = res })
     )
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 12 sheets of plasterboard from Jewson'))
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
 
     const rememberBtn = screen.getAllByRole('button', { name: /remember this/i })[0]
     fireEvent.click(rememberBtn)
@@ -543,5 +624,94 @@ describe('ReviewQueueScreen', () => {
         sourceCandidateFactIds: [],
       })
     })
+  })
+
+  it('card shows material, quantity, supplier, cost and total without expanding source', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+
+    expect(screen.getByText('hardcore')).toBeInTheDocument()
+    expect(screen.getByText('8 bags')).toBeInTheDocument()
+    expect(screen.getByText('Jewson')).toBeInTheDocument()
+    expect(screen.getByText('£5 each')).toBeInTheDocument()
+    expect(screen.getByText('£40')).toBeInTheDocument()
+
+    // Source context must still be collapsed
+    expect(screen.queryByText(/five pounds each/i)).not.toBeInTheDocument()
+  })
+
+  it('card shows Worth checking for cost_uncertain items', async () => {
+    const uncertainItem: QueueItem = {
+      ...ITEM_SINGLE,
+      id: 'qi-uncertain',
+      uncertaintyFlags: ['cost_uncertain'],
+    }
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [uncertainItem] }],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    expect(screen.getByText('Worth checking')).toBeInTheDocument()
+  })
+
+  it('edit form includes cost amount, cost qualifier, and total cost fields', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    expect(form.querySelector('input[placeholder="e.g. 5.00"]')).toBeInTheDocument()
+    expect(form.querySelector('input[placeholder="e.g. 40"]')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /each \(per item\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /approximate/i })).toBeInTheDocument()
+  })
+
+  it('correction payload includes cost fields when changed', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-001',
+      action: 'correct',
+      status: 'corrected',
+      memoryItemId: 'mem-001',
+      sourceCandidateFactIds: ['cf-001'],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    const costInput = form.querySelector<HTMLInputElement>('input[placeholder="e.g. 5.00"]')!
+    fireEvent.change(costInput, { target: { value: '6' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+
+    await waitFor(() => {
+      expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({
+        corrected: expect.objectContaining({ costAmount: '6' }),
+      }))
+    })
+  })
+
+  it('does not show accounting, procurement, or report language', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    expect(screen.queryByText(/invoice/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/reorder/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/spend report/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/total spend/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/procurement/i)).not.toBeInTheDocument()
+  })
+
+  it('source context still expands and collapses after cost fields added', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+
+    const toggle = screen.getAllByText(/this came from your note/i)[0]
+    expect(screen.queryByText(/five pounds each/i)).not.toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.getByText('"Bought 8 bags of hardcore from Jewson, five pounds each."')).toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.queryByText(/five pounds each/i)).not.toBeInTheDocument()
   })
 })

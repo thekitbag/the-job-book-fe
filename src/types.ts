@@ -50,6 +50,8 @@ export type FactType =
 
 export type ConfidenceLabel = 'high' | 'medium' | 'low'
 
+export type CostQualifier = 'each' | 'total' | 'approx' | 'unknown'
+
 // ── Review types (Story 7) ───────────────────────────────────────────────────
 
 export type ReviewDecisionAction = 'confirm' | 'correct' | 'reject' | 'confirm_section' | 'add_missing'
@@ -117,6 +119,10 @@ export interface ProposedMemory {
   supplierName: string | null
   deliveryTiming: string | null
   locationOrUse: string | null
+  costAmount: string | null
+  costCurrency: string | null
+  costQualifier: CostQualifier | null
+  totalCostAmount: string | null
 }
 
 export type QueueItemKind = 'single' | 'duplicate_group' | 'contradiction' | 'unclear_prompt'
@@ -161,6 +167,11 @@ export interface AlreadyRememberedItem {
   supplierName?: string | null
   deliveryTiming?: string | null
   locationOrUse?: string | null
+  costAmount?: string | null
+  costCurrency?: string | null
+  costQualifier?: CostQualifier | null
+  totalCostAmount?: string | null
+  uncertaintyFlags?: string[]
 }
 
 export interface ReviewQueue {
@@ -201,6 +212,10 @@ export interface CandidateFact {
   supplierName: string | null
   deliveryTiming: string | null
   locationOrUse: string | null
+  costAmount: string | null
+  costCurrency: string | null
+  costQualifier: CostQualifier | null
+  totalCostAmount: string | null
   confidenceLabel: ConfidenceLabel
   confidenceReason: string | null
   uncertaintyFlags: string[]
@@ -331,6 +346,11 @@ export interface MemoryViewItem {
   supplierName: string | null
   deliveryTiming: string | null
   locationOrUse: string | null
+  costAmount: string | null
+  costCurrency: string | null
+  costQualifier: CostQualifier | null
+  totalCostAmount: string | null
+  uncertaintyFlags: string[]
   sourceCandidateFactId: string | null
   reviewDecisionId: string | null
   createdAt: string
@@ -357,9 +377,27 @@ export interface MemoryViewStillToCheck {
   items: MemoryViewStillToCheckItem[]
 }
 
+export interface ScanViewItem {
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  costLabel: string | null
+  totalCostLabel: string | null
+  uncertaintyFlags: string[]
+  memoryItemIds: string[]
+}
+
+export interface ScanViewSection {
+  key: string
+  label: string
+  items: ScanViewItem[]
+}
+
 export interface MemoryViewResponse {
   job: Job
   generatedAt: string
   sections: MemoryViewSection[]
   stillToCheck: MemoryViewStillToCheck
+  summarySections?: ScanViewSection[]
 }

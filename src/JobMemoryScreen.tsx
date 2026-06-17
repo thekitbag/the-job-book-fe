@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getMemoryView } from './api'
-import type { Job, MemoryViewItem, MemoryViewResponse, MemoryViewSection } from './types'
+import type { Job, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
 
 const SECTION_SHORT_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
@@ -11,21 +11,137 @@ const SECTION_SHORT_LABELS: Record<string, string> = {
   watch_outs: 'Watch out',
 }
 
+const SCAN_SECTION_MAP: { key: string; label: string }[] = [
+  { key: 'ordered_materials', label: 'Bought / ordered' },
+  { key: 'used_materials', label: 'Used' },
+  { key: 'leftovers', label: 'Left over' },
+]
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function StructuredFields({ item }: { item: MemoryViewItem }) {
-  const parts = [
-    item.quantity && item.unit ? `${item.quantity} ${item.unit}` : item.quantity,
-    item.materialName,
-    item.supplierName,
-    item.deliveryTiming,
-    item.locationOrUse,
-  ].filter((v): v is string => Boolean(v))
+function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
+  if (!amount) return null
+  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
+  const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.' }
+  return `${sym}${amount}${qualifier ? (q[qualifier] ?? '') : ''}`
+}
 
-  if (parts.length === 0) return null
-  return <p className="mem-item-detail">{parts.join(' · ')}</p>
+function formatTotalLabel(amount: string | null, currency: string | null): string | null {
+  if (!amount) return null
+  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
+  return `${sym}${amount}`
+}
+
+function deriveScanSections(sections: MemoryViewSection[]): ScanViewSection[] {
+  return SCAN_SECTION_MAP
+    .map(({ key, label }) => {
+      const section = sections.find(s => s.key === key)
+      if (!section || section.items.length === 0) return null
+
+      const groupMap = new Map<string, MemoryViewItem[]>()
+      const separateItems: MemoryViewItem[] = []
+
+      const DECIMAL_RE = /^\d+(\.\d+)?$/
+      for (const item of section.items) {
+        const canGroup =
+          item.materialName != null &&
+          item.unit != null &&
+          DECIMAL_RE.test(item.quantity ?? '') &&
+          (item.uncertaintyFlags ?? []).length === 0
+
+        if (canGroup) {
+          const groupKey = `${item.materialName}|${item.unit}`
+          if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
+          groupMap.get(groupKey)!.push(item)
+        } else {
+          separateItems.push(item)
+        }
+      }
+
+      const scanItems: ScanViewItem[] = []
+
+      for (const groupItems of groupMap.values()) {
+        const first = groupItems[0]
+        if (groupItems.length === 1) {
+          scanItems.push({
+            materialName: first.materialName,
+            quantity: first.quantity,
+            unit: first.unit,
+            supplierName: first.supplierName,
+            costLabel: formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier),
+            totalCostLabel: formatTotalLabel(first.totalCostAmount, first.costCurrency),
+            uncertaintyFlags: [],
+            memoryItemIds: [first.id],
+          })
+        } else {
+          const totalQty = groupItems.reduce((sum, it) => sum + parseFloat(it.quantity!), 0)
+          const allSameCost = groupItems.every(it =>
+            it.costAmount === first.costAmount &&
+            it.costCurrency === first.costCurrency &&
+            it.costQualifier === first.costQualifier
+          )
+          const allSameTotal = groupItems.every(it => it.totalCostAmount === first.totalCostAmount)
+          const allSameSupplier = groupItems.every(it => it.supplierName === first.supplierName)
+          scanItems.push({
+            materialName: first.materialName,
+            quantity: String(Math.round(totalQty * 1000) / 1000),
+            unit: first.unit,
+            supplierName: allSameSupplier ? first.supplierName : null,
+            costLabel: allSameCost ? formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier) : null,
+            totalCostLabel: allSameTotal ? formatTotalLabel(first.totalCostAmount, first.costCurrency) : null,
+            uncertaintyFlags: [],
+            memoryItemIds: groupItems.map(it => it.id),
+          })
+        }
+      }
+
+      for (const item of separateItems) {
+        scanItems.push({
+          materialName: item.materialName,
+          quantity: item.quantity,
+          unit: item.unit,
+          supplierName: item.supplierName,
+          costLabel: formatCostLabel(item.costAmount, item.costCurrency, item.costQualifier),
+          totalCostLabel: formatTotalLabel(item.totalCostAmount, item.costCurrency),
+          uncertaintyFlags: item.uncertaintyFlags ?? [],
+          memoryItemIds: [item.id],
+        })
+      }
+
+      if (scanItems.length === 0) return null
+      return { key, label, items: scanItems }
+    })
+    .filter((s): s is ScanViewSection => s !== null)
+}
+
+function StructuredFields({ item }: { item: MemoryViewItem }) {
+  const rows: [string, string][] = []
+  if (item.materialName) rows.push(['Item', item.materialName])
+  const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
+  if (qty) rows.push(['Quantity', qty])
+  if (item.supplierName) rows.push(['Supplier', item.supplierName])
+  if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
+  if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
+  const costLabel = formatCostLabel(item.costAmount, item.costCurrency, item.costQualifier)
+  if (costLabel) rows.push(['Cost', costLabel])
+  const totalLabel = formatTotalLabel(item.totalCostAmount, item.costCurrency)
+  if (totalLabel) rows.push(['Total', totalLabel])
+  const uncertain = (item.uncertaintyFlags ?? []).length > 0
+
+  if (rows.length === 0 && !uncertain) return null
+  return (
+    <dl className="card-detail-fields">
+      {rows.map(([label, value]) => (
+        <div key={label} className="card-detail-row">
+          <dt className="card-detail-label">{label}</dt>
+          <dd className="card-detail-value">{value}</dd>
+        </div>
+      ))}
+      {uncertain && <p className="card-uncertainty">Worth checking</p>}
+    </dl>
+  )
 }
 
 function SourceContext({ item }: { item: MemoryViewItem }) {
@@ -75,6 +191,38 @@ function MemSection({ section }: { section: MemoryViewSection }) {
     <section className="mem-section">
       <h2 className="mem-section-heading">{shortLabel}</h2>
       {section.items.map(item => <MemoryCard key={item.id} item={item} />)}
+    </section>
+  )
+}
+
+function ScanItem({ item }: { item: ScanViewItem }) {
+  const desc = [
+    [item.quantity, item.unit].filter(Boolean).join(' '),
+    item.materialName,
+    item.supplierName,
+  ].filter(Boolean).join(' · ')
+  const uncertain = item.uncertaintyFlags.length > 0
+  return (
+    <div className="mem-scan-item">
+      {desc && <span className="mem-scan-item-desc">{desc}</span>}
+      {item.costLabel && <span className="mem-scan-item-cost">{item.costLabel}</span>}
+      {item.totalCostLabel && <span className="mem-scan-item-total">{item.totalCostLabel}</span>}
+      {uncertain && <span className="mem-scan-item-uncertain">Worth checking</span>}
+    </div>
+  )
+}
+
+function ScanView({ data }: { data: MemoryViewResponse }) {
+  const sections = data.summarySections ?? deriveScanSections(data.sections)
+  if (sections.length === 0) return null
+  return (
+    <section className="mem-scan" aria-label="Memory scan">
+      {sections.map(section => (
+        <div key={section.key} className="mem-scan-section">
+          <h3 className="mem-scan-heading">{section.label}</h3>
+          {section.items.map((item, i) => <ScanItem key={i} item={item} />)}
+        </div>
+      ))}
     </section>
   )
 }
@@ -154,6 +302,8 @@ export default function JobMemoryScreen({
               ))}
             </div>
           )}
+
+          {hasMemory && <ScanView data={data} />}
 
           {/* Trusted memory sections */}
           {hasMemory
