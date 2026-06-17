@@ -43,13 +43,12 @@ function deriveScanSections(sections: MemoryViewSection[]): ScanViewSection[] {
       const groupMap = new Map<string, MemoryViewItem[]>()
       const separateItems: MemoryViewItem[] = []
 
+      const DECIMAL_RE = /^\d+(\.\d+)?$/
       for (const item of section.items) {
-        const qty = parseFloat(item.quantity ?? '')
         const canGroup =
           item.materialName != null &&
           item.unit != null &&
-          !isNaN(qty) &&
-          qty > 0 &&
+          DECIMAL_RE.test(item.quantity ?? '') &&
           (item.uncertaintyFlags ?? []).length === 0
 
         if (canGroup) {
@@ -202,7 +201,7 @@ function ScanItem({ item }: { item: ScanViewItem }) {
     item.materialName,
     item.supplierName,
   ].filter(Boolean).join(' · ')
-  const uncertain = item.uncertaintyFlags.includes('cost_uncertain')
+  const uncertain = item.uncertaintyFlags.length > 0
   return (
     <div className="mem-scan-item">
       {desc && <span className="mem-scan-item-desc">{desc}</span>}

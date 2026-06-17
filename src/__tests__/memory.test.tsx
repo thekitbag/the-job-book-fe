@@ -447,6 +447,100 @@ describe('JobMemoryScreen', () => {
     expect(scanRegion.textContent).not.toContain('4 bags')
   })
 
+  it('scan view does not group items whose quantity is non-decimal (e.g. "about 8")', async () => {
+    const baseItem = MEMORY_VIEW.sections[0].items[0]
+    const viewWithNonDecimal: MemoryViewResponse = {
+      ...MEMORY_VIEW,
+      sections: MEMORY_VIEW.sections.map(s =>
+        s.key === 'used_materials'
+          ? {
+              ...s,
+              items: [
+                {
+                  ...baseItem,
+                  id: 'mem-nd-a',
+                  memoryType: 'used_material' as const,
+                  summary: 'Used about 8 bags of sand',
+                  materialName: 'sand',
+                  quantity: 'about 8',
+                  unit: 'bags',
+                  supplierName: null,
+                  costAmount: null,
+                  costCurrency: null,
+                  costQualifier: null,
+                  totalCostAmount: null,
+                  uncertaintyFlags: [],
+                  source: null,
+                },
+                {
+                  ...baseItem,
+                  id: 'mem-nd-b',
+                  memoryType: 'used_material' as const,
+                  summary: 'Used 4 bags of sand',
+                  materialName: 'sand',
+                  quantity: '4',
+                  unit: 'bags',
+                  supplierName: null,
+                  costAmount: null,
+                  costCurrency: null,
+                  costQualifier: null,
+                  totalCostAmount: null,
+                  uncertaintyFlags: [],
+                  source: null,
+                },
+              ],
+            }
+          : s
+      ),
+    }
+    mockGetMemoryView.mockResolvedValue(viewWithNonDecimal)
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByRole('region', { name: /memory scan/i }))
+    const scanRegion = screen.getByRole('region', { name: /memory scan/i })
+    // Non-decimal quantity must appear as its own row, not merged
+    expect(scanRegion.textContent).toContain('about 8')
+    expect(scanRegion.textContent).toContain('4')
+    // Combined total of 12 must NOT appear (rows kept separate)
+    expect(scanRegion.textContent).not.toContain('12')
+  })
+
+  it('scan view shows Worth checking for non-cost uncertainty flags', async () => {
+    const baseItem = MEMORY_VIEW.sections[0].items[0]
+    const viewWithUncertainty: MemoryViewResponse = {
+      ...MEMORY_VIEW,
+      sections: MEMORY_VIEW.sections.map(s =>
+        s.key === 'used_materials'
+          ? {
+              ...s,
+              items: [
+                {
+                  ...baseItem,
+                  id: 'mem-unc-a',
+                  memoryType: 'used_material' as const,
+                  summary: 'Used some sand bags',
+                  materialName: 'sand',
+                  quantity: null,
+                  unit: null,
+                  supplierName: null,
+                  costAmount: null,
+                  costCurrency: null,
+                  costQualifier: null,
+                  totalCostAmount: null,
+                  uncertaintyFlags: ['quantity_ambiguous'],
+                  source: null,
+                },
+              ],
+            }
+          : s
+      ),
+    }
+    mockGetMemoryView.mockResolvedValue(viewWithUncertainty)
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByRole('region', { name: /memory scan/i }))
+    const scanRegion = screen.getByRole('region', { name: /memory scan/i })
+    expect(scanRegion.textContent).toContain('Worth checking')
+  })
+
   it('does not show accounting, procurement or report controls', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
