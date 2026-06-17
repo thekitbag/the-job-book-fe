@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getReviewQueue, submitQueueDecision } from './api'
 import type {
   AlreadyRememberedItem,
+  CostQualifier,
   Job,
   MemoryType,
   ProposedMemory,
@@ -19,6 +20,27 @@ const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: strin
   { value: 'customer_change', label: 'Customer change', shortLabel: 'Customer' },
   { value: 'watch_out', label: 'Watch out', shortLabel: 'Watch out' },
 ]
+
+const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: '— not stated —' },
+  { value: 'each', label: 'Each (per item)' },
+  { value: 'total', label: 'Total' },
+  { value: 'approx', label: 'Approximate' },
+  { value: 'unknown', label: 'Not clear' },
+]
+
+function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
+  if (!amount) return null
+  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
+  const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.' }
+  return `${sym}${amount}${qualifier ? (q[qualifier] ?? '') : ''}`
+}
+
+function formatTotalLabel(amount: string | null, currency: string | null): string | null {
+  if (!amount) return null
+  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
+  return `${sym}${amount}`
+}
 
 function SourceContext({ contexts }: { contexts: QueueItem['sourceContext'] }) {
   const [open, setOpen] = useState(false)
@@ -63,6 +85,34 @@ function ItemKindBadge({ item }: { item: QueueItem }) {
   return <span className={cls}>{item.reviewLabel}</span>
 }
 
+function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncertaintyFlags: string[] }) {
+  const rows: [string, string][] = []
+  if (pm.materialName) rows.push(['Item', pm.materialName])
+  const qty = [pm.quantity, pm.unit].filter(Boolean).join(' ')
+  if (qty) rows.push(['Quantity', qty])
+  if (pm.supplierName) rows.push(['Supplier', pm.supplierName])
+  if (pm.deliveryTiming) rows.push(['Delivery', pm.deliveryTiming])
+  if (pm.locationOrUse) rows.push(['Location', pm.locationOrUse])
+  const costLabel = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
+  if (costLabel) rows.push(['Cost', costLabel])
+  const totalLabel = formatTotalLabel(pm.totalCostAmount, pm.costCurrency)
+  if (totalLabel) rows.push(['Total', totalLabel])
+  const uncertain = uncertaintyFlags.includes('cost_uncertain')
+
+  if (rows.length === 0 && !uncertain) return null
+  return (
+    <dl className="card-detail-fields">
+      {rows.map(([label, value]) => (
+        <div key={label} className="card-detail-row">
+          <dt className="card-detail-label">{label}</dt>
+          <dd className="card-detail-value">{value}</dd>
+        </div>
+      ))}
+      {uncertain && <p className="card-uncertainty">Worth checking</p>}
+    </dl>
+  )
+}
+
 function EditForm({
   initial,
   onSubmit,
@@ -75,10 +125,12 @@ function EditForm({
   submitting: boolean
 }) {
   const [form, setForm] = useState<ProposedMemory>(initial)
-  const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType'>, v: string) =>
+  const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType' | 'costQualifier'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
   const setType = (v: string) =>
     setForm(f => ({ ...f, memoryType: v as MemoryType }))
+  const setCostQualifier = (v: string) =>
+    setForm(f => ({ ...f, costQualifier: (v as CostQualifier) || null }))
 
   return (
     <form
@@ -121,6 +173,22 @@ function EditForm({
       <label className="queue-field">
         <span className="queue-field-label">Location / use</span>
         <input className="queue-field-input" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
+      </label>
+      <label className="queue-field">
+        <span className="queue-field-label">Cost amount</span>
+        <input className="queue-field-input" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
+      </label>
+      <label className="queue-field">
+        <span className="queue-field-label">Cost qualifier</span>
+        <select className="queue-field-input" value={form.costQualifier ?? ''} onChange={e => setCostQualifier(e.target.value)}>
+          {COST_QUALIFIER_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="queue-field">
+        <span className="queue-field-label">Total cost</span>
+        <input className="queue-field-input" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
       </label>
       <div className="queue-edit-actions">
         <button type="submit" className="btn-queue-save" disabled={submitting}>
@@ -168,6 +236,10 @@ function QueueItemCard({
       </div>
 
       <p className="queue-item-summary">{item.summary}</p>
+
+      {!isEditing && (
+        <QueueItemDetails pm={item.proposedMemory} uncertaintyFlags={item.uncertaintyFlags} />
+      )}
 
       {!resolved && <SourceContext contexts={item.sourceContext} />}
 
