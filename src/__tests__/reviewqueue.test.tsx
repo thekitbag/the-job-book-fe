@@ -385,10 +385,12 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
-    expect(screen.getByText('scaffolding · TCS · Friday morning')).toBeInTheDocument()
+    expect(screen.getByText('scaffolding')).toBeInTheDocument()
+    expect(screen.getByText('TCS')).toBeInTheDocument()
+    expect(screen.getByText('Friday morning')).toBeInTheDocument()
   })
 
-  it('omits details line when no structured fields present', async () => {
+  it('omits details dl when no structured fields present', async () => {
     mockGetReviewQueue.mockResolvedValue(makeQueue({
       alreadyRemembered: [
         { memoryItemId: 'mem-001', summary: 'Watch out near back door', memoryType: 'watch_out' },
@@ -397,8 +399,78 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
     expect(screen.getByText('Watch out near back door')).toBeInTheDocument()
-    // no details line rendered
-    expect(document.querySelector('.queue-remembered-card-details')).not.toBeInTheDocument()
+    const rememberedRegion = screen.getByRole('region', { name: /already remembered/i })
+    expect(rememberedRegion.querySelector('.card-detail-fields')).not.toBeInTheDocument()
+  })
+
+  it('remembered card shows labelled cost and total rows', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [],
+      alreadyRemembered: [
+        {
+          memoryItemId: 'mem-001',
+          summary: 'Ordered 8 bags of hardcore from Jewson at £5 each',
+          memoryType: 'ordered_material',
+          materialName: 'hardcore',
+          quantity: '8',
+          unit: 'bags',
+          supplierName: 'Jewson',
+          costAmount: '5',
+          costCurrency: 'GBP',
+          costQualifier: 'each' as const,
+          totalCostAmount: '40',
+          uncertaintyFlags: [],
+        },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('£5 each')).toBeInTheDocument()
+    expect(screen.getByText('£40')).toBeInTheDocument()
+  })
+
+  it('remembered card shows Worth checking when uncertaintyFlags is non-empty', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        {
+          memoryItemId: 'mem-001',
+          summary: 'Ordered something uncertain',
+          memoryType: 'ordered_material',
+          materialName: 'timber',
+          uncertaintyFlags: ['quantity_ambiguous'],
+        },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    expect(screen.getByText('Worth checking')).toBeInTheDocument()
+  })
+
+  it('corrected summary and cost appear on card after saving a correction', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-001',
+      action: 'correct',
+      status: 'corrected',
+      memoryItemId: 'mem-001',
+      sourceCandidateFactIds: ['cf-001'],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    const summaryInput = form.querySelector<HTMLInputElement>('input[required]')!
+    fireEvent.change(summaryInput, { target: { value: 'Ordered 10 bags of hardcore from Jewson' } })
+
+    const costInput = form.querySelector<HTMLInputElement>('input[placeholder="e.g. 5.00"]')!
+    fireEvent.change(costInput, { target: { value: '4.50' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+
+    await waitFor(() => screen.getAllByText('Saved to trusted memory'))
+    expect(screen.getByText('Ordered 10 bags of hardcore from Jewson')).toBeInTheDocument()
+    expect(screen.getByText('£4.50 each')).toBeInTheDocument()
   })
 
   it('multiple remembered items are individually scannable as separate elements', async () => {

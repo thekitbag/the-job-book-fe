@@ -389,6 +389,64 @@ describe('JobMemoryScreen', () => {
     expect(scanRegion.textContent).not.toContain('13')
   })
 
+  it('scan view consolidates compatible material+unit rows by summing quantities', async () => {
+    const baseItem = MEMORY_VIEW.sections[0].items[0]
+    const viewWithCompatible: MemoryViewResponse = {
+      ...MEMORY_VIEW,
+      sections: MEMORY_VIEW.sections.map(s =>
+        s.key === 'used_materials'
+          ? {
+              ...s,
+              items: [
+                {
+                  ...baseItem,
+                  id: 'mem-used-a',
+                  memoryType: 'used_material' as const,
+                  summary: 'Used 9 bags of sand',
+                  materialName: 'sand',
+                  quantity: '9',
+                  unit: 'bags',
+                  supplierName: null,
+                  costAmount: null,
+                  costCurrency: null,
+                  costQualifier: null,
+                  totalCostAmount: null,
+                  uncertaintyFlags: [],
+                  source: null,
+                },
+                {
+                  ...baseItem,
+                  id: 'mem-used-b',
+                  memoryType: 'used_material' as const,
+                  summary: 'Used 4 bags of sand',
+                  materialName: 'sand',
+                  quantity: '4',
+                  unit: 'bags',
+                  supplierName: null,
+                  costAmount: null,
+                  costCurrency: null,
+                  costQualifier: null,
+                  totalCostAmount: null,
+                  uncertaintyFlags: [],
+                  source: null,
+                },
+              ],
+            }
+          : s
+      ),
+    }
+    mockGetMemoryView.mockResolvedValue(viewWithCompatible)
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByRole('region', { name: /memory scan/i }))
+    const scanRegion = screen.getByRole('region', { name: /memory scan/i })
+    // Two compatible sand/bags items should be merged into one showing combined quantity
+    expect(scanRegion.textContent).toContain('13')
+    expect(scanRegion.textContent).toContain('sand')
+    // Items must NOT appear as two separate rows
+    expect(scanRegion.textContent).not.toContain('9 bags')
+    expect(scanRegion.textContent).not.toContain('4 bags')
+  })
+
   it('does not show accounting, procurement or report controls', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)

@@ -97,7 +97,7 @@ function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncert
   if (costLabel) rows.push(['Cost', costLabel])
   const totalLabel = formatTotalLabel(pm.totalCostAmount, pm.costCurrency)
   if (totalLabel) rows.push(['Total', totalLabel])
-  const uncertain = uncertaintyFlags.includes('cost_uncertain')
+  const uncertain = uncertaintyFlags.length > 0
 
   if (rows.length === 0 && !uncertain) return null
   return (
@@ -284,13 +284,18 @@ function QueueItemCard({
 function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
   const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.shortLabel ?? item.memoryType
 
-  const details: string[] = []
-  if (item.quantity && item.unit) details.push(`${item.quantity} ${item.unit}`)
-  else if (item.quantity) details.push(item.quantity)
-  if (item.materialName) details.push(item.materialName)
-  if (item.supplierName) details.push(item.supplierName)
-  if (item.deliveryTiming) details.push(item.deliveryTiming)
-  if (item.locationOrUse) details.push(item.locationOrUse)
+  const rows: [string, string][] = []
+  const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
+  if (item.materialName) rows.push(['Item', item.materialName])
+  if (qty) rows.push(['Quantity', qty])
+  if (item.supplierName) rows.push(['Supplier', item.supplierName])
+  if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
+  if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
+  const costLabel = formatCostLabel(item.costAmount ?? null, item.costCurrency ?? null, item.costQualifier ?? null)
+  if (costLabel) rows.push(['Cost', costLabel])
+  const totalLabel = formatTotalLabel(item.totalCostAmount ?? null, item.costCurrency ?? null)
+  if (totalLabel) rows.push(['Total', totalLabel])
+  const uncertain = (item.uncertaintyFlags ?? []).length > 0
 
   return (
     <li className={`queue-remembered-card queue-remembered-card--${item.memoryType}`}>
@@ -299,8 +304,21 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
         {item.timeLabel && <span className="queue-remembered-card-time">{item.timeLabel}</span>}
       </div>
       <p className="queue-remembered-card-summary">{item.summary}</p>
-      {details.length > 0 && (
-        <p className="queue-remembered-card-details">{details.join(' · ')}</p>
+      {(rows.length > 0 || uncertain) && (
+        <dl className="card-detail-fields">
+          {rows.map(([label, value]) => (
+            <div key={label} className="card-detail-row">
+              <dt className="card-detail-label">{label}</dt>
+              <dd className="card-detail-value">{value}</dd>
+            </div>
+          ))}
+          {uncertain && (
+            <div className="card-detail-row card-uncertainty">
+              <dt className="card-detail-label">Worth checking</dt>
+              <dd className="card-detail-value">cost or quantity may need confirming</dd>
+            </div>
+          )}
+        </dl>
       )}
     </li>
   )
@@ -398,7 +416,11 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
           ...q,
           sections: q.sections.map(s => ({
             ...s,
-            items: s.items.map(it => it.id === itemId ? { ...it, status: result.status } : it),
+            items: s.items.map(it => it.id !== itemId ? it : {
+              ...it,
+              status: result.status,
+              ...(corrected ? { summary: corrected.summary, proposedMemory: corrected } : {}),
+            }),
           })),
         }
       })

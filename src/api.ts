@@ -394,6 +394,11 @@ const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
     quantity: null,
     unit: null,
     locationOrUse: null,
+    costAmount: null,
+    costCurrency: null,
+    costQualifier: null,
+    totalCostAmount: null,
+    uncertaintyFlags: [],
   },
   {
     memoryItemId: 'mem-mock-002',
@@ -406,6 +411,11 @@ const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
     supplierName: null,
     deliveryTiming: null,
     locationOrUse: 'near back door',
+    costAmount: null,
+    costCurrency: null,
+    costQualifier: null,
+    totalCostAmount: null,
+    uncertaintyFlags: [],
   },
 ]
 

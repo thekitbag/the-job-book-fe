@@ -39,10 +39,67 @@ function deriveScanSections(sections: MemoryViewSection[]): ScanViewSection[] {
     .map(({ key, label }) => {
       const section = sections.find(s => s.key === key)
       if (!section || section.items.length === 0) return null
-      return {
-        key,
-        label,
-        items: section.items.map(item => ({
+
+      const groupMap = new Map<string, MemoryViewItem[]>()
+      const separateItems: MemoryViewItem[] = []
+
+      for (const item of section.items) {
+        const qty = parseFloat(item.quantity ?? '')
+        const canGroup =
+          item.materialName != null &&
+          item.unit != null &&
+          !isNaN(qty) &&
+          qty > 0 &&
+          (item.uncertaintyFlags ?? []).length === 0
+
+        if (canGroup) {
+          const groupKey = `${item.materialName}|${item.unit}`
+          if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
+          groupMap.get(groupKey)!.push(item)
+        } else {
+          separateItems.push(item)
+        }
+      }
+
+      const scanItems: ScanViewItem[] = []
+
+      for (const groupItems of groupMap.values()) {
+        const first = groupItems[0]
+        if (groupItems.length === 1) {
+          scanItems.push({
+            materialName: first.materialName,
+            quantity: first.quantity,
+            unit: first.unit,
+            supplierName: first.supplierName,
+            costLabel: formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier),
+            totalCostLabel: formatTotalLabel(first.totalCostAmount, first.costCurrency),
+            uncertaintyFlags: [],
+            memoryItemIds: [first.id],
+          })
+        } else {
+          const totalQty = groupItems.reduce((sum, it) => sum + parseFloat(it.quantity!), 0)
+          const allSameCost = groupItems.every(it =>
+            it.costAmount === first.costAmount &&
+            it.costCurrency === first.costCurrency &&
+            it.costQualifier === first.costQualifier
+          )
+          const allSameTotal = groupItems.every(it => it.totalCostAmount === first.totalCostAmount)
+          const allSameSupplier = groupItems.every(it => it.supplierName === first.supplierName)
+          scanItems.push({
+            materialName: first.materialName,
+            quantity: String(Math.round(totalQty * 1000) / 1000),
+            unit: first.unit,
+            supplierName: allSameSupplier ? first.supplierName : null,
+            costLabel: allSameCost ? formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier) : null,
+            totalCostLabel: allSameTotal ? formatTotalLabel(first.totalCostAmount, first.costCurrency) : null,
+            uncertaintyFlags: [],
+            memoryItemIds: groupItems.map(it => it.id),
+          })
+        }
+      }
+
+      for (const item of separateItems) {
+        scanItems.push({
           materialName: item.materialName,
           quantity: item.quantity,
           unit: item.unit,
@@ -51,8 +108,11 @@ function deriveScanSections(sections: MemoryViewSection[]): ScanViewSection[] {
           totalCostLabel: formatTotalLabel(item.totalCostAmount, item.costCurrency),
           uncertaintyFlags: item.uncertaintyFlags ?? [],
           memoryItemIds: [item.id],
-        })),
+        })
       }
+
+      if (scanItems.length === 0) return null
+      return { key, label, items: scanItems }
     })
     .filter((s): s is ScanViewSection => s !== null)
 }
@@ -69,7 +129,7 @@ function StructuredFields({ item }: { item: MemoryViewItem }) {
   if (costLabel) rows.push(['Cost', costLabel])
   const totalLabel = formatTotalLabel(item.totalCostAmount, item.costCurrency)
   if (totalLabel) rows.push(['Total', totalLabel])
-  const uncertain = (item.uncertaintyFlags ?? []).includes('cost_uncertain')
+  const uncertain = (item.uncertaintyFlags ?? []).length > 0
 
   if (rows.length === 0 && !uncertain) return null
   return (

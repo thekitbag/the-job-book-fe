@@ -171,6 +171,7 @@ export interface AlreadyRememberedItem {
   costCurrency?: string | null
   costQualifier?: CostQualifier | null
   totalCostAmount?: string | null
+  uncertaintyFlags?: string[]
 }
 
 export interface ReviewQueue {
