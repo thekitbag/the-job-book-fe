@@ -1217,6 +1217,15 @@ code {
   line-height: 1.4;
 }
 
+.queue-item-type-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #555;
+  margin: 0 0 0.5rem;
+}
+
 .queue-item-resolved {
   font-size: 0.85rem;
   margin: 0.5rem 0 0;
@@ -2163,6 +2172,15 @@ code {
   font-size: 0.95rem;
   font-weight: 500;
   color: #1a1a1a;
+}
+
+.mem-card-type-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #555;
+  margin: 0 0 0.5rem;
 }
 
 .mem-item-detail {

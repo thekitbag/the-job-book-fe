@@ -29,6 +29,14 @@ const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'unknown', label: 'Not clear' },
 ]
 
+const MATERIAL_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material'])
+
+const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
+  ordered_material: 'Bought / ordered',
+  used_material: 'Used',
+  leftover_material: 'Left over',
+}
+
 function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
@@ -108,7 +116,12 @@ function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncert
           <dd className="card-detail-value">{value}</dd>
         </div>
       ))}
-      {uncertain && <p className="card-uncertainty">Worth checking</p>}
+      {uncertain && (
+        <div className="card-detail-row card-uncertainty">
+          <dt className="card-detail-label">Worth checking</dt>
+          <dd className="card-detail-value">cost or quantity may need confirming</dd>
+        </div>
+      )}
     </dl>
   )
 }
@@ -224,6 +237,19 @@ function QueueItemCard({
   onDismiss: () => void
 }) {
   const resolved = item.status !== 'draft'
+  const memType = item.proposedMemory.memoryType
+  const isMaterial = MATERIAL_TYPES.has(memType)
+  const hasDetailFields = !!(
+    item.proposedMemory.materialName ||
+    item.proposedMemory.quantity ||
+    item.proposedMemory.unit ||
+    item.proposedMemory.supplierName ||
+    item.proposedMemory.deliveryTiming ||
+    item.proposedMemory.locationOrUse ||
+    item.proposedMemory.costAmount ||
+    item.proposedMemory.totalCostAmount ||
+    item.uncertaintyFlags.length > 0
+  )
 
   return (
     <div
@@ -235,10 +261,17 @@ function QueueItemCard({
         {item.timeLabel && <span className="queue-time-label">{item.timeLabel}</span>}
       </div>
 
-      <p className="queue-item-summary">{item.summary}</p>
+      {isMaterial
+        ? <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>
+        : <p className="queue-item-summary">{item.summary}</p>
+      }
 
       {!isEditing && (
         <QueueItemDetails pm={item.proposedMemory} uncertaintyFlags={item.uncertaintyFlags} />
+      )}
+
+      {isMaterial && !hasDetailFields && !isEditing && (
+        <p className="queue-item-summary">{item.summary}</p>
       )}
 
       {!resolved && <SourceContext contexts={item.sourceContext} />}
@@ -296,6 +329,8 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
   const totalLabel = formatTotalLabel(item.totalCostAmount ?? null, item.costCurrency ?? null)
   if (totalLabel) rows.push(['Total', totalLabel])
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
+  const isMaterial = MATERIAL_TYPES.has(item.memoryType)
+  const hasDetailRows = rows.length > 0 || uncertain
 
   return (
     <li className={`queue-remembered-card queue-remembered-card--${item.memoryType}`}>
@@ -303,7 +338,9 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
         <span className={`queue-remembered-type-chip queue-remembered-type-chip--${item.memoryType}`}>{typeLabel}</span>
         {item.timeLabel && <span className="queue-remembered-card-time">{item.timeLabel}</span>}
       </div>
-      <p className="queue-remembered-card-summary">{item.summary}</p>
+      {(!isMaterial || !hasDetailRows) && (
+        <p className="queue-remembered-card-summary">{item.summary}</p>
+      )}
       {(rows.length > 0 || uncertain) && (
         <dl className="card-detail-fields">
           {rows.map(([label, value]) => (
