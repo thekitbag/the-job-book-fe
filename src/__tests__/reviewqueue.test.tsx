@@ -141,9 +141,9 @@ describe('ReviewQueueScreen', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     expect(screen.getByText('Loading…')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeInTheDocument()
+      expect(screen.getByText('Bought / ordered')).toBeInTheDocument()
     })
-    expect(screen.getByText('Used OSB boards on the back wall')).toBeInTheDocument()
+    expect(screen.getByText('OSB')).toBeInTheDocument()
   })
 
   it('shows "Nothing to check right now" for an empty queue', async () => {
@@ -164,7 +164,7 @@ describe('ReviewQueueScreen', () => {
     mockGetReviewQueue.mockResolvedValue(makeQueue())
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
     await waitFor(() => {
-      expect(screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeInTheDocument()
+      expect(screen.getByText('Bought / ordered')).toBeInTheDocument()
     })
   })
 
@@ -193,7 +193,7 @@ describe('ReviewQueueScreen', () => {
   it('source context is collapsed by default and expands on click', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => {
-      expect(screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeInTheDocument()
+      expect(screen.getByText('Bought / ordered')).toBeInTheDocument()
     })
 
     const toggles = screen.getAllByText(/this came from your note/i)
@@ -224,7 +224,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /remember this/i })[0])
 
@@ -249,7 +249,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /dismiss/i })[0])
 
@@ -275,7 +275,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
@@ -302,7 +302,7 @@ describe('ReviewQueueScreen', () => {
 
   it('cancel in edit form closes the form without submitting', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
     expect(screen.getByRole('form', { name: /edit correction/i })).toBeInTheDocument()
@@ -314,7 +314,7 @@ describe('ReviewQueueScreen', () => {
 
   it('edit form type selector excludes unclear', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
@@ -328,7 +328,7 @@ describe('ReviewQueueScreen', () => {
   it('shows item-level error on decision failure with retry possible', async () => {
     mockSubmitQueueDecision.mockRejectedValue(new Error('network'))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /remember this/i })[0])
 
@@ -455,7 +455,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
@@ -469,8 +469,9 @@ describe('ReviewQueueScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
 
     await waitFor(() => screen.getAllByText('Saved to trusted memory'))
-    expect(screen.getByText('Ordered 10 bags of hardcore from Jewson')).toBeInTheDocument()
     expect(screen.getByText('£4.50 each')).toBeInTheDocument()
+    // Stale prose must not appear as a conflicting headline after correction
+    expect(screen.queryByText('Ordered 8 bags of hardcore from Jewson at £5 each')).not.toBeInTheDocument()
   })
 
   it('multiple remembered items are individually scannable as separate elements', async () => {
@@ -506,7 +507,7 @@ describe('ReviewQueueScreen', () => {
 
   it('already-remembered section is hidden when empty', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
     expect(screen.queryByRole('region', { name: /already remembered/i })).not.toBeInTheDocument()
   })
 
@@ -529,7 +530,7 @@ describe('ReviewQueueScreen', () => {
 
   it('duplicate group shows multiple source contexts', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Used OSB boards on the back wall'))
+    await waitFor(() => screen.getAllByText('OSB'))
 
     const toggles = screen.getAllByText(/this came from your note/i)
     // expand the duplicate item's toggle (second one in DOM)
@@ -575,7 +576,7 @@ describe('ReviewQueueScreen', () => {
       sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [itemNoCtx] }],
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
     expect(screen.getByText('Source unavailable')).toBeInTheDocument()
     expect(screen.queryByText(/this came from your note/i)).not.toBeInTheDocument()
   })
@@ -606,7 +607,7 @@ describe('ReviewQueueScreen', () => {
       new Promise(res => { resolveDecision = res })
     )
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     const rememberBtn = screen.getAllByRole('button', { name: /remember this/i })[0]
     fireEvent.click(rememberBtn)
@@ -628,7 +629,7 @@ describe('ReviewQueueScreen', () => {
 
   it('card shows material, quantity, supplier, cost and total without expanding source', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     expect(screen.getByText('hardcore')).toBeInTheDocument()
     expect(screen.getByText('8 bags')).toBeInTheDocument()
@@ -650,13 +651,13 @@ describe('ReviewQueueScreen', () => {
       sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [uncertainItem] }],
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
     expect(screen.getByText('Worth checking')).toBeInTheDocument()
   })
 
   it('edit form includes cost amount, cost qualifier, and total cost fields', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
@@ -676,7 +677,7 @@ describe('ReviewQueueScreen', () => {
       sourceCandidateFactIds: ['cf-001'],
     })
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
@@ -695,7 +696,7 @@ describe('ReviewQueueScreen', () => {
 
   it('does not show accounting, procurement, or report language', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
     expect(screen.queryByText(/invoice/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/reorder/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/spend report/i)).not.toBeInTheDocument()
@@ -705,7 +706,7 @@ describe('ReviewQueueScreen', () => {
 
   it('source context still expands and collapses after cost fields added', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('Bought / ordered'))
 
     const toggle = screen.getAllByText(/this came from your note/i)[0]
     expect(screen.queryByText(/five pounds each/i)).not.toBeInTheDocument()

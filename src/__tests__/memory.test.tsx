@@ -152,19 +152,20 @@ describe('JobMemoryScreen', () => {
     expect(screen.queryByText('Watch out')).toBeNull()
   })
 
-  it('renders memory card summary text', async () => {
+  it('renders type label as primary display for material memory cards', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() =>
-      screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')
-    )
-    expect(screen.getByText('Used OSB boards on the back wall')).toBeTruthy()
+    await waitFor(() => screen.getAllByText('Bought / ordered'))
+    expect(screen.getAllByText('Used').length).toBeGreaterThan(0)
+    // Prose summaries must not appear as primary titles for material types with structured fields
+    expect(screen.queryByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeNull()
+    expect(screen.queryByText('Used OSB boards on the back wall')).toBeNull()
   })
 
   it('renders structured fields as labelled rows without showing null text', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('hardcore'))
     // Individual labelled field values
     expect(screen.getByText('hardcore')).toBeTruthy()
     expect(screen.getByText('8 bags')).toBeTruthy()
@@ -176,7 +177,7 @@ describe('JobMemoryScreen', () => {
   it('renders structured fields with locationOrUse when present', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Used OSB boards on the back wall'))
+    await waitFor(() => screen.getAllByText('OSB'))
     // "OSB" appears in both scan view item and memory card — check at least one exists
     expect(screen.getAllByText('OSB').length).toBeGreaterThan(0)
     expect(screen.getByText('back wall')).toBeTruthy()
@@ -185,7 +186,7 @@ describe('JobMemoryScreen', () => {
   it('renders cost and total cost on memory cards', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('hardcore'))
     // Cost labels appear in both scan view and memory card
     expect(screen.getAllByText('£5 each').length).toBeGreaterThan(0)
     expect(screen.getAllByText('£40').length).toBeGreaterThan(0)
@@ -200,7 +201,7 @@ describe('JobMemoryScreen', () => {
   it('does not show source toggle for items without source', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Used OSB boards on the back wall'))
+    await waitFor(() => screen.getAllByText('OSB'))
     // Only one item has source; only one toggle should appear
     expect(screen.getAllByText('Show source').length).toBe(1)
   })
@@ -278,7 +279,7 @@ describe('JobMemoryScreen', () => {
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     await waitFor(() => screen.getByRole('button', { name: 'Try again' }))
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('hardcore'))
   })
 
   it('calls onClose when Back is clicked', async () => {
@@ -291,7 +292,7 @@ describe('JobMemoryScreen', () => {
   it('does not show confirm/correct/dismiss/edit controls', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('hardcore'))
     expect(screen.queryByRole('button', { name: /confirm/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /correct/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /dismiss/i })).toBeNull()
@@ -352,7 +353,7 @@ describe('JobMemoryScreen', () => {
     mockGetMemoryView.mockResolvedValue(viewWithLeftovers)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     await waitFor(() => screen.getByRole('region', { name: /memory scan/i }))
-    expect(screen.getByText('Left over')).toBeTruthy()
+    expect(screen.getAllByText('Left over').length).toBeGreaterThan(0)
     const scanRegion = screen.getByRole('region', { name: /memory scan/i })
     expect(scanRegion.textContent).toContain('sand')
   })
@@ -544,7 +545,7 @@ describe('JobMemoryScreen', () => {
   it('does not show accounting, procurement or report controls', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('hardcore'))
     expect(screen.queryByText(/invoice/i)).toBeNull()
     expect(screen.queryByText(/reorder/i)).toBeNull()
     expect(screen.queryByText(/spend report/i)).toBeNull()
@@ -581,9 +582,9 @@ describe('JobMemoryScreen', () => {
     const { rerender } = render(
       <JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />
     )
-    await waitFor(() => screen.getByText('Ordered 8 bags of hardcore from Jewson at £5 each'))
+    await waitFor(() => screen.getByText('hardcore'))
     rerender(<JobMemoryScreen job={JOB_B} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Ordered bricks from Travis Perkins'))
-    expect(screen.queryByText('Ordered 8 bags of hardcore from Jewson at £5 each')).toBeNull()
+    await waitFor(() => screen.getByText('bricks'))
+    expect(screen.queryByText('hardcore')).toBeNull()
   })
 })
