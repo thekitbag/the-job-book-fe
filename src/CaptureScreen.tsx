@@ -370,14 +370,13 @@ export default function CaptureScreen({
         )}
       </header>
 
-      {/* 1. Current job identity */}
+      {/* 1. Current job identity — title + Switch job make the selection clear */}
       <div className="capture-current-job">
-        <div className="capture-current-job-row">
-          <span className="capture-current-job-label">Current job</span>
-          {onSwitchJob && (
+        {onSwitchJob && (
+          <div className="capture-current-job-row">
             <button className="btn-switch-job" onClick={onSwitchJob}>Switch job</button>
-          )}
-        </div>
+          </div>
+        )}
         <div className="capture-current-job-detail">
           <span className="capture-current-job-title">{job.title}</span>
           {job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (

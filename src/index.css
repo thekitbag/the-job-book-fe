@@ -192,16 +192,8 @@ button {
 .capture-current-job-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.6rem;
-}
-
-.capture-current-job-label {
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.13em;
-  color: var(--ink-400);
+  justify-content: flex-end;
+  margin-bottom: 0.7rem;
 }
 
 .btn-switch-job {

@@ -71,9 +71,8 @@ beforeEach(() => {
 // ── CaptureScreen job display ──────────────────────────────────────────────
 
 describe('CaptureScreen — selected job display', () => {
-  it('shows "Current job" label and job title', () => {
+  it('shows the selected job title', () => {
     render(<CaptureScreen job={JOB_A} />)
-    expect(screen.getByText(/current job/i)).toBeInTheDocument()
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 

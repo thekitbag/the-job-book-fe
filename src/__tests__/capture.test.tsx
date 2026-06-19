@@ -91,7 +91,6 @@ describe('CaptureScreen', () => {
   it('shows the current job title', async () => {
     render(<CaptureScreen job={JOB} />)
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
-    expect(screen.getByText(/current job/i)).toBeInTheDocument()
   })
 
   it('has no category picker on the capture screen', () => {
@@ -269,6 +268,10 @@ describe('CaptureScreen', () => {
         supplierName: null,
         deliveryTiming: null,
         locationOrUse: null,
+        costAmount: null,
+        costCurrency: null,
+        costQualifier: null,
+        totalCostAmount: null,
       },
     })
     vi.mocked(getReviewQueue).mockResolvedValue({
@@ -308,6 +311,10 @@ describe('CaptureScreen', () => {
         supplierName: null,
         deliveryTiming: null,
         locationOrUse: null,
+        costAmount: null,
+        costCurrency: null,
+        costQualifier: null,
+        totalCostAmount: null,
       },
     }
     vi.mocked(getReviewQueue).mockResolvedValue({

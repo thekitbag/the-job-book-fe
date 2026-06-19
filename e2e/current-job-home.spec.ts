@@ -21,8 +21,8 @@ test.describe('Current job home UX', () => {
   })
 
   test('selected job is unmistakable before recording', async ({ page }) => {
-    await expect(page.getByText(/current job/i)).toBeVisible()
-    // Job title from mock — exact match avoids clash with "Garden room" type chip
+    // The large job title makes the current selection clear before recording.
+    // Exact match avoids clash with the "Garden room" type chip.
     await expect(page.locator('.capture-current-job-title')).toHaveText('Garden Room')
   })
 
