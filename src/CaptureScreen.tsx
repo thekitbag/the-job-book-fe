@@ -451,7 +451,8 @@ export default function CaptureScreen({
           )}
           {onOpenJobMemory && (
             <button className="btn-job-memory" onClick={onOpenJobMemory}>
-              Job memory
+              <span>Job memory</span>
+              <span className="btn-job-memory-sub">What I remember</span>
             </button>
           )}
         </div>
