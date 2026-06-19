@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { saveNote, getNotesForJob } from './db'
-import { getDraftFacts } from './api'
+import { getDraftFacts, getReviewQueue } from './api'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
 import { useTranscriptPoll } from './useTranscriptPoll'
@@ -19,22 +19,16 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatBytes(b: number): string {
-  if (b < 1024) return `${b} B`
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
-  return `${(b / (1024 * 1024)).toFixed(2)} MB`
-}
-
 function NoteStateLabel({ note, online }: { note: LocalNote; online: boolean }) {
   switch (note.localState) {
     case 'saved_local':
       return online
         ? <span className="note-state note-state--local">Saved on phone</span>
-        : <span className="note-state note-state--waiting">Waiting for signal</span>
+        : <span className="note-state note-state--offline">Saved on this phone</span>
     case 'uploading':
-      return <span className="note-state note-state--uploading">Uploading…</span>
+      return <span className="note-state note-state--uploading">Saving…</span>
     case 'uploaded':
-      return <span className="note-state note-state--synced">Synced</span>
+      return <span className="note-state note-state--saved">Voice note saved</span>
     case 'upload_failed':
       return <span className="note-state note-state--failed">Will retry</span>
     case 'upload_needs_attention':
@@ -70,11 +64,6 @@ function TranscriptSection({ note }: { note: LocalNote }) {
 }
 
 function FactCard({ fact }: { fact: CandidateFact }) {
-  // Badge precedence (tech lead steer 2025-06-07):
-  // unclear type/status → Unclear
-  // low confidence → Low confidence
-  // medium confidence OR any uncertainty flags → Needs checking
-  // high with no flags → no badge
   const isUnclear = fact.factType === 'unclear' || fact.status === 'unclear'
   let badge: 'unclear' | 'low' | 'medium' | null = null
   if (isUnclear) {
@@ -106,7 +95,6 @@ function DraftFactsSection({
   facts: CandidateFact[]
   factsLoadFailed: boolean
 }) {
-  // Extraction only starts after transcript succeeds — don't show section before that.
   if (note.transcriptStatus !== 'ready') return null
 
   if (note.extractionStatus === 'failed') {
@@ -163,7 +151,6 @@ function NoteCard({
       <div className="note-card-meta">
         <span className="note-time">{formatTime(note.capturedAt)}</span>
         <span className="note-duration">{formatDuration(note.durationMs)}</span>
-        <span className="note-size">{formatBytes(note.sizeBytes)}</span>
       </div>
       <div className="note-card-status">
         <NoteStateLabel note={note} online={online} />
@@ -210,7 +197,7 @@ function InstallBanner({
           Add to your home screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>
         </p>
       ) : (
-        <p className="install-banner-text">Install Job Book on your phone for quick access</p>
+        <p className="install-banner-text">Install The Job Book on your phone for quick access</p>
       )}
       <div className="install-banner-actions">
         {!isIosSafari && (
@@ -251,6 +238,11 @@ export default function CaptureScreen({
   const { showBanner, isIosSafari, triggerInstall, dismiss: dismissInstall } = usePwaInstall()
   const [facts, setFacts] = useState<CandidateFact[]>([])
   const [factsLoadFailed, setFactsLoadFailed] = useState(false)
+  const [showSourceHistory, setShowSourceHistory] = useState(true)
+
+  // Things to check queue state
+  const [draftCount, setDraftCount] = useState<number>(0)
+  const [queueLoadState, setQueueLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
 
   const refreshNotes = useCallback(async () => {
     const fresh = await getNotesForJob(job.id)
@@ -271,7 +263,22 @@ export default function CaptureScreen({
     }
   }, [])
 
-  // Fetch draft facts whenever a new note reaches extraction-ready state.
+  const loadQueue = useCallback(() => {
+    setQueueLoadState('loading')
+    getReviewQueue(job.id)
+      .then(q => {
+        const count = q.sections
+          .flatMap(s => s.items)
+          .filter(it => it.status === 'draft')
+          .length
+        setDraftCount(count)
+        setQueueLoadState('ready')
+      })
+      .catch(() => setQueueLoadState('error'))
+  }, [job.id])
+
+  useEffect(() => { loadQueue() }, [loadQueue])
+
   const readyExtractionCount = notes.filter(
     n => n.localState === 'uploaded' && n.extractionStatus === 'ready',
   ).length
@@ -320,19 +327,30 @@ export default function CaptureScreen({
       await saveNote(note)
       await refreshNotes()
       syncAll()
+      loadQueue()
     })
-  }, [recorder, job.id, refreshNotes, syncAll])
+  }, [recorder, job.id, refreshNotes, syncAll, loadQueue])
 
   const dismissExplainer = useCallback(() => {
     localStorage.setItem(EXPLAINER_KEY, 'true')
     setShowExplainer(false)
   }, [])
 
+  const thingsToCheckLabel = (() => {
+    if (queueLoadState === 'loading') return 'Still looking for useful job facts'
+    if (queueLoadState === 'error') return 'Things to check'
+    if (draftCount === 1) return '1 thing to check'
+    if (draftCount > 1) return `${draftCount} things to check`
+    return 'Nothing to check'
+  })()
+
+  const hasUrgentItems = queueLoadState === 'ready' && draftCount > 0
+
   if (!isRecordingSupported) {
     return (
       <div className="capture-page">
         <div className="capture-header">
-          <span className="capture-app-name">Job Book</span>
+          <span className="capture-app-name">The Job Book</span>
         </div>
         <div className="unsupported-msg">
           {!window.isSecureContext
@@ -346,19 +364,19 @@ export default function CaptureScreen({
   return (
     <div className="capture-page">
       <header className="capture-header">
-        <span className="capture-app-name">Job Book</span>
+        <span className="capture-app-name">The Job Book</span>
         {!online && (
           <span className="offline-badge" aria-live="polite">No signal</span>
         )}
       </header>
 
+      {/* 1. Current job identity — title + Switch job make the selection clear */}
       <div className="capture-current-job">
-        <div className="capture-current-job-row">
-          <span className="capture-current-job-label">Current job</span>
-          {onSwitchJob && (
+        {onSwitchJob && (
+          <div className="capture-current-job-row">
             <button className="btn-switch-job" onClick={onSwitchJob}>Switch job</button>
-          )}
-        </div>
+          </div>
+        )}
         <div className="capture-current-job-detail">
           <span className="capture-current-job-title">{job.title}</span>
           {job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
@@ -377,6 +395,7 @@ export default function CaptureScreen({
 
       {showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
 
+      {/* 2. Record — primary action */}
       <div className="capture-controls">
         {recorder.state === 'idle' && (
           <button
@@ -417,40 +436,75 @@ export default function CaptureScreen({
         )}
       </div>
 
+      {/* 3 & 4. Things to check (stateful) + Job memory (quieter) */}
       {(onOpenReviewQueue || onOpenJobMemory) && (
-        <div className="capture-nav-actions">
+        <div className="capture-job-actions">
           {onOpenReviewQueue && (
-            <button className="btn-open-review-queue" onClick={onOpenReviewQueue}>
-              Things to check
+            <button
+              className={`btn-things-to-check${hasUrgentItems ? ' btn-things-to-check--urgent' : ''}`}
+              onClick={onOpenReviewQueue}
+            >
+              <span className="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 5h11M9 12h11M9 19h11" />
+                  <path d="m3 5 1.5 1.5L7 4M3 12l1.5 1.5L7 11M3 19l1.5 1.5L7 18" />
+                </svg>
+              </span>
+              <span className="action-text">
+                <span className="things-to-check-title">Things to check</span>
+                <span className="things-to-check-state">{thingsToCheckLabel}</span>
+              </span>
             </button>
           )}
           {onOpenJobMemory && (
-            <button className="btn-open-job-memory" onClick={onOpenJobMemory}>
-              Job memory
+            <button className="btn-job-memory" onClick={onOpenJobMemory}>
+              <span className="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+                  <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20" />
+                </svg>
+              </span>
+              <span className="action-text">
+                <span>Job memory</span>
+                <span className="btn-job-memory-sub">What I remember</span>
+              </span>
             </button>
           )}
         </div>
       )}
 
-      <section className="notes-section">
-        <div className="notes-heading-row">
-          <h2 className="notes-heading">Recent notes</h2>
-          {notes.some(n => n.localState === 'uploaded' && n.serverNoteId) && (
+      {/* 5. Source history — secondary, collapsible */}
+      <section className="source-history" aria-label="Source history">
+        <div className="source-history-header">
+          <button
+            className="source-history-toggle"
+            aria-expanded={showSourceHistory}
+            onClick={() => setShowSourceHistory(h => !h)}
+          >
+            {showSourceHistory
+              ? 'Hide source history'
+              : notes.length > 0
+                ? `Source history (${notes.length})`
+                : 'Source history'}
+          </button>
+          {showSourceHistory && notes.some(n => n.localState === 'uploaded' && n.serverNoteId) && (
             <button className="btn-refresh-transcripts" onClick={handleRefresh}>
               Refresh
             </button>
           )}
         </div>
-        {notes.length === 0 ? (
-          <p className="notes-empty">No notes yet. Tap Record to add one.</p>
-        ) : (
-          <ul className="notes-list">
-            {notes.map(note => (
-              <li key={note.clientNoteId}>
-                <NoteCard note={note} online={online} onRetry={retryNote} facts={facts} factsLoadFailed={factsLoadFailed} />
-              </li>
-            ))}
-          </ul>
+        {showSourceHistory && (
+          notes.length === 0 ? (
+            <p className="notes-empty">No notes yet. Tap Record to add one.</p>
+          ) : (
+            <ul className="notes-list">
+              {notes.map(note => (
+                <li key={note.clientNoteId}>
+                  <NoteCard note={note} online={online} onRetry={retryNote} facts={facts} factsLoadFailed={factsLoadFailed} />
+                </li>
+              ))}
+            </ul>
+          )
         )}
       </section>
     </div>

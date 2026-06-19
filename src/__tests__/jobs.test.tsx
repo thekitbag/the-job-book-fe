@@ -19,6 +19,7 @@ vi.mock('../api', async (importOriginal) => {
     getJobs: vi.fn(),
     getDraftFacts: vi.fn(),
     getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+    getReviewQueue: vi.fn(),
   }
 })
 
@@ -64,14 +65,14 @@ const JOB_B: Job = {
 beforeEach(() => {
   mockGetNotesForJob.mockResolvedValue([])
   mockGetDraftFacts.mockResolvedValue([])
+  vi.mocked(api.getReviewQueue).mockResolvedValue({ jobId: 'job-001', generatedAt: '', sections: [], alreadyRemembered: [] })
 })
 
 // ── CaptureScreen job display ──────────────────────────────────────────────
 
 describe('CaptureScreen — selected job display', () => {
-  it('shows "Current job" label and job title', () => {
+  it('shows the selected job title', () => {
     render(<CaptureScreen job={JOB_A} />)
-    expect(screen.getByText(/current job/i)).toBeInTheDocument()
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 

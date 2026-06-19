@@ -10,11 +10,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Job Book',
-        short_name: 'Job Book',
+        name: 'The Job Book',
+        short_name: 'The Job Book',
         description: 'Voice notes for the site',
         theme_color: '#1a6f38',
-        background_color: '#f4f4f0',
+        background_color: '#f2f1ea',
         display: 'standalone',
         start_url: '/',
         icons: [
@@ -39,8 +39,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Cache app shell, static assets, and icon PNGs for offline load
-        globPatterns: ['**/*.{js,css,html,svg,png}'],
+        // Cache app shell, static assets, icon PNGs, and fonts for offline load
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },
     }),
   ],

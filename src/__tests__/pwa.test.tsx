@@ -5,6 +5,7 @@ import { resolve } from 'path'
 import CaptureScreen from '../CaptureScreen'
 import { saveNote } from '../db'
 import { makeNote } from './helpers'
+import { getReviewQueue } from '../api'
 import type { UseRecorderReturn } from '../useRecorder'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -15,6 +16,7 @@ vi.mock('../api', () => ({
   getJobNoteStatuses: vi.fn().mockResolvedValue([]),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn().mockResolvedValue([]),
+  getReviewQueue: vi.fn().mockResolvedValue({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] }),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -66,8 +68,8 @@ describe('PWA assets and manifest config', () => {
 
   it('vite config declares correct app name and short name', () => {
     const config = readFileSync(CONFIG_PATH, 'utf-8')
-    expect(config).toContain("name: 'Job Book'")
-    expect(config).toContain("short_name: 'Job Book'")
+    expect(config).toContain("name: 'The Job Book'")
+    expect(config).toContain("short_name: 'The Job Book'")
   })
 
   it('vite config sets standalone display mode', () => {
@@ -98,6 +100,7 @@ describe('PWA assets and manifest config', () => {
 describe('CaptureScreen — pilot field requirements', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] })
   })
 
   it('shows approved audio-storage explainer copy on first launch', () => {
@@ -117,7 +120,7 @@ describe('CaptureScreen — pilot field requirements', () => {
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
-  it('shows "Saved on phone" label for a locally-saved note', async () => {
+  it('shows "Saved on phone" label for a locally-saved note when online', async () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
@@ -128,18 +131,18 @@ describe('CaptureScreen — pilot field requirements', () => {
     })
   })
 
-  it('shows "Synced" label after a note is uploaded', async () => {
+  it('shows "Voice note saved" label after a note is uploaded', async () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
     render(<CaptureScreen job={PILOT_JOB} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Synced')).toBeInTheDocument()
+      expect(screen.getByText('Voice note saved')).toBeInTheDocument()
     })
   })
 
-  it('shows "Waiting for signal" when offline and a note is saved locally', async () => {
+  it('shows "Saved on this phone" when offline and a note is saved locally', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
@@ -147,7 +150,7 @@ describe('CaptureScreen — pilot field requirements', () => {
     render(<CaptureScreen job={PILOT_JOB} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Waiting for signal')).toBeInTheDocument()
+      expect(screen.getByText('Saved on this phone')).toBeInTheDocument()
     })
   })
 

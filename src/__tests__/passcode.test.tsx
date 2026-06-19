@@ -19,7 +19,7 @@ describe('PasscodeScreen', () => {
   it('renders the passcode form', () => {
     render(<PasscodeScreen onLoginSuccess={mockOnLoginSuccess} />)
 
-    expect(screen.getByText('Job Book')).toBeInTheDocument()
+    expect(screen.getByText('The Job Book')).toBeInTheDocument()
     expect(screen.getByRole('form', { name: /pilot login/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/passcode/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /enter/i })).toBeInTheDocument()

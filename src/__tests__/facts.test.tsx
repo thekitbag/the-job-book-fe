@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import CaptureScreen from '../CaptureScreen'
 import { saveNote } from '../db'
-import { getJobNoteStatuses, getDraftFacts } from '../api'
+import { getJobNoteStatuses, getDraftFacts, getReviewQueue } from '../api'
 import { makeNote, makeFact } from './helpers'
 import type { UseRecorderReturn } from '../useRecorder'
 
@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
   getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn(),
+  getReviewQueue: vi.fn(),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -44,6 +45,11 @@ const mockGetStatuses = vi.mocked(getJobNoteStatuses)
 const mockGetDraftFacts = vi.mocked(getDraftFacts)
 
 describe('draft facts visibility', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] })
+  })
+
   it('shows "Looking for job facts…" when transcript is ready but extraction is pending', async () => {
     const note = makeNote({
       jobId: JOB.id,
