@@ -283,7 +283,7 @@ describe('ReviewQueueScreen', () => {
     expect(form).toBeInTheDocument()
 
     // Update summary
-    const summaryInput = form.querySelector<HTMLInputElement>('input[required]')!
+    const summaryInput = form.querySelector<HTMLInputElement>('input[name="summary"]')!
     fireEvent.change(summaryInput, { target: { value: 'Ordered 10 bags of hardcore from Jewson' } })
 
     fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
@@ -460,7 +460,7 @@ describe('ReviewQueueScreen', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
 
     const form = screen.getByRole('form', { name: /edit correction/i })
-    const summaryInput = form.querySelector<HTMLInputElement>('input[required]')!
+    const summaryInput = form.querySelector<HTMLInputElement>('input[name="summary"]')!
     fireEvent.change(summaryInput, { target: { value: 'Ordered 10 bags of hardcore from Jewson' } })
 
     const costInput = form.querySelector<HTMLInputElement>('input[placeholder="e.g. 5.00"]')!
