@@ -29,6 +29,14 @@ const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'unknown', label: 'Not clear' },
 ]
 
+const MATERIAL_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material'])
+
+const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
+  ordered_material: 'Bought / ordered',
+  used_material: 'Used',
+  leftover_material: 'Left over',
+}
+
 function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
@@ -108,7 +116,12 @@ function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncert
           <dd className="card-detail-value">{value}</dd>
         </div>
       ))}
-      {uncertain && <p className="card-uncertainty">Worth checking</p>}
+      {uncertain && (
+        <div className="card-detail-row card-uncertainty">
+          <dt className="card-detail-label">Worth checking</dt>
+          <dd className="card-detail-value">cost or quantity may need confirming</dd>
+        </div>
+      )}
     </dl>
   )
 }
@@ -147,36 +160,32 @@ function EditForm({
         </select>
       </label>
       <label className="queue-field">
-        <span className="queue-field-label">Summary</span>
-        <input className="queue-field-input" value={form.summary} onChange={e => setStr('summary', e.target.value)} required />
-      </label>
-      <label className="queue-field">
         <span className="queue-field-label">Material</span>
-        <input className="queue-field-input" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
+        <input className="queue-field-input" name="materialName" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Quantity</span>
-        <input className="queue-field-input" value={form.quantity ?? ''} onChange={e => setStr('quantity', e.target.value)} />
+        <input className="queue-field-input" name="quantity" value={form.quantity ?? ''} onChange={e => setStr('quantity', e.target.value)} />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Unit</span>
-        <input className="queue-field-input" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} />
+        <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Supplier</span>
-        <input className="queue-field-input" value={form.supplierName ?? ''} onChange={e => setStr('supplierName', e.target.value)} />
+        <input className="queue-field-input" name="supplierName" value={form.supplierName ?? ''} onChange={e => setStr('supplierName', e.target.value)} />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Delivery timing</span>
-        <input className="queue-field-input" value={form.deliveryTiming ?? ''} onChange={e => setStr('deliveryTiming', e.target.value)} />
+        <input className="queue-field-input" name="deliveryTiming" value={form.deliveryTiming ?? ''} onChange={e => setStr('deliveryTiming', e.target.value)} />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Location / use</span>
-        <input className="queue-field-input" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
+        <input className="queue-field-input" name="locationOrUse" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Cost amount</span>
-        <input className="queue-field-input" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
+        <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Cost qualifier</span>
@@ -188,7 +197,11 @@ function EditForm({
       </label>
       <label className="queue-field">
         <span className="queue-field-label">Total cost</span>
-        <input className="queue-field-input" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
+        <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
+      </label>
+      <label className="queue-field">
+        <span className="queue-field-label">Summary (optional)</span>
+        <input className="queue-field-input queue-field-summary" name="summary" value={form.summary} onChange={e => setStr('summary', e.target.value)} />
       </label>
       <div className="queue-edit-actions">
         <button type="submit" className="btn-queue-save" disabled={submitting}>
@@ -224,6 +237,19 @@ function QueueItemCard({
   onDismiss: () => void
 }) {
   const resolved = item.status !== 'draft'
+  const memType = item.proposedMemory.memoryType
+  const isMaterial = MATERIAL_TYPES.has(memType)
+  const hasDetailFields = !!(
+    item.proposedMemory.materialName ||
+    item.proposedMemory.quantity ||
+    item.proposedMemory.unit ||
+    item.proposedMemory.supplierName ||
+    item.proposedMemory.deliveryTiming ||
+    item.proposedMemory.locationOrUse ||
+    item.proposedMemory.costAmount ||
+    item.proposedMemory.totalCostAmount ||
+    item.uncertaintyFlags.length > 0
+  )
 
   return (
     <div
@@ -235,10 +261,17 @@ function QueueItemCard({
         {item.timeLabel && <span className="queue-time-label">{item.timeLabel}</span>}
       </div>
 
-      <p className="queue-item-summary">{item.summary}</p>
+      {isMaterial
+        ? <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>
+        : <p className="queue-item-summary">{item.summary}</p>
+      }
 
       {!isEditing && (
         <QueueItemDetails pm={item.proposedMemory} uncertaintyFlags={item.uncertaintyFlags} />
+      )}
+
+      {isMaterial && !hasDetailFields && !isEditing && (
+        <p className="queue-item-summary">{item.summary}</p>
       )}
 
       {!resolved && <SourceContext contexts={item.sourceContext} />}
@@ -296,6 +329,8 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
   const totalLabel = formatTotalLabel(item.totalCostAmount ?? null, item.costCurrency ?? null)
   if (totalLabel) rows.push(['Total', totalLabel])
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
+  const isMaterial = MATERIAL_TYPES.has(item.memoryType)
+  const hasDetailRows = rows.length > 0 || uncertain
 
   return (
     <li className={`queue-remembered-card queue-remembered-card--${item.memoryType}`}>
@@ -303,7 +338,9 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
         <span className={`queue-remembered-type-chip queue-remembered-type-chip--${item.memoryType}`}>{typeLabel}</span>
         {item.timeLabel && <span className="queue-remembered-card-time">{item.timeLabel}</span>}
       </div>
-      <p className="queue-remembered-card-summary">{item.summary}</p>
+      {(!isMaterial || !hasDetailRows) && (
+        <p className="queue-remembered-card-summary">{item.summary}</p>
+      )}
       {(rows.length > 0 || uncertain) && (
         <dl className="card-detail-fields">
           {rows.map(([label, value]) => (

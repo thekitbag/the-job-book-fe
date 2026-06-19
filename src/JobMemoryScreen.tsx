@@ -17,6 +17,14 @@ const SCAN_SECTION_MAP: { key: string; label: string }[] = [
   { key: 'leftovers', label: 'Left over' },
 ]
 
+const MATERIAL_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material'])
+
+const MATERIAL_TYPE_LABEL: Record<string, string> = {
+  ordered_material: 'Bought / ordered',
+  used_material: 'Used',
+  leftover_material: 'Left over',
+}
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
@@ -139,7 +147,12 @@ function StructuredFields({ item }: { item: MemoryViewItem }) {
           <dd className="card-detail-value">{value}</dd>
         </div>
       ))}
-      {uncertain && <p className="card-uncertainty">Worth checking</p>}
+      {uncertain && (
+        <div className="card-detail-row card-uncertainty">
+          <dt className="card-detail-label">Worth checking</dt>
+          <dd className="card-detail-value">cost or quantity may need confirming</dd>
+        </div>
+      )}
     </dl>
   )
 }
@@ -175,10 +188,21 @@ function SourceContext({ item }: { item: MemoryViewItem }) {
 }
 
 function MemoryCard({ item }: { item: MemoryViewItem }) {
+  const isMaterial = MATERIAL_TYPES.has(item.memoryType)
+  const hasFields = !!(
+    item.materialName || item.quantity || item.unit ||
+    item.supplierName || item.deliveryTiming || item.locationOrUse ||
+    item.costAmount || item.totalCostAmount ||
+    (item.uncertaintyFlags ?? []).length > 0
+  )
   return (
     <div className="mem-card">
-      <p className="mem-card-summary">{item.summary}</p>
+      {isMaterial
+        ? <p className="mem-card-type-label">{MATERIAL_TYPE_LABEL[item.memoryType]}</p>
+        : <p className="mem-card-summary">{item.summary}</p>
+      }
       <StructuredFields item={item} />
+      {isMaterial && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
       <SourceContext item={item} />
     </div>
   )

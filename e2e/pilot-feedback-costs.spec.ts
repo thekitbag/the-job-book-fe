@@ -24,7 +24,7 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await expect(card.getByText('Worth checking')).not.toBeVisible()
   })
 
-  test('Fix 1: corrected summary and cost appear on card after save', async ({ page }) => {
+  test('Fix 1: corrected structured fields update visible card after save', async ({ page }) => {
     await page.goto('/')
     await page.getByText('Things to check').first().click()
     await page.waitForTimeout(700)
@@ -33,26 +33,32 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await page.getByRole('button', { name: /fix details/i }).first().click()
 
     const form = page.getByRole('form', { name: /edit correction/i })
-    await form.locator('input[required]').fill('Ordered 10 bags of hardcore from Jewson')
-    await form.locator('input[placeholder="e.g. 5.00"]').fill('4.50')
+    // Edit structured fields — V2 makes these the primary display, not the prose summary
+    await form.locator('input[name="quantity"]').fill('10')
+    await form.locator('input[name="costAmount"]').fill('4.50')
     await page.getByRole('button', { name: /save correction/i }).click()
     await page.waitForTimeout(1000)
 
-    await expect(card.getByText('Ordered 10 bags of hardcore from Jewson')).toBeVisible()
+    // Corrected structured rows must be visible
+    await expect(card.getByText('10 bags', { exact: true })).toBeVisible()
     await expect(card.getByText('£4.50 each', { exact: true })).toBeVisible()
     await expect(card.getByText('Saved to trusted memory')).toBeVisible()
+    // Stale prose summary must not appear as a headline
+    await expect(card.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).not.toBeVisible()
   })
 
-  test('Fix 4: already remembered cards show labelled detail rows', async ({ page }) => {
+  test('Fix 4: already remembered material cards show type label and structured rows', async ({ page }) => {
     await page.goto('/')
     await page.getByText('Things to check').first().click()
     await page.waitForTimeout(700)
 
     const remembered = page.getByRole('region', { name: /already remembered/i })
-    await expect(remembered.getByText('Ordered scaffolding from TCS')).toBeVisible()
-    // labelled detail rows (exact match on dd value, not substring in summary)
+    // V2: material type shows structured rows, not prose summary as headline
+    await expect(remembered.locator('dd').getByText('scaffolding', { exact: true })).toBeVisible()
     await expect(remembered.locator('dd').getByText('TCS', { exact: true })).toBeVisible()
     await expect(remembered.locator('dd').getByText('Friday morning', { exact: true })).toBeVisible()
+    // Prose summary must not be the prominent headline for material types with structured fields
+    await expect(remembered.getByText('Ordered scaffolding from TCS')).not.toBeVisible()
   })
 
   test('Fix 3: scan view renders in job memory with cost', async ({ page }) => {
