@@ -27,7 +27,7 @@ export default function PasscodeScreen({ onLoginSuccess }: { onLoginSuccess: () 
   return (
     <div className="passcode-page">
       <div className="passcode-card">
-        <h1 className="passcode-title">Job Book</h1>
+        <h1 className="passcode-title">The Job Book</h1>
         <p className="passcode-subtitle">Enter the pilot passcode to continue</p>
         <form className="passcode-form" onSubmit={handleSubmit} aria-label="Pilot login">
           <label className="passcode-field">

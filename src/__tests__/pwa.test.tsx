@@ -68,8 +68,8 @@ describe('PWA assets and manifest config', () => {
 
   it('vite config declares correct app name and short name', () => {
     const config = readFileSync(CONFIG_PATH, 'utf-8')
-    expect(config).toContain("name: 'Job Book'")
-    expect(config).toContain("short_name: 'Job Book'")
+    expect(config).toContain("name: 'The Job Book'")
+    expect(config).toContain("short_name: 'The Job Book'")
   })
 
   it('vite config sets standalone display mode', () => {

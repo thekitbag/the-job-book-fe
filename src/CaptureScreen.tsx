@@ -197,7 +197,7 @@ function InstallBanner({
           Add to your home screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>
         </p>
       ) : (
-        <p className="install-banner-text">Install Job Book on your phone for quick access</p>
+        <p className="install-banner-text">Install The Job Book on your phone for quick access</p>
       )}
       <div className="install-banner-actions">
         {!isIosSafari && (
@@ -350,7 +350,7 @@ export default function CaptureScreen({
     return (
       <div className="capture-page">
         <div className="capture-header">
-          <span className="capture-app-name">Job Book</span>
+          <span className="capture-app-name">The Job Book</span>
         </div>
         <div className="unsupported-msg">
           {!window.isSecureContext
@@ -364,7 +364,7 @@ export default function CaptureScreen({
   return (
     <div className="capture-page">
       <header className="capture-header">
-        <span className="capture-app-name">Job Book</span>
+        <span className="capture-app-name">The Job Book</span>
         {!online && (
           <span className="offline-badge" aria-live="polite">No signal</span>
         )}
@@ -445,14 +445,30 @@ export default function CaptureScreen({
               className={`btn-things-to-check${hasUrgentItems ? ' btn-things-to-check--urgent' : ''}`}
               onClick={onOpenReviewQueue}
             >
-              <span className="things-to-check-title">Things to check</span>
-              <span className="things-to-check-state">{thingsToCheckLabel}</span>
+              <span className="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 5h11M9 12h11M9 19h11" />
+                  <path d="m3 5 1.5 1.5L7 4M3 12l1.5 1.5L7 11M3 19l1.5 1.5L7 18" />
+                </svg>
+              </span>
+              <span className="action-text">
+                <span className="things-to-check-title">Things to check</span>
+                <span className="things-to-check-state">{thingsToCheckLabel}</span>
+              </span>
             </button>
           )}
           {onOpenJobMemory && (
             <button className="btn-job-memory" onClick={onOpenJobMemory}>
-              <span>Job memory</span>
-              <span className="btn-job-memory-sub">What I remember</span>
+              <span className="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+                  <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20" />
+                </svg>
+              </span>
+              <span className="action-text">
+                <span>Job memory</span>
+                <span className="btn-job-memory-sub">What I remember</span>
+              </span>
             </button>
           )}
         </div>
