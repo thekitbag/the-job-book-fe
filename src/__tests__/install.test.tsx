@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { getNotesForJob } from '../db'
+import { getReviewQueue } from '../api'
 
 // CaptureScreen depends on these; mock to isolate install behaviour
 vi.mock('../db', () => ({
@@ -14,6 +15,7 @@ vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn().mockResolvedValue([]),
   getNoteTranscript: vi.fn(),
+  getReviewQueue: vi.fn(),
 }))
 
 vi.mock('../useRecorder', () => ({
@@ -64,6 +66,7 @@ const { default: CaptureScreen } = await import('../CaptureScreen')
 describe('PWA install banner', () => {
   beforeEach(() => {
     mockGetNotesForJob.mockResolvedValue([])
+    vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-001', generatedAt: '', sections: [], alreadyRemembered: [] })
     localStorage.clear()
     // Ensure not in standalone mode by default
     Object.defineProperty(window, 'matchMedia', {

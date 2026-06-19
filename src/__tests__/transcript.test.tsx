@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import CaptureScreen from '../CaptureScreen'
 import { saveNote } from '../db'
-import { getJobNoteStatuses, getNoteTranscript, getDraftFacts } from '../api'
+import { getJobNoteStatuses, getNoteTranscript, getDraftFacts, getReviewQueue } from '../api'
 import { makeNote } from './helpers'
 import type { UseRecorderReturn } from '../useRecorder'
 
@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
   getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn().mockResolvedValue([]),
+  getReviewQueue: vi.fn(),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -47,9 +48,8 @@ const mockGetDraftFacts = vi.mocked(getDraftFacts)
 describe('transcript visibility', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
-    // getDraftFacts is called whenever any note has extractionStatus === 'ready'.
-    // Provide a default to avoid unhandled "undefined.then" errors after vi.resetAllMocks().
     mockGetDraftFacts.mockResolvedValue([])
+    vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] })
   })
 
   it('shows Show transcript toggle when transcript is ready, hides text by default', async () => {

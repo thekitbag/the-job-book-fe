@@ -399,11 +399,13 @@ button { cursor: pointer; font-family: inherit; }
   border-radius: 999px;
 }
 
-.note-state--local  { background: #e0f2fe; color: #0c4a6e; }
-.note-state--waiting { background: #fef9c3; color: #713f12; }
+.note-state--local    { background: #e0f2fe; color: #0c4a6e; }
+.note-state--offline  { background: #fef9c3; color: #713f12; }
+.note-state--waiting  { background: #fef9c3; color: #713f12; }
 .note-state--uploading { background: #e0f2fe; color: #0c4a6e; }
-.note-state--synced { background: #d1fae5; color: #14532d; }
-.note-state--failed { background: #fef3c7; color: #92400e; }
+.note-state--saved    { background: #d1fae5; color: #14532d; }
+.note-state--synced   { background: #d1fae5; color: #14532d; }
+.note-state--failed   { background: #fef3c7; color: #92400e; }
 .note-state--attention { background: #fee2e2; color: #7f1d1d; }
 
 .btn-retry {
@@ -1048,35 +1050,83 @@ code {
   .spike-page { padding-left: 0.75rem; padding-right: 0.75rem; }
 }
 
-/* ── Capture nav actions (Things to check + Job memory) ── */
+/* ── Capture job actions (Things to check + Job memory) ── */
 
-.capture-nav-actions {
+.capture-job-actions {
   padding: 0 1rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.btn-open-review-queue {
+.btn-things-to-check {
   width: 100%;
-  padding: 0.9rem 1.5rem;
-  background: #1a6f38;
-  color: #fff;
-  border: none;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.btn-open-job-memory {
-  width: 100%;
-  padding: 0.75rem 1.5rem;
-  background: #fff;
+  padding: 0.85rem 1.25rem;
+  background: #f0faf4;
   color: #1a6f38;
   border: 1.5px solid #1a6f38;
   border-radius: 12px;
-  font-size: 1rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.btn-things-to-check--urgent {
+  background: #1a6f38;
+  color: #fff;
+  border-color: #1a6f38;
+}
+
+.things-to-check-title {
+  font-size: 0.7rem;
   font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.things-to-check-state {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.btn-job-memory {
+  width: 100%;
+  padding: 0.6rem 1.25rem;
+  background: none;
+  color: #555;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+/* ── Source history (demoted notes list) ── */
+
+.source-history {
+  flex: 1;
+  padding: 0 1rem;
+}
+
+.source-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.source-history-toggle {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  padding: 0;
 }
 
 /* ── Review queue page ── */

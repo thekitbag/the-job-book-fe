@@ -6,7 +6,7 @@ import { saveNote, getNotesForJob } from '../db'
 import { makeNote } from './helpers'
 import type { RecordingResult, UseRecorderReturn } from '../useRecorder'
 import type { UploadNoteResponse } from '../api'
-import { getDraftFacts } from '../api'
+import { getDraftFacts, getReviewQueue } from '../api'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ vi.mock('../api', () => ({
   getJobNoteStatuses: vi.fn().mockResolvedValue([]),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn().mockResolvedValue([]),
+  getReviewQueue: vi.fn().mockResolvedValue({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] }),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -45,6 +46,8 @@ const JOB = {
   createdAt: '2026-06-01T08:00:00Z',
   updatedAt: '2026-06-10T09:00:00Z',
 }
+
+const EMPTY_QUEUE = { jobId: JOB.id, generatedAt: '', sections: [], alreadyRemembered: [] }
 
 async function getRecorderMock() {
   const mod = await import('../useRecorder')
@@ -81,8 +84,8 @@ const FAKE_RESULT: RecordingResult = {
 describe('CaptureScreen', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
-    // localStorage is cleared between tests by setup.ts
     vi.mocked(getDraftFacts).mockResolvedValue([])
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
   })
 
   it('shows the current job title', async () => {
@@ -144,7 +147,7 @@ describe('CaptureScreen', () => {
     expect(notes[0].mimeType).toBe('audio/webm;codecs=opus')
   })
 
-  it('mocked successful upload shows note as synced', async () => {
+  it('mocked successful upload shows note as voice note saved', async () => {
     const mockUpload = await getUploadMock()
     mockUpload.mockImplementation(mockUploadSuccess())
 
@@ -159,9 +162,9 @@ describe('CaptureScreen', () => {
       expect(screen.getByText(/saved on phone/i)).toBeInTheDocument()
     })
 
-    // After upload completes shows synced
+    // After upload completes shows voice note saved
     await waitFor(() => {
-      expect(screen.getByText(/synced/i)).toBeInTheDocument()
+      expect(screen.getByText(/voice note saved/i)).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
@@ -203,9 +206,9 @@ describe('CaptureScreen', () => {
     await user.click(screen.getByRole('button', { name: /record/i }))
     await simulateRecordingComplete(FAKE_RESULT)
 
-    // Note is saved locally, upload not attempted
+    // Note is saved locally offline — shows "Saved on this phone"
     await waitFor(() => {
-      expect(screen.getByText(/waiting for signal/i)).toBeInTheDocument()
+      expect(screen.getByText(/saved on this phone/i)).toBeInTheDocument()
     })
     expect(mockUpload).not.toHaveBeenCalled()
 
@@ -214,7 +217,7 @@ describe('CaptureScreen', () => {
     await act(async () => { window.dispatchEvent(new Event('online')) })
 
     await waitFor(() => {
-      expect(screen.getByText(/synced/i)).toBeInTheDocument()
+      expect(screen.getByText(/voice note saved/i)).toBeInTheDocument()
     }, { timeout: 3000 })
 
     expect(mockUpload).toHaveBeenCalledOnce()
@@ -233,5 +236,148 @@ describe('CaptureScreen', () => {
     const notes = await getNotesForJob(JOB.id)
     expect(notes).toHaveLength(1)
     expect(notes[0].jobId).toBe(JOB.id)
+  })
+
+  it('Switch job button is visible when onSwitchJob prop is provided', () => {
+    const onSwitchJob = vi.fn()
+    render(<CaptureScreen job={JOB} onSwitchJob={onSwitchJob} />)
+    expect(screen.getByRole('button', { name: /switch job/i })).toBeInTheDocument()
+  })
+
+  it('Switch job is not shown when onSwitchJob prop is omitted', () => {
+    render(<CaptureScreen job={JOB} />)
+    expect(screen.queryByRole('button', { name: /switch job/i })).not.toBeInTheDocument()
+  })
+
+  it('Things to check shows draft count when queue has items', async () => {
+    const draftItem = (id: string, summary: string) => ({
+      id,
+      status: 'draft' as const,
+      summary,
+      kind: 'single' as const,
+      reviewLabel: '',
+      confidenceLabel: 'high' as const,
+      uncertaintyFlags: [],
+      sourceCandidateFactIds: [],
+      sourceContext: [],
+      proposedMemory: {
+        memoryType: 'used_material' as const,
+        summary,
+        materialName: null,
+        quantity: null,
+        unit: null,
+        supplierName: null,
+        deliveryTiming: null,
+        locationOrUse: null,
+      },
+    })
+    vi.mocked(getReviewQueue).mockResolvedValue({
+      jobId: JOB.id,
+      generatedAt: '',
+      sections: [{
+        key: 'materials',
+        label: 'Materials',
+        items: [draftItem('i1', 'Item 1'), draftItem('i2', 'Item 2'), draftItem('i3', 'Item 3')],
+      }],
+      alreadyRemembered: [],
+    })
+
+    render(<CaptureScreen job={JOB} onOpenReviewQueue={() => {}} />)
+    await waitFor(() => {
+      expect(screen.getByText('3 things to check')).toBeInTheDocument()
+    })
+  })
+
+  it('Things to check shows singular when one draft item', async () => {
+    const draftItem = {
+      id: 'i1',
+      status: 'draft' as const,
+      summary: 'Item 1',
+      kind: 'single' as const,
+      reviewLabel: '',
+      confidenceLabel: 'high' as const,
+      uncertaintyFlags: [],
+      sourceCandidateFactIds: [],
+      sourceContext: [],
+      proposedMemory: {
+        memoryType: 'used_material' as const,
+        summary: 'Item 1',
+        materialName: null,
+        quantity: null,
+        unit: null,
+        supplierName: null,
+        deliveryTiming: null,
+        locationOrUse: null,
+      },
+    }
+    vi.mocked(getReviewQueue).mockResolvedValue({
+      jobId: JOB.id,
+      generatedAt: '',
+      sections: [{ key: 'materials', label: 'Materials', items: [draftItem] }],
+      alreadyRemembered: [],
+    })
+
+    render(<CaptureScreen job={JOB} onOpenReviewQueue={() => {}} />)
+    await waitFor(() => {
+      expect(screen.getByText('1 thing to check')).toBeInTheDocument()
+    })
+  })
+
+  it('Things to check shows Nothing to check when queue is empty', async () => {
+    render(<CaptureScreen job={JOB} onOpenReviewQueue={() => {}} />)
+    await waitFor(() => {
+      expect(screen.getByText('Nothing to check')).toBeInTheDocument()
+    })
+  })
+
+  it('file size is not shown on note cards', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
+    await saveNote(note)
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => screen.getByText(/voice note saved/i))
+    // No byte/KB/MB size text in any note card
+    expect(screen.queryByText(/\d+\s*(B|KB|MB|bytes)/i)).not.toBeInTheDocument()
+  })
+
+  it('source history section is visible by default', () => {
+    render(<CaptureScreen job={JOB} />)
+    expect(screen.getByRole('region', { name: /source history/i })).toBeInTheDocument()
+  })
+
+  it('does not show Synced as uploaded label — uses Voice note saved', async () => {
+    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
+    await saveNote(note)
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => screen.getByText(/voice note saved/i))
+    expect(screen.queryByText(/^synced$/i)).not.toBeInTheDocument()
+  })
+
+  it('offline locally-saved note shows Saved on this phone', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const note = makeNote({ jobId: JOB.id, localState: 'saved_local', serverNoteId: null })
+    await saveNote(note)
+
+    render(<CaptureScreen job={JOB} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Saved on this phone')).toBeInTheDocument()
+    })
+  })
+
+  it('Job memory button is shown when onOpenJobMemory prop is provided', () => {
+    render(<CaptureScreen job={JOB} onOpenJobMemory={() => {}} />)
+    expect(screen.getByRole('button', { name: /job memory/i })).toBeInTheDocument()
+  })
+
+  it('Things to check button calls onOpenReviewQueue', async () => {
+    const onOpenReviewQueue = vi.fn()
+    render(<CaptureScreen job={JOB} onOpenReviewQueue={onOpenReviewQueue} />)
+    const btn = screen.getByRole('button', { name: /things to check/i })
+    btn.click()
+    expect(onOpenReviewQueue).toHaveBeenCalledTimes(1)
   })
 })
