@@ -401,3 +401,20 @@ export interface MemoryViewResponse {
   stillToCheck: MemoryViewStillToCheck
   summarySections?: ScanViewSection[]
 }
+
+// Request body for PATCH /api/jobs/:jobId/memory-items/:memoryItemId
+// Corrects trusted memory in place — never creates a queue item or draft fact.
+export interface MemoryItemEdit {
+  memoryType: MemoryType
+  summary?: string | null
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
+  costAmount: string | null
+  costCurrency: string | null
+  costQualifier: CostQualifier | null
+  totalCostAmount: string | null
+}

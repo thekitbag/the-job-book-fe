@@ -1,4 +1,4 @@
-import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryType, MemoryViewResponse, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -689,6 +689,52 @@ export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> 
   if (res.status === 404) throw new ApiError('Job not found', 404)
   if (!res.ok) throw new ApiError(`GET memory-view → ${res.status}`, res.status)
   return res.json() as Promise<MemoryViewResponse>
+}
+
+// PATCH /api/jobs/:jobId/memory-items/:memoryItemId — correct trusted memory in
+// place. Returns the updated normalized memory item (memory-view item shape).
+// Never creates a queue item, draft fact, or review decision.
+export async function updateMemoryItem(
+  jobId: string,
+  memoryItemId: string,
+  edit: MemoryItemEdit,
+): Promise<MemoryViewItem> {
+  if (USE_MOCK) {
+    await delay(300)
+    const now = new Date().toISOString()
+    return {
+      id: memoryItemId,
+      memoryType: edit.memoryType,
+      summary: edit.summary ?? '',
+      materialName: edit.materialName,
+      quantity: edit.quantity,
+      unit: edit.unit,
+      supplierName: edit.supplierName,
+      deliveryTiming: edit.deliveryTiming,
+      locationOrUse: edit.locationOrUse,
+      costAmount: edit.costAmount,
+      costCurrency: edit.costCurrency,
+      costQualifier: edit.costQualifier,
+      totalCostAmount: edit.totalCostAmount,
+      uncertaintyFlags: [],
+      sourceCandidateFactId: null,
+      reviewDecisionId: null,
+      createdAt: now,
+      updatedAt: now,
+      source: null,
+    }
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(edit),
+  })
+  if (res.status === 400) throw new ApiError('Invalid memory edit', 400)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Memory item not found', 404)
+  if (!res.ok) throw new ApiError(`PATCH memory-item → ${res.status}`, res.status)
+  return res.json() as Promise<MemoryViewItem>
 }
 
 function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {

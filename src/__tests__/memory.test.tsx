@@ -9,10 +9,12 @@ vi.mock('../api', async (importOriginal) => {
   return {
     ...actual,
     getMemoryView: vi.fn(),
+    updateMemoryItem: vi.fn(),
   }
 })
 
 const mockGetMemoryView = vi.mocked(api.getMemoryView)
+const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
 
 const JOB: Job = {
   id: 'job-mem-001',
@@ -586,5 +588,115 @@ describe('JobMemoryScreen', () => {
     rerender(<JobMemoryScreen job={JOB_B} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     await waitFor(() => screen.getByText('bricks'))
     expect(screen.queryByText('hardcore')).toBeNull()
+  })
+})
+
+// ── Remembered-memory edit (Fix memory) ─────────────────────────────────────
+
+describe('JobMemoryScreen — Fix memory', () => {
+  beforeEach(() => {
+    mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
+    mockUpdateMemoryItem.mockReset()
+  })
+
+  function updatedItem(overrides: Partial<import('../types').MemoryViewItem>): import('../types').MemoryViewItem {
+    return {
+      id: 'mem-001', memoryType: 'ordered_material',
+      summary: 'Ordered hardcore from Jewson',
+      materialName: 'hardcore', quantity: '8', unit: 'bags', supplierName: 'Jewson',
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: '5', costCurrency: 'GBP', costQualifier: 'each', totalCostAmount: '40',
+      uncertaintyFlags: [], sourceCandidateFactId: 'fact-001', reviewDecisionId: 'decision-001',
+      createdAt: '2026-06-13T09:25:00.000Z', updatedAt: '2026-06-20T09:00:00.000Z',
+      source: null,
+      ...overrides,
+    }
+  }
+
+  it('shows a Fix memory action on remembered items', async () => {
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+    expect(screen.getAllByRole('button', { name: /fix memory/i }).length).toBeGreaterThan(0)
+  })
+
+  it('opens a structured edit form with Save memory', async () => {
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
+    const form = screen.getByRole('form', { name: /edit memory/i })
+    expect(form).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeInTheDocument()
+    expect(form.querySelector('input[name="quantity"]')).toBeInTheDocument()
+    expect(form.querySelector('input[name="costAmount"]')).toBeInTheDocument()
+  })
+
+  it('saves edits via updateMemoryItem with structured fields', async () => {
+    mockUpdateMemoryItem.mockResolvedValue(updatedItem({ quantity: '10', costAmount: '4.50' }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
+
+    const form = screen.getByRole('form', { name: /edit memory/i })
+    fireEvent.change(form.querySelector('input[name="quantity"]')!, { target: { value: '10' } })
+    fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '4.50' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateMemoryItem).toHaveBeenCalledWith('job-mem-001', 'mem-001',
+        expect.objectContaining({ quantity: '10', costAmount: '4.50', memoryType: 'ordered_material' }))
+    })
+  })
+
+  it('updates the visible card after saving an edit', async () => {
+    mockUpdateMemoryItem.mockResolvedValue(updatedItem({ quantity: '10', costAmount: '4.50' }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '4.50' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => expect(screen.getByText('10 bags')).toBeInTheDocument())
+    // appears in both the scan summary and the detailed card after the edit
+    expect(screen.getAllByText('£4.50 each').length).toBeGreaterThan(0)
+    // form closed
+    expect(screen.queryByRole('form', { name: /edit memory/i })).not.toBeInTheDocument()
+  })
+
+  it('moves item to the correct section when the type changes', async () => {
+    // change ordered hardcore → leftover_material
+    mockUpdateMemoryItem.mockResolvedValue(updatedItem({ memoryType: 'leftover_material' }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
+    const typeSelect = screen.getByRole('form', { name: /edit memory/i }).querySelector('select')!
+    fireEvent.change(typeSelect, { target: { value: 'leftover_material' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    // The "Leftover" section heading should now appear (it was empty before)
+    await waitFor(() => expect(screen.getByText('Leftover')).toBeInTheDocument())
+  })
+
+  it('keeps source context available after editing', async () => {
+    // response omits source (like the mock backend) — client preserves prior linkage
+    mockUpdateMemoryItem.mockResolvedValue(updatedItem({ quantity: '9', source: null }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="quantity"]')!, { target: { value: '9' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => screen.getByText('9 bags'))
+    // Source toggle still present for the edited ordered item
+    expect(screen.getAllByRole('button', { name: /show source/i }).length).toBeGreaterThan(0)
+  })
+
+  it('shows an inline error and keeps the form on save failure', async () => {
+    mockUpdateMemoryItem.mockRejectedValue(new Error('network'))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByText('hardcore'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    await waitFor(() => expect(screen.getByText(/could not save/i)).toBeInTheDocument())
   })
 })

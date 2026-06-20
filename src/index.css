@@ -1874,6 +1874,16 @@ code {
   gap: 0.5rem;
 }
 
+.queue-remembered-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.3rem;
+}
+
+.queue-remembered-card--editing {
+  border-left-color: var(--green-600);
+}
+
 /* ── Individual remembered card ── */
 
 .queue-remembered-card {
@@ -2656,6 +2666,33 @@ code {
   flex-direction: column;
   gap: 0.3rem;
 }
+
+.mem-card--editing {
+  border-left-color: var(--green-600);
+}
+
+.mem-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+/* Light edit affordance for trusted memory */
+.btn-mem-fix {
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--green-700);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-mem-fix:active { background: var(--green-50); }
 
 .mem-card-summary {
   margin: 0;

@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { getMemoryView } from './api'
-import type { Job, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
+import { useCallback, useEffect, useState } from 'react'
+import { getMemoryView, updateMemoryItem } from './api'
+import MemoryEditForm from './MemoryEditForm'
+import { memoryItemToEdit } from './memoryEdit'
+import type { Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
 
 const SECTION_SHORT_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
@@ -9,6 +11,27 @@ const SECTION_SHORT_LABELS: Record<string, string> = {
   supplier_delivery_notes: 'Supplier',
   customer_changes: 'Customer',
   watch_outs: 'Watch out',
+}
+
+// memoryType → memory-view section key, for moving an item when its type changes
+const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
+  ordered_material: 'ordered_materials',
+  used_material: 'used_materials',
+  leftover_material: 'leftovers',
+  supplier_delivery_note: 'supplier_delivery_notes',
+  customer_change: 'customer_changes',
+  watch_out: 'watch_outs',
+}
+
+const SECTION_ORDER = ['ordered_materials', 'used_materials', 'leftovers', 'supplier_delivery_notes', 'customer_changes', 'watch_outs']
+
+const SECTION_FULL_LABELS: Record<string, string> = {
+  ordered_materials: 'Ordered materials',
+  used_materials: 'Used materials',
+  leftovers: 'Leftovers',
+  supplier_delivery_notes: 'Supplier delivery notes',
+  customer_changes: 'Customer changes',
+  watch_outs: 'Watch outs',
 }
 
 const SCAN_SECTION_MAP: { key: string; label: string }[] = [
@@ -187,7 +210,23 @@ function SourceContext({ item }: { item: MemoryViewItem }) {
   )
 }
 
-function MemoryCard({ item }: { item: MemoryViewItem }) {
+function MemoryCard({
+  item,
+  isEditing,
+  submitting,
+  errorMsg,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+}: {
+  item: MemoryViewItem
+  isEditing: boolean
+  submitting: boolean
+  errorMsg: string | null
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSave: (edit: MemoryItemEdit) => void
+}) {
   const isMaterial = MATERIAL_TYPES.has(item.memoryType)
   const hasFields = !!(
     item.materialName || item.quantity || item.unit ||
@@ -195,6 +234,16 @@ function MemoryCard({ item }: { item: MemoryViewItem }) {
     item.costAmount || item.totalCostAmount ||
     (item.uncertaintyFlags ?? []).length > 0
   )
+
+  if (isEditing) {
+    return (
+      <div className="mem-card mem-card--editing">
+        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} onSubmit={onSave} onCancel={onCancelEdit} />
+        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      </div>
+    )
+  }
+
   return (
     <div className="mem-card">
       {isMaterial
@@ -203,18 +252,49 @@ function MemoryCard({ item }: { item: MemoryViewItem }) {
       }
       <StructuredFields item={item} />
       {isMaterial && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
-      <SourceContext item={item} />
+      <div className="mem-card-footer">
+        <SourceContext item={item} />
+        <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
+      </div>
+      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
     </div>
   )
 }
 
-function MemSection({ section }: { section: MemoryViewSection }) {
+function MemSection({
+  section,
+  editingId,
+  submittingId,
+  itemErrors,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+}: {
+  section: MemoryViewSection
+  editingId: string | null
+  submittingId: string | null
+  itemErrors: Record<string, string>
+  onStartEdit: (id: string) => void
+  onCancelEdit: () => void
+  onSave: (id: string, edit: MemoryItemEdit) => void
+}) {
   if (section.items.length === 0) return null
   const shortLabel = SECTION_SHORT_LABELS[section.key] ?? section.label
   return (
     <section className="mem-section">
       <h2 className="mem-section-heading">{shortLabel}</h2>
-      {section.items.map(item => <MemoryCard key={item.id} item={item} />)}
+      {section.items.map(item => (
+        <MemoryCard
+          key={item.id}
+          item={item}
+          isEditing={editingId === item.id}
+          submitting={submittingId === item.id}
+          errorMsg={itemErrors[item.id] ?? null}
+          onStartEdit={() => onStartEdit(item.id)}
+          onCancelEdit={onCancelEdit}
+          onSave={edit => onSave(item.id, edit)}
+        />
+      ))}
     </section>
   )
 }
@@ -263,6 +343,9 @@ export default function JobMemoryScreen({
   const [data, setData] = useState<MemoryViewResponse | null>(null)
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
 
   function load() {
     setLoadState('loading')
@@ -276,6 +359,38 @@ export default function JobMemoryScreen({
   }
 
   useEffect(() => { load() }, [job.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Edit trusted memory in place. Updates the visible item from the API
+  // response and re-homes it if its type changed — never re-queues it.
+  const handleSaveEdit = useCallback(async (memoryItemId: string, edit: MemoryItemEdit) => {
+    setSubmittingId(memoryItemId)
+    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      const updated = await updateMemoryItem(job.id, memoryItemId, edit)
+      setData(prev => {
+        if (!prev) return prev
+        // Preserve source linkage if the response omits it (mock returns null)
+        let prevItem: MemoryViewItem | undefined
+        prev.sections.forEach(s => { const f = s.items.find(it => it.id === memoryItemId); if (f) prevItem = f })
+        const merged: MemoryViewItem = { ...updated, source: updated.source ?? prevItem?.source ?? null }
+
+        const targetKey = MEMORY_TYPE_TO_SECTION_KEY[merged.memoryType] ?? merged.memoryType
+        let sections = prev.sections.map(s => ({ ...s, items: s.items.filter(it => it.id !== memoryItemId) }))
+        if (!sections.some(s => s.key === targetKey)) {
+          sections = [...sections, { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }]
+        }
+        sections = sections.map(s => s.key === targetKey ? { ...s, items: [merged, ...s.items] } : s)
+        sections.sort((a, b) =>
+          ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
+        return { ...prev, sections }
+      })
+      setEditingId(null)
+    } catch {
+      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+    } finally {
+      setSubmittingId(null)
+    }
+  }, [job.id])
 
   const hasMemory = data
     ? data.sections.some(s => s.items.length > 0)
@@ -331,7 +446,18 @@ export default function JobMemoryScreen({
 
           {/* Trusted memory sections */}
           {hasMemory
-            ? data.sections.map(s => <MemSection key={s.key} section={s} />)
+            ? data.sections.map(s => (
+                <MemSection
+                  key={s.key}
+                  section={s}
+                  editingId={editingId}
+                  submittingId={submittingId}
+                  itemErrors={itemErrors}
+                  onStartEdit={setEditingId}
+                  onCancelEdit={() => setEditingId(null)}
+                  onSave={handleSaveEdit}
+                />
+              ))
             : (
               <div className="mem-empty">
                 <p>No trusted memory yet. Review Things to check to save useful job details here.</p>
