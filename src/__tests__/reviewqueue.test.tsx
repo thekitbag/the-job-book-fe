@@ -915,4 +915,41 @@ describe('ReviewQueueScreen — real-use volume', () => {
     expect(screen.getByRole('button', { name: 'Ordered 12' })).toBeInTheDocument()
     expect(document.querySelectorAll('.queue-item-card').length).toBe(13)
   })
+
+  it('already-remembered context follows the active category focus', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeVolumeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-ord', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+        { memoryItemId: 'mem-watch', summary: 'Watch out near back door', memoryType: 'watch_out', timeLabel: 'Earlier' },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    // All: both remembered shown when expanded
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items \(2\)/i }))
+    const remembered = screen.getByRole('region', { name: /already remembered/i })
+    expect(within(remembered).getByText('Ordered scaffolding from TCS')).toBeInTheDocument()
+    expect(within(remembered).getByText('Watch out near back door')).toBeInTheDocument()
+
+    // Focus Ordered: section stays expanded but now shows only ordered context
+    fireEvent.click(screen.getByRole('button', { name: 'Ordered 1' }))
+    const rememberedOrdered = screen.getByRole('region', { name: /already remembered/i })
+    expect(within(rememberedOrdered).getByText('Ordered scaffolding from TCS')).toBeInTheDocument()
+    expect(within(rememberedOrdered).queryByText('Watch out near back door')).not.toBeInTheDocument()
+  })
+
+  it('hides remembered context entirely for a focus with no matching memory', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeVolumeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-ord', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    // Used has a pending item but no remembered context → section hidden
+    fireEvent.click(screen.getByRole('button', { name: 'Used 1' }))
+    expect(screen.queryByRole('region', { name: /already remembered/i })).not.toBeInTheDocument()
+  })
 })

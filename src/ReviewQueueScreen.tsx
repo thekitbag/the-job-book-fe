@@ -51,6 +51,16 @@ const SECTION_CHIP_LABELS: Record<string, string> = {
 const chipLabel = (s: QueueSection) => SECTION_CHIP_LABELS[s.key] ?? s.label
 const draftCount = (s: QueueSection) => s.items.filter(it => it.status === 'draft').length
 
+// memoryType → section key, so already-remembered context can follow category focus
+const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
+  ordered_material: 'ordered_materials',
+  used_material: 'used_materials',
+  leftover_material: 'leftovers',
+  supplier_delivery_note: 'supplier_delivery_notes',
+  customer_change: 'customer_changes',
+  watch_out: 'watch_outs',
+}
+
 function CategoryChips({
   sections,
   totalPending,
@@ -416,9 +426,19 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
   )
 }
 
-function AlreadyRememberedSection({ items }: { items: AlreadyRememberedItem[] }) {
+function AlreadyRememberedSection({
+  items,
+  focusedKey,
+}: {
+  items: AlreadyRememberedItem[]
+  focusedKey: string | null
+}) {
   const [open, setOpen] = useState(false)
-  if (items.length === 0) return null
+  // Already-remembered context follows the active category focus
+  const shown = focusedKey === null
+    ? items
+    : items.filter(m => MEMORY_TYPE_TO_SECTION_KEY[m.memoryType] === focusedKey)
+  if (shown.length === 0) return null
   return (
     <div className="queue-already-remembered" role="region" aria-label="Already remembered">
       <p className="queue-remembered-heading">Already remembered</p>
@@ -428,11 +448,11 @@ function AlreadyRememberedSection({ items }: { items: AlreadyRememberedItem[] })
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
-        {open ? 'Hide remembered items' : `Show remembered items (${items.length})`}
+        {open ? 'Hide remembered items' : `Show remembered items (${shown.length})`}
       </button>
       {open && (
         <ul className="queue-remembered-list">
-          {items.map(m => <RememberedCard key={m.memoryItemId} item={m} />)}
+          {shown.map(m => <RememberedCard key={m.memoryItemId} item={m} />)}
         </ul>
       )}
     </div>
@@ -627,8 +647,9 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                 ))
               )}
 
-              {/* Already remembered is confirmed-memory context, below pending work */}
-              <AlreadyRememberedSection items={queue.alreadyRemembered} />
+              {/* Already remembered is confirmed-memory context, below pending work,
+                  and follows the active category focus */}
+              <AlreadyRememberedSection items={queue.alreadyRemembered} focusedKey={focusedKey} />
             </>
           )}
         </>
