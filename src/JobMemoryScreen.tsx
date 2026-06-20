@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getMemoryView, updateMemoryItem } from './api'
-import type { CostQualifier, Job, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
+import MemoryEditForm from './MemoryEditForm'
+import { memoryItemToEdit } from './memoryEdit'
+import type { Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
 
 const SECTION_SHORT_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
@@ -10,23 +12,6 @@ const SECTION_SHORT_LABELS: Record<string, string> = {
   customer_changes: 'Customer',
   watch_outs: 'Watch out',
 }
-
-const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
-  { value: 'used_material', label: 'Used material' },
-  { value: 'ordered_material', label: 'Ordered material' },
-  { value: 'leftover_material', label: 'Leftover material' },
-  { value: 'supplier_delivery_note', label: 'Supplier / delivery note' },
-  { value: 'customer_change', label: 'Customer change' },
-  { value: 'watch_out', label: 'Watch out' },
-]
-
-const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: '— not stated —' },
-  { value: 'each', label: 'Each (per item)' },
-  { value: 'total', label: 'Total' },
-  { value: 'approx', label: 'Approximate' },
-  { value: 'unknown', label: 'Not clear' },
-]
 
 // memoryType → memory-view section key, for moving an item when its type changes
 const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
@@ -225,104 +210,6 @@ function SourceContext({ item }: { item: MemoryViewItem }) {
   )
 }
 
-function MemoryEditForm({
-  initial,
-  submitting,
-  onSubmit,
-  onCancel,
-}: {
-  initial: MemoryViewItem
-  submitting: boolean
-  onSubmit: (edit: MemoryItemEdit) => void
-  onCancel: () => void
-}) {
-  const [form, setForm] = useState<MemoryItemEdit>({
-    memoryType: (initial.memoryType as MemoryType),
-    summary: initial.summary,
-    materialName: initial.materialName,
-    quantity: initial.quantity,
-    unit: initial.unit,
-    supplierName: initial.supplierName,
-    deliveryTiming: initial.deliveryTiming,
-    locationOrUse: initial.locationOrUse,
-    costAmount: initial.costAmount,
-    costCurrency: initial.costCurrency,
-    costQualifier: initial.costQualifier,
-    totalCostAmount: initial.totalCostAmount,
-  })
-  const setStr = (k: Exclude<keyof MemoryItemEdit, 'memoryType' | 'costQualifier'>, v: string) =>
-    setForm(f => ({ ...f, [k]: v || null }))
-
-  return (
-    <form
-      className="queue-edit-form"
-      aria-label="Edit memory"
-      onSubmit={e => { e.preventDefault(); onSubmit(form) }}
-    >
-      <label className="queue-field">
-        <span className="queue-field-label">Type</span>
-        <select
-          className="queue-field-input"
-          value={form.memoryType}
-          onChange={e => setForm(f => ({ ...f, memoryType: e.target.value as MemoryType }))}
-        >
-          {MEMORY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Material</span>
-        <input className="queue-field-input" name="materialName" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Quantity</span>
-        <input className="queue-field-input" name="quantity" value={form.quantity ?? ''} onChange={e => setStr('quantity', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Unit</span>
-        <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Supplier</span>
-        <input className="queue-field-input" name="supplierName" value={form.supplierName ?? ''} onChange={e => setStr('supplierName', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Delivery timing</span>
-        <input className="queue-field-input" name="deliveryTiming" value={form.deliveryTiming ?? ''} onChange={e => setStr('deliveryTiming', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Location / use</span>
-        <input className="queue-field-input" name="locationOrUse" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Cost amount</span>
-        <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Cost qualifier</span>
-        <select
-          className="queue-field-input"
-          value={form.costQualifier ?? ''}
-          onChange={e => setForm(f => ({ ...f, costQualifier: (e.target.value as CostQualifier) || null }))}
-        >
-          {COST_QUALIFIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Total cost</span>
-        <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
-      </label>
-      <div className="queue-edit-actions">
-        <button type="submit" className="btn-queue-save" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Save memory'}
-        </button>
-        <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  )
-}
-
 function MemoryCard({
   item,
   isEditing,
@@ -351,7 +238,7 @@ function MemoryCard({
   if (isEditing) {
     return (
       <div className="mem-card mem-card--editing">
-        <MemoryEditForm initial={item} submitting={submitting} onSubmit={onSave} onCancel={onCancelEdit} />
+        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} onSubmit={onSave} onCancel={onCancelEdit} />
         {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
       </div>
     )

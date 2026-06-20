@@ -67,11 +67,24 @@ test.describe('Remembered-memory edit & focus', () => {
     await expect(page.getByRole('region', { name: /already remembered/i })).toHaveCount(0)
   })
 
-  test('Things to check: editing memory never adds a pending queue item', async ({ page }) => {
+  test('Things to check: Fix memory corrects a remembered card in place', async ({ page }) => {
     await signIn(page)
     await page.locator('.btn-things-to-check').click()
     await page.waitForTimeout(700)
-    // baseline pending total stays at 3 (mock); editing happens in Job memory, not here
+    await expect(page.getByText('3 waiting')).toBeVisible()
+
+    // Expand remembered, fix the first remembered card
+    await page.getByRole('button', { name: /show remembered items/i }).click()
+    const remembered = page.getByRole('region', { name: /already remembered/i })
+    await remembered.getByRole('button', { name: /fix memory/i }).first().click()
+
+    const form = page.getByRole('form', { name: /edit memory/i })
+    await form.locator('input[name="supplierName"]').fill('Travis Perkins')
+    await page.getByRole('button', { name: /save memory/i }).click()
+    await page.waitForTimeout(600)
+
+    // updated in place, and no new pending queue item was created
+    await expect(remembered.getByText('Travis Perkins')).toBeVisible()
     await expect(page.getByText('3 waiting')).toBeVisible()
   })
 })

@@ -1874,6 +1874,16 @@ code {
   gap: 0.5rem;
 }
 
+.queue-remembered-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.3rem;
+}
+
+.queue-remembered-card--editing {
+  border-left-color: var(--green-600);
+}
+
 /* ── Individual remembered card ── */
 
 .queue-remembered-card {

@@ -6,6 +6,7 @@ import type { Job, QueueItem, ReviewQueue } from '../types'
 
 const mockGetReviewQueue = vi.mocked(api.getReviewQueue)
 const mockSubmitQueueDecision = vi.mocked(api.submitQueueDecision)
+const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
@@ -13,6 +14,7 @@ vi.mock('../api', async (importOriginal) => {
     ...actual,
     getReviewQueue: vi.fn(),
     submitQueueDecision: vi.fn(),
+    updateMemoryItem: vi.fn(),
   }
 })
 
@@ -951,5 +953,96 @@ describe('ReviewQueueScreen — real-use volume', () => {
     // Used has a pending item but no remembered context → section hidden
     fireEvent.click(screen.getByRole('button', { name: 'Used 1' }))
     expect(screen.queryByRole('region', { name: /already remembered/i })).not.toBeInTheDocument()
+  })
+})
+
+// ── Fix memory on Already-remembered cards (in-place trusted-memory correction) ──
+
+describe('ReviewQueueScreen — Fix memory on remembered cards', () => {
+  const REMEMBERED = {
+    memoryItemId: 'mem-ord', summary: 'Ordered scaffolding from TCS',
+    memoryType: 'ordered_material' as const, timeLabel: 'Yesterday',
+    materialName: 'scaffolding', quantity: '1', unit: 'lot', supplierName: 'TCS',
+    deliveryTiming: 'Friday morning', locationOrUse: null,
+    costAmount: null, costCurrency: 'GBP', costQualifier: null, totalCostAmount: null,
+    uncertaintyFlags: [],
+  }
+
+  function updatedMemItem(overrides: Partial<import('../types').MemoryViewItem>): import('../types').MemoryViewItem {
+    return {
+      id: 'mem-ord', memoryType: 'ordered_material', summary: 'Ordered scaffolding from TCS',
+      materialName: 'scaffolding', quantity: '1', unit: 'lot', supplierName: 'TCS',
+      deliveryTiming: 'Friday morning', locationOrUse: null,
+      costAmount: null, costCurrency: 'GBP', costQualifier: null, totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '2026-06-20T09:00:00Z', updatedAt: '2026-06-20T09:00:00Z', source: null,
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    mockGetReviewQueue.mockResolvedValue(makeVolumeQueue({ alreadyRemembered: [REMEMBERED] }))
+    mockUpdateMemoryItem.mockReset()
+  })
+
+  async function openRemembered() {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
+  }
+
+  it('shows a Fix memory action on remembered cards', async () => {
+    await openRemembered()
+    const remembered = screen.getByRole('region', { name: /already remembered/i })
+    expect(within(remembered).getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
+  })
+
+  it('opens the shared structured edit form (Save memory)', async () => {
+    await openRemembered()
+    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+    expect(screen.getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeInTheDocument()
+  })
+
+  it('saves via updateMemoryItem and updates the card in place', async () => {
+    mockUpdateMemoryItem.mockResolvedValue(updatedMemItem({ supplierName: 'Travis Perkins', quantity: '2' }))
+    await openRemembered()
+    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+
+    const form = screen.getByRole('form', { name: /edit memory/i })
+    fireEvent.change(form.querySelector('input[name="supplierName"]')!, { target: { value: 'Travis Perkins' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateMemoryItem).toHaveBeenCalledWith(MOCK_JOB.id, 'mem-ord',
+        expect.objectContaining({ supplierName: 'Travis Perkins', memoryType: 'ordered_material' }))
+    })
+    const remembered = screen.getByRole('region', { name: /already remembered/i })
+    await waitFor(() => expect(within(remembered).getByText('Travis Perkins')).toBeInTheDocument())
+    expect(screen.queryByRole('form', { name: /edit memory/i })).not.toBeInTheDocument()
+  })
+
+  it('does NOT add a pending queue item or change the pending count', async () => {
+    mockUpdateMemoryItem.mockResolvedValue(updatedMemItem({ quantity: '2' }))
+    await openRemembered()
+    expect(screen.getByText('3 waiting')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="quantity"]')!, { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => expect(mockUpdateMemoryItem).toHaveBeenCalled())
+    // pending total unchanged — no new draft / queue item created
+    expect(screen.getByText('3 waiting')).toBeInTheDocument()
+    expect(mockSubmitQueueDecision).not.toHaveBeenCalled()
+  })
+
+  it('shows an inline error and keeps the form on failure', async () => {
+    mockUpdateMemoryItem.mockRejectedValue(new Error('network'))
+    await openRemembered()
+    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    await waitFor(() => expect(screen.getByText(/could not save/i)).toBeInTheDocument())
+    expect(screen.getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
   })
 })

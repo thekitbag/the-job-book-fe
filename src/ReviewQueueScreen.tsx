@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getReviewQueue, submitQueueDecision } from './api'
+import { getReviewQueue, submitQueueDecision, updateMemoryItem } from './api'
+import MemoryEditForm from './MemoryEditForm'
+import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
 import type {
   AlreadyRememberedItem,
   CostQualifier,
   Job,
+  MemoryItemEdit,
   MemoryType,
   ProposedMemory,
   QueueDecisionAction,
@@ -379,8 +382,33 @@ function QueueItemCard({
   )
 }
 
-function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
+function RememberedCard({
+  item,
+  isEditing,
+  submitting,
+  errorMsg,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+}: {
+  item: AlreadyRememberedItem
+  isEditing: boolean
+  submitting: boolean
+  errorMsg: string | null
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSave: (edit: MemoryItemEdit) => void
+}) {
   const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.shortLabel ?? item.memoryType
+
+  if (isEditing) {
+    return (
+      <li className="queue-remembered-card queue-remembered-card--editing">
+        <MemoryEditForm initial={rememberedItemToEdit(item)} submitting={submitting} onSubmit={onSave} onCancel={onCancelEdit} />
+        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      </li>
+    )
+  }
 
   const rows: [string, string][] = []
   const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
@@ -422,6 +450,10 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
           )}
         </dl>
       )}
+      <div className="queue-remembered-card-footer">
+        <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
+      </div>
+      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
     </li>
   )
 }
@@ -429,9 +461,21 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
 function AlreadyRememberedSection({
   items,
   focusedKey,
+  editingId,
+  submittingId,
+  itemErrors,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
 }: {
   items: AlreadyRememberedItem[]
   focusedKey: string | null
+  editingId: string | null
+  submittingId: string | null
+  itemErrors: Record<string, string>
+  onStartEdit: (id: string) => void
+  onCancelEdit: () => void
+  onSave: (id: string, edit: MemoryItemEdit) => void
 }) {
   const [open, setOpen] = useState(false)
   // Already-remembered context follows the active category focus
@@ -452,7 +496,18 @@ function AlreadyRememberedSection({
       </button>
       {open && (
         <ul className="queue-remembered-list">
-          {shown.map(m => <RememberedCard key={m.memoryItemId} item={m} />)}
+          {shown.map(m => (
+            <RememberedCard
+              key={m.memoryItemId}
+              item={m}
+              isEditing={editingId === m.memoryItemId}
+              submitting={submittingId === m.memoryItemId}
+              errorMsg={itemErrors[m.memoryItemId] ?? null}
+              onStartEdit={() => onStartEdit(m.memoryItemId)}
+              onCancelEdit={onCancelEdit}
+              onSave={edit => onSave(m.memoryItemId, edit)}
+            />
+          ))}
         </ul>
       )}
     </div>
@@ -509,6 +564,10 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
   const [focusedKey, setFocusedKey] = useState<string | null>(null)
+  // Remembered-memory ("Fix memory") edit state — separate from draft review state
+  const [editingMemId, setEditingMemId] = useState<string | null>(null)
+  const [memSubmittingId, setMemSubmittingId] = useState<string | null>(null)
+  const [memErrors, setMemErrors] = useState<Record<string, string>>({})
 
   const loadQueue = useCallback(() => {
     setLoadState('loading')
@@ -555,6 +614,29 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
       setSubmittingId(null)
     }
   }, [queue, job.id, editingItemId])
+
+  // Correct an already-remembered (trusted) item in place via the same
+  // updateMemoryItem path used in Job memory. Never re-queues the item.
+  const handleSaveRemembered = useCallback(async (memoryItemId: string, edit: MemoryItemEdit) => {
+    setMemSubmittingId(memoryItemId)
+    setMemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      const updated = await updateMemoryItem(job.id, memoryItemId, edit)
+      setQueue(q => {
+        if (!q) return q
+        return {
+          ...q,
+          alreadyRemembered: q.alreadyRemembered.map(m =>
+            m.memoryItemId === memoryItemId ? applyEditToRemembered(m, updated) : m),
+        }
+      })
+      setEditingMemId(null)
+    } catch {
+      setMemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+    } finally {
+      setMemSubmittingId(null)
+    }
+  }, [job.id])
 
   const totalPending = queue
     ? queue.sections.reduce((n, s) => n + draftCount(s), 0)
@@ -648,8 +730,17 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
               )}
 
               {/* Already remembered is confirmed-memory context, below pending work,
-                  and follows the active category focus */}
-              <AlreadyRememberedSection items={queue.alreadyRemembered} focusedKey={focusedKey} />
+                  follows the active category focus, and is correctable in place */}
+              <AlreadyRememberedSection
+                items={queue.alreadyRemembered}
+                focusedKey={focusedKey}
+                editingId={editingMemId}
+                submittingId={memSubmittingId}
+                itemErrors={memErrors}
+                onStartEdit={setEditingMemId}
+                onCancelEdit={() => setEditingMemId(null)}
+                onSave={handleSaveRemembered}
+              />
             </>
           )}
         </>
