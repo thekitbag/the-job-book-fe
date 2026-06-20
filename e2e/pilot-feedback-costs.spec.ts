@@ -53,6 +53,8 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await page.waitForTimeout(700)
 
     const remembered = page.getByRole('region', { name: /already remembered/i })
+    // Already remembered is collapsed by default — expand it first
+    await remembered.getByRole('button', { name: /show remembered items/i }).click()
     // V2: material type shows structured rows, not prose summary as headline
     await expect(remembered.locator('dd').getByText('scaffolding', { exact: true })).toBeVisible()
     await expect(remembered.locator('dd').getByText('TCS', { exact: true })).toBeVisible()

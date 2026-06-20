@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import ReviewQueueScreen from '../ReviewQueueScreen'
 import * as api from '../api'
@@ -146,11 +146,11 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText('OSB')).toBeInTheDocument()
   })
 
-  it('shows "Nothing to check right now" for an empty queue', async () => {
+  it('shows "Nothing waiting" empty state for an empty queue', async () => {
     mockGetReviewQueue.mockResolvedValue(emptyQueue())
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => {
-      expect(screen.getByText('Nothing to check right now.')).toBeInTheDocument()
+      expect(screen.getByText('Nothing waiting')).toBeInTheDocument()
     })
   })
 
@@ -349,6 +349,7 @@ describe('ReviewQueueScreen', () => {
     await waitFor(() => {
       expect(screen.getByRole('region', { name: /already remembered/i })).toBeInTheDocument()
     })
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     expect(screen.getByText('Ordered scaffolding from TCS')).toBeInTheDocument()
     expect(screen.getByText(/Yesterday/)).toBeInTheDocument()
   })
@@ -362,8 +363,12 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
-    expect(screen.getByText('Ordered')).toBeInTheDocument()
-    expect(screen.getByText('Watch out')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
+    // Scope to the remembered region so the type chips don't clash with the
+    // category focus chips (which also read "Ordered …").
+    const remembered = screen.getByRole('region', { name: /already remembered/i })
+    expect(within(remembered).getByText('Ordered')).toBeInTheDocument()
+    expect(within(remembered).getByText('Watch out')).toBeInTheDocument()
   })
 
   it('shows structured details for remembered items that have them', async () => {
@@ -385,6 +390,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     expect(screen.getByText('scaffolding')).toBeInTheDocument()
     expect(screen.getByText('TCS')).toBeInTheDocument()
     expect(screen.getByText('Friday morning')).toBeInTheDocument()
@@ -398,6 +404,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     expect(screen.getByText('Watch out near back door')).toBeInTheDocument()
     const rememberedRegion = screen.getByRole('region', { name: /already remembered/i })
     expect(rememberedRegion.querySelector('.card-detail-fields')).not.toBeInTheDocument()
@@ -425,6 +432,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     expect(screen.getByText('£5 each')).toBeInTheDocument()
     expect(screen.getByText('£40')).toBeInTheDocument()
   })
@@ -443,6 +451,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     expect(screen.getByText('Worth checking')).toBeInTheDocument()
   })
 
@@ -484,6 +493,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     const cards = document.querySelectorAll('.queue-remembered-card')
     expect(cards.length).toBe(3)
     expect(cards[0].textContent).toContain('Ordered scaffolding from TCS')
@@ -500,6 +510,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('region', { name: /already remembered/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
     expect(screen.queryByRole('button', { name: /remember this/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /fix details/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument()
@@ -714,5 +725,194 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText('"Bought 8 bags of hardcore from Jewson, five pounds each."')).toBeInTheDocument()
     fireEvent.click(toggle)
     expect(screen.queryByText(/five pounds each/i)).not.toBeInTheDocument()
+  })
+})
+
+// ── Real-use volume: counts, category focus, hierarchy ──────────────────────
+
+function makeWatchItem(id: string): QueueItem {
+  return {
+    id,
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'Watch out',
+    timeLabel: 'Today',
+    summary: 'Watch out — uneven floor near back door',
+    proposedMemory: {
+      memoryType: 'watch_out',
+      summary: 'Watch out — uneven floor near back door',
+      materialName: null, quantity: null, unit: null, supplierName: null,
+      deliveryTiming: null, locationOrUse: 'near back door',
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['cf-watch'],
+    sourceContext: [],
+  }
+}
+
+function makeVolumeQueue(overrides?: Partial<ReviewQueue>): ReviewQueue {
+  return {
+    jobId: MOCK_JOB.id,
+    generatedAt: '2026-06-07T12:00:00Z',
+    sections: [
+      { key: 'ordered_materials', label: 'Ordered materials', items: [ITEM_SINGLE] },
+      { key: 'used_materials', label: 'Used materials', items: [ITEM_DUPLICATE] },
+      { key: 'leftovers', label: 'Leftovers', items: [] },
+      { key: 'watch_outs', label: 'Watch outs', items: [makeWatchItem('qi-watch-1')] },
+    ],
+    alreadyRemembered: [
+      { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+    ],
+    ...overrides,
+  }
+}
+
+describe('ReviewQueueScreen — real-use volume', () => {
+  beforeEach(() => {
+    mockGetReviewQueue.mockResolvedValue(makeVolumeQueue())
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-001', action: 'confirm', status: 'confirmed',
+      memoryItemId: 'mem-x', sourceCandidateFactIds: [],
+    })
+  })
+
+  it('shows total pending count across all categories', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('3 waiting')).toBeInTheDocument())
+  })
+
+  it('shows per-category chips with pending counts including an empty one', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByRole('button', { name: 'All 3' }))
+    expect(screen.getByRole('button', { name: 'Ordered 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Used 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Left over 0' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Watch-outs 1' })).toBeInTheDocument()
+  })
+
+  it('renders pending items before the already-remembered section', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    const firstCard = document.querySelector('.queue-item-card')!
+    const remembered = screen.getByRole('region', { name: /already remembered/i })
+    // remembered region comes AFTER the first pending card in document order
+    expect(firstCard.compareDocumentPosition(remembered) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('focusing a category reduces visible pending items to that category', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Used 1' }))
+
+    expect(screen.getByText('OSB')).toBeInTheDocument()
+    expect(screen.queryByText('Bought / ordered')).not.toBeInTheDocument()
+    expect(screen.queryByText(/uneven floor/)).not.toBeInTheDocument()
+    // total still visible while focused
+    expect(screen.getByText('3 waiting')).toBeInTheDocument()
+  })
+
+  it('focusing an empty category shows "Nothing waiting here"', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Left over 0' }))
+
+    expect(screen.getByText('Nothing waiting here')).toBeInTheDocument()
+    expect(screen.queryByText('Bought / ordered')).not.toBeInTheDocument()
+  })
+
+  it('All shows every pending group again', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getByRole('button', { name: 'Used 1' }))
+    expect(screen.queryByText('Bought / ordered')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All 3' }))
+    expect(screen.getByText('Bought / ordered')).toBeInTheDocument()
+    expect(screen.getByText('OSB')).toBeInTheDocument()
+  })
+
+  it('confirm updates total and category counts', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    // confirm the ordered (hardcore) item — first Remember this
+    fireEvent.click(screen.getAllByRole('button', { name: /remember this/i })[0])
+
+    await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Ordered 0' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'All 2' })).toBeInTheDocument()
+  })
+
+  it('dismiss updates total and category counts', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-001', action: 'dismiss', status: 'dismissed', sourceCandidateFactIds: [],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /dismiss/i })[0])
+
+    await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Ordered 0' })).toBeInTheDocument()
+  })
+
+  it('correct updates total and category counts', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-001', action: 'correct', status: 'corrected',
+      memoryItemId: 'mem-x', sourceCandidateFactIds: [],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+
+    await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Ordered 0' })).toBeInTheDocument()
+  })
+
+  it('keeps the focused category after acting on an item', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-002', action: 'dismiss', status: 'dismissed', sourceCandidateFactIds: [],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Used 1' }))
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
+
+    // still focused on Used (chip pressed), count dropped to 0, total updated
+    await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Used 0' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByText('Bought / ordered')).not.toBeInTheDocument()
+  })
+
+  it('already remembered is collapsed below pending by default', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    // toggle present, content hidden until expanded
+    expect(screen.getByRole('button', { name: /show remembered items/i })).toBeInTheDocument()
+    expect(screen.queryByText('Ordered scaffolding from TCS')).not.toBeInTheDocument()
+  })
+
+  it('renders a large multi-category queue and stays pending-first', async () => {
+    const many: QueueItem[] = Array.from({ length: 12 }, (_, i) => ({
+      ...ITEM_SINGLE,
+      id: `qi-many-${i}`,
+    }))
+    mockGetReviewQueue.mockResolvedValue(makeVolumeQueue({
+      sections: [
+        { key: 'ordered_materials', label: 'Ordered materials', items: many },
+        { key: 'used_materials', label: 'Used materials', items: [ITEM_DUPLICATE] },
+      ],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('13 waiting')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Ordered 12' })).toBeInTheDocument()
+    expect(document.querySelectorAll('.queue-item-card').length).toBe(13)
   })
 })

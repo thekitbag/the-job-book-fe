@@ -380,6 +380,40 @@ const MOCK_QUEUE_ITEMS: QueueItem[] = [
       },
     ],
   },
+  {
+    id: 'queue-item-mock-003',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'Watch out',
+    timeLabel: 'Today',
+    summary: 'Watch out — uneven floor near back door',
+    proposedMemory: {
+      memoryType: 'watch_out' as MemoryType,
+      summary: 'Watch out — uneven floor near back door',
+      materialName: null,
+      quantity: null,
+      unit: null,
+      supplierName: null,
+      deliveryTiming: null,
+      locationOrUse: 'near back door',
+      costAmount: null,
+      costCurrency: null,
+      costQualifier: null,
+      totalCostAmount: null,
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-004'],
+    sourceContext: [
+      {
+        candidateFactId: 'mock-fact-004',
+        noteId: 'mock-note-003',
+        transcriptId: 'mock-trans-003',
+        capturedAt: new Date().toISOString(),
+        transcriptText: 'Mind the uneven floor by the back door.',
+      },
+    ],
+  },
 ]
 
 const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
@@ -429,6 +463,8 @@ export async function getReviewQueue(jobId: string): Promise<ReviewQueue> {
       sections: [
         { key: 'ordered_materials', label: 'Ordered materials', items: [MOCK_QUEUE_ITEMS[0]] },
         { key: 'used_materials', label: 'Used materials', items: [MOCK_QUEUE_ITEMS[1]] },
+        { key: 'leftovers', label: 'Leftovers', items: [] },
+        { key: 'watch_outs', label: 'Watch outs', items: [MOCK_QUEUE_ITEMS[2]] },
       ],
       alreadyRemembered: MOCK_REMEMBERED,
     }

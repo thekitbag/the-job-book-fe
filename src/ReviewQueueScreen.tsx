@@ -37,6 +37,61 @@ const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
   leftover_material: 'Left over',
 }
 
+// Plain builder labels for the category focus chips, keyed by section key.
+const SECTION_CHIP_LABELS: Record<string, string> = {
+  ordered_materials: 'Ordered',
+  used_materials: 'Used',
+  leftovers: 'Left over',
+  supplier_delivery_notes: 'Supplier notes',
+  customer_changes: 'Changes',
+  watch_outs: 'Watch-outs',
+  unclear_items: 'Unclear',
+}
+
+const chipLabel = (s: QueueSection) => SECTION_CHIP_LABELS[s.key] ?? s.label
+const draftCount = (s: QueueSection) => s.items.filter(it => it.status === 'draft').length
+
+function CategoryChips({
+  sections,
+  totalPending,
+  focusedKey,
+  onFocus,
+}: {
+  sections: QueueSection[]
+  totalPending: number
+  focusedKey: string | null
+  onFocus: (key: string | null) => void
+}) {
+  return (
+    <div className="queue-cat-chips" role="group" aria-label="Focus a category">
+      {/* Label + count render as a single text node so the count chips never
+          collide with the remembered type chips (e.g. exact text "Ordered"). */}
+      <button
+        type="button"
+        className={`queue-cat-chip${focusedKey === null ? ' queue-cat-chip--active' : ''}`}
+        aria-pressed={focusedKey === null}
+        onClick={() => onFocus(null)}
+      >
+        All <span className="queue-cat-chip-count">{totalPending}</span>
+      </button>
+      {sections.map(s => {
+        const count = draftCount(s)
+        return (
+          <button
+            key={s.key}
+            type="button"
+            className={`queue-cat-chip${focusedKey === s.key ? ' queue-cat-chip--active' : ''}${count === 0 ? ' queue-cat-chip--empty' : ''}`}
+            aria-pressed={focusedKey === s.key}
+            onClick={() => onFocus(s.key)}
+          >
+            {chipLabel(s)} <span className="queue-cat-chip-count">{count}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
@@ -362,13 +417,24 @@ function RememberedCard({ item }: { item: AlreadyRememberedItem }) {
 }
 
 function AlreadyRememberedSection({ items }: { items: AlreadyRememberedItem[] }) {
+  const [open, setOpen] = useState(false)
   if (items.length === 0) return null
   return (
     <div className="queue-already-remembered" role="region" aria-label="Already remembered">
       <p className="queue-remembered-heading">Already remembered</p>
-      <ul className="queue-remembered-list">
-        {items.map(m => <RememberedCard key={m.memoryItemId} item={m} />)}
-      </ul>
+      <button
+        type="button"
+        className="queue-remembered-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+      >
+        {open ? 'Hide remembered items' : `Show remembered items (${items.length})`}
+      </button>
+      {open && (
+        <ul className="queue-remembered-list">
+          {items.map(m => <RememberedCard key={m.memoryItemId} item={m} />)}
+        </ul>
+      )}
     </div>
   )
 }
@@ -422,6 +488,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
+  const [focusedKey, setFocusedKey] = useState<string | null>(null)
 
   const loadQueue = useCallback(() => {
     setLoadState('loading')
@@ -469,13 +536,25 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     }
   }, [queue, job.id, editingItemId])
 
-  const hasDraftItems = queue
-    ? queue.sections.some(s => s.items.some(it => it.status === 'draft'))
-    : false
+  const totalPending = queue
+    ? queue.sections.reduce((n, s) => n + draftCount(s), 0)
+    : 0
 
   const isEmpty = queue
     ? queue.sections.every(s => s.items.length === 0) && queue.alreadyRemembered.length === 0
     : false
+
+  // Keep focus stable across actions; only reset if the focused category
+  // disappears entirely from the queue (it never does mid-session here).
+  const focusedSection = focusedKey
+    ? queue?.sections.find(s => s.key === focusedKey) ?? null
+    : null
+  const focusedEmpty = focusedKey !== null && (!focusedSection || focusedSection.items.length === 0)
+  const visibleSections = focusedKey === null
+    ? (queue?.sections ?? [])
+    : (focusedSection ? [focusedSection] : [])
+
+  const pendingLabel = totalPending === 0 ? 'Nothing waiting' : `${totalPending} waiting`
 
   return (
     <div className="queue-page">
@@ -486,7 +565,17 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         <h1 className="queue-title">Things to check</h1>
       </header>
 
-      <div className="queue-job-label">{job.title}</div>
+      <div className="queue-subhead">
+        <span className="queue-job-label">{job.title}</span>
+        {loadState === 'ready' && !isEmpty && (
+          <span
+            className={`queue-pending-total${totalPending === 0 ? ' queue-pending-total--none' : ''}`}
+            aria-live="polite"
+          >
+            {pendingLabel}
+          </span>
+        )}
+      </div>
 
       {loadState === 'loading' && (
         <p className="queue-loading">Loading…</p>
@@ -501,30 +590,47 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
 
       {loadState === 'ready' && queue && (
         <>
-          {isEmpty && (
-            <p className="queue-empty">Nothing to check right now.</p>
+          {isEmpty ? (
+            <div className="queue-empty">
+              <p className="queue-empty-title">Nothing waiting</p>
+              <p className="queue-empty-sub">
+                Useful facts will appear here to check after you record on this job.
+              </p>
+              <button className="btn-queue-retry" onClick={onClose}>Back to job</button>
+            </div>
+          ) : (
+            <>
+              <CategoryChips
+                sections={queue.sections}
+                totalPending={totalPending}
+                focusedKey={focusedKey}
+                onFocus={setFocusedKey}
+              />
+
+              {/* Pending draft facts come first */}
+              {focusedEmpty ? (
+                <p className="queue-empty-category">Nothing waiting here</p>
+              ) : (
+                visibleSections.map(section => (
+                  <SectionBlock
+                    key={section.key}
+                    section={section}
+                    editingItemId={editingItemId}
+                    submittingId={submittingId}
+                    itemErrors={itemErrors}
+                    onConfirm={id => handleDecision(id, 'confirm')}
+                    onStartEdit={id => setEditingItemId(id)}
+                    onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected)}
+                    onCancelEdit={() => setEditingItemId(null)}
+                    onDismiss={id => handleDecision(id, 'dismiss')}
+                  />
+                ))
+              )}
+
+              {/* Already remembered is confirmed-memory context, below pending work */}
+              <AlreadyRememberedSection items={queue.alreadyRemembered} />
+            </>
           )}
-
-          {!isEmpty && !hasDraftItems && queue.alreadyRemembered.length > 0 && (
-            <p className="queue-empty">All items reviewed.</p>
-          )}
-
-          <AlreadyRememberedSection items={queue.alreadyRemembered} />
-
-          {queue.sections.map(section => (
-            <SectionBlock
-              key={section.key}
-              section={section}
-              editingItemId={editingItemId}
-              submittingId={submittingId}
-              itemErrors={itemErrors}
-              onConfirm={id => handleDecision(id, 'confirm')}
-              onStartEdit={id => setEditingItemId(id)}
-              onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected)}
-              onCancelEdit={() => setEditingItemId(null)}
-              onDismiss={id => handleDecision(id, 'dismiss')}
-            />
-          ))}
         </>
       )}
     </div>
