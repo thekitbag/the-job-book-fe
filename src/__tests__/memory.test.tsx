@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import JobMemoryScreen from '../JobMemoryScreen'
 import * as api from '../api'
@@ -123,6 +123,12 @@ beforeEach(() => {
   mockOpenReviewQueue.mockReset()
 })
 
+// Remembered detail is collapsed by default — open it before asserting on
+// detail cards / Fix memory / source toggles.
+async function openDetail() {
+  fireEvent.click(await screen.findByRole('button', { name: /show details/i }))
+}
+
 describe('JobMemoryScreen', () => {
   it('shows the Job memory heading', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
@@ -145,8 +151,9 @@ describe('JobMemoryScreen', () => {
   it('renders memory section headings for sections with items', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
     // "Ordered" short label appears only in the memory section heading (scan label is "Bought / ordered")
-    await waitFor(() => screen.getByText('Ordered'))
+    expect(screen.getByText('Ordered')).toBeTruthy()
     // "Used" appears in both scan heading and memory section heading — check at least one exists
     expect(screen.getAllByText('Used').length).toBeGreaterThan(0)
     // Empty sections should not appear
@@ -167,11 +174,13 @@ describe('JobMemoryScreen', () => {
   it('renders structured fields as labelled rows without showing null text', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
-    // Individual labelled field values
-    expect(screen.getByText('hardcore')).toBeTruthy()
-    expect(screen.getByText('8 bags')).toBeTruthy()
-    expect(screen.getByText('Jewson')).toBeTruthy()
+    await openDetail()
+    // Individual labelled field values in the detail region (some also appear
+    // in the scan summary, so scope to the detail cards).
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    expect(within(detail).getByText('hardcore')).toBeTruthy()
+    expect(within(detail).getByText('8 bags')).toBeTruthy()
+    expect(within(detail).getByText('Jewson')).toBeTruthy()
     // null values must not appear literally
     expect(screen.queryByText(/null/)).toBeNull()
   })
@@ -188,7 +197,7 @@ describe('JobMemoryScreen', () => {
   it('renders cost and total cost on memory cards', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     // Cost labels appear in both scan view and memory card
     expect(screen.getAllByText('£5 each').length).toBeGreaterThan(0)
     expect(screen.getAllByText('£40').length).toBeGreaterThan(0)
@@ -197,13 +206,14 @@ describe('JobMemoryScreen', () => {
   it('shows Show source toggle for items with source context', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Show source'))
+    await openDetail()
+    expect(screen.getByText('Show source')).toBeTruthy()
   })
 
   it('does not show source toggle for items without source', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getAllByText('OSB'))
+    await openDetail()
     // Only one item has source; only one toggle should appear
     expect(screen.getAllByText('Show source').length).toBe(1)
   })
@@ -211,7 +221,7 @@ describe('JobMemoryScreen', () => {
   it('expands source context on Show source click', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Show source'))
+    await openDetail()
     fireEvent.click(screen.getByText('Show source'))
     expect(screen.getByText('This came from your note')).toBeTruthy()
     expect(screen.getByText('What the system heard')).toBeTruthy()
@@ -221,7 +231,7 @@ describe('JobMemoryScreen', () => {
   it('collapses source context when toggled again', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('Show source'))
+    await openDetail()
     fireEvent.click(screen.getByText('Show source'))
     expect(screen.getByText('Hide source')).toBeTruthy()
     fireEvent.click(screen.getByText('Hide source'))
@@ -281,7 +291,7 @@ describe('JobMemoryScreen', () => {
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     await waitFor(() => screen.getByRole('button', { name: 'Try again' }))
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    await waitFor(() => screen.getByText('hardcore'))
+    await waitFor(() => screen.getByRole('button', { name: /show details/i }))
   })
 
   it('calls onClose when Back is clicked', async () => {
@@ -294,7 +304,7 @@ describe('JobMemoryScreen', () => {
   it('does not show confirm/correct/dismiss/edit controls', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     expect(screen.queryByRole('button', { name: /confirm/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /correct/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /dismiss/i })).toBeNull()
@@ -392,20 +402,21 @@ describe('JobMemoryScreen', () => {
     expect(scanRegion.textContent).not.toContain('13')
   })
 
-  it('scan view consolidates compatible material+unit rows by summing quantities', async () => {
+  it('scan view consolidates compatible ordered material+unit rows by summing quantities', async () => {
     const baseItem = MEMORY_VIEW.sections[0].items[0]
+    // Only bought/ordered consolidates like-for-like, so put the sand rows there.
     const viewWithCompatible: MemoryViewResponse = {
       ...MEMORY_VIEW,
       sections: MEMORY_VIEW.sections.map(s =>
-        s.key === 'used_materials'
+        s.key === 'ordered_materials'
           ? {
               ...s,
               items: [
                 {
                   ...baseItem,
-                  id: 'mem-used-a',
-                  memoryType: 'used_material' as const,
-                  summary: 'Used 9 bags of sand',
+                  id: 'mem-ord-a',
+                  memoryType: 'ordered_material' as const,
+                  summary: 'Ordered 9 bags of sand',
                   materialName: 'sand',
                   quantity: '9',
                   unit: 'bags',
@@ -419,9 +430,9 @@ describe('JobMemoryScreen', () => {
                 },
                 {
                   ...baseItem,
-                  id: 'mem-used-b',
-                  memoryType: 'used_material' as const,
-                  summary: 'Used 4 bags of sand',
+                  id: 'mem-ord-b',
+                  memoryType: 'ordered_material' as const,
+                  summary: 'Ordered 4 bags of sand',
                   materialName: 'sand',
                   quantity: '4',
                   unit: 'bags',
@@ -448,6 +459,32 @@ describe('JobMemoryScreen', () => {
     // Items must NOT appear as two separate rows
     expect(scanRegion.textContent).not.toContain('9 bags')
     expect(scanRegion.textContent).not.toContain('4 bags')
+  })
+
+  it('scan view does NOT consolidate used material rows (totals are ordered-only)', async () => {
+    const baseItem = MEMORY_VIEW.sections[0].items[0]
+    const viewWithUsed: MemoryViewResponse = {
+      ...MEMORY_VIEW,
+      sections: MEMORY_VIEW.sections.map(s =>
+        s.key === 'used_materials'
+          ? {
+              ...s,
+              items: [
+                { ...baseItem, id: 'mem-u-a', memoryType: 'used_material' as const, summary: 'Used 9 bags of sand', materialName: 'sand', quantity: '9', unit: 'bags', supplierName: null, costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null, uncertaintyFlags: [], source: null },
+                { ...baseItem, id: 'mem-u-b', memoryType: 'used_material' as const, summary: 'Used 4 bags of sand', materialName: 'sand', quantity: '4', unit: 'bags', supplierName: null, costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null, uncertaintyFlags: [], source: null },
+              ],
+            }
+          : s
+      ),
+    }
+    mockGetMemoryView.mockResolvedValue(viewWithUsed)
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => screen.getByRole('region', { name: /memory scan/i }))
+    const scanRegion = screen.getByRole('region', { name: /memory scan/i })
+    // Used stays as separate rows — no fake "13 bags" total
+    expect(scanRegion.textContent).toContain('9 bags')
+    expect(scanRegion.textContent).toContain('4 bags')
+    expect(scanRegion.textContent).not.toContain('13')
   })
 
   it('scan view does not group items whose quantity is non-decimal (e.g. "about 8")', async () => {
@@ -547,7 +584,7 @@ describe('JobMemoryScreen', () => {
   it('does not show accounting, procurement or report controls', async () => {
     mockGetMemoryView.mockResolvedValue(MEMORY_VIEW)
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     expect(screen.queryByText(/invoice/i)).toBeNull()
     expect(screen.queryByText(/reorder/i)).toBeNull()
     expect(screen.queryByText(/spend report/i)).toBeNull()
@@ -584,7 +621,8 @@ describe('JobMemoryScreen', () => {
     const { rerender } = render(
       <JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />
     )
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
+    expect(screen.getByText('hardcore')).toBeTruthy()
     rerender(<JobMemoryScreen job={JOB_B} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     await waitFor(() => screen.getByText('bricks'))
     expect(screen.queryByText('hardcore')).toBeNull()
@@ -615,13 +653,13 @@ describe('JobMemoryScreen — Fix memory', () => {
 
   it('shows a Fix memory action on remembered items', async () => {
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     expect(screen.getAllByRole('button', { name: /fix memory/i }).length).toBeGreaterThan(0)
   })
 
   it('opens a structured edit form with Save memory', async () => {
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
     const form = screen.getByRole('form', { name: /edit memory/i })
     expect(form).toBeInTheDocument()
@@ -633,7 +671,7 @@ describe('JobMemoryScreen — Fix memory', () => {
   it('saves edits via updateMemoryItem with structured fields', async () => {
     mockUpdateMemoryItem.mockResolvedValue(updatedItem({ quantity: '10', costAmount: '4.50' }))
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
 
     const form = screen.getByRole('form', { name: /edit memory/i })
@@ -650,7 +688,7 @@ describe('JobMemoryScreen — Fix memory', () => {
   it('updates the visible card after saving an edit', async () => {
     mockUpdateMemoryItem.mockResolvedValue(updatedItem({ quantity: '10', costAmount: '4.50' }))
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
     fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '4.50' } })
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
@@ -666,7 +704,7 @@ describe('JobMemoryScreen — Fix memory', () => {
     // change ordered hardcore → leftover_material
     mockUpdateMemoryItem.mockResolvedValue(updatedItem({ memoryType: 'leftover_material' }))
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
 
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
     const typeSelect = screen.getByRole('form', { name: /edit memory/i }).querySelector('select')!
@@ -681,7 +719,7 @@ describe('JobMemoryScreen — Fix memory', () => {
     // response omits source (like the mock backend) — client preserves prior linkage
     mockUpdateMemoryItem.mockResolvedValue(updatedItem({ quantity: '9', source: null }))
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
     fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="quantity"]')!, { target: { value: '9' } })
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
@@ -694,7 +732,7 @@ describe('JobMemoryScreen — Fix memory', () => {
   it('shows an inline error and keeps the form on save failure', async () => {
     mockUpdateMemoryItem.mockRejectedValue(new Error('network'))
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
-    await waitFor(() => screen.getByText('hardcore'))
+    await openDetail()
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => expect(screen.getByText(/could not save/i)).toBeInTheDocument())

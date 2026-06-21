@@ -21,6 +21,8 @@ test.describe('Remembered-memory edit & focus', () => {
     await signIn(page)
     await page.getByRole('button', { name: 'Job memory' }).click()
     await page.waitForTimeout(700)
+    // Detail (with Fix memory) is collapsed by default on the scan page
+    await page.getByRole('button', { name: /show details/i }).click()
 
     await page.getByRole('button', { name: /fix memory/i }).first().click()
     const form = page.getByRole('form', { name: /edit memory/i })
@@ -40,15 +42,16 @@ test.describe('Remembered-memory edit & focus', () => {
     await signIn(page)
     await page.getByRole('button', { name: 'Job memory' }).click()
     await page.waitForTimeout(700)
+    await page.getByRole('button', { name: /show details/i }).click()
 
     await page.getByRole('button', { name: /fix memory/i }).first().click()
     const form = page.getByRole('form', { name: /edit memory/i })
-    await form.locator('select').first().selectOption('leftover_material')
+    await form.locator('select').first().selectOption('customer_change')
     await page.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(600)
 
-    // "Leftover" section heading now present (it was empty before)
-    await expect(page.getByRole('heading', { name: 'Leftover' })).toBeVisible()
+    // The "Customer" detail section heading now appears (it was empty before)
+    await expect(page.getByRole('heading', { name: 'Customer', exact: true })).toBeVisible()
   })
 
   test('Things to check: remembered context follows category focus', async ({ page }) => {

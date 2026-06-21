@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getMemoryView, updateMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
+import {
+  deriveScanGroups,
+  formatCostLabel,
+  formatTotalLabel,
+  MEMORY_TYPE_TO_SECTION_KEY,
+  SECTION_FULL_LABELS,
+  SECTION_ORDER,
+} from './memoryScan'
 import type { Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
 
 const SECTION_SHORT_LABELS: Record<string, string> = {
@@ -13,33 +21,6 @@ const SECTION_SHORT_LABELS: Record<string, string> = {
   watch_outs: 'Watch out',
 }
 
-// memoryType → memory-view section key, for moving an item when its type changes
-const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
-  ordered_material: 'ordered_materials',
-  used_material: 'used_materials',
-  leftover_material: 'leftovers',
-  supplier_delivery_note: 'supplier_delivery_notes',
-  customer_change: 'customer_changes',
-  watch_out: 'watch_outs',
-}
-
-const SECTION_ORDER = ['ordered_materials', 'used_materials', 'leftovers', 'supplier_delivery_notes', 'customer_changes', 'watch_outs']
-
-const SECTION_FULL_LABELS: Record<string, string> = {
-  ordered_materials: 'Ordered materials',
-  used_materials: 'Used materials',
-  leftovers: 'Leftovers',
-  supplier_delivery_notes: 'Supplier delivery notes',
-  customer_changes: 'Customer changes',
-  watch_outs: 'Watch outs',
-}
-
-const SCAN_SECTION_MAP: { key: string; label: string }[] = [
-  { key: 'ordered_materials', label: 'Bought / ordered' },
-  { key: 'used_materials', label: 'Used' },
-  { key: 'leftovers', label: 'Left over' },
-]
-
 const MATERIAL_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material'])
 
 const MATERIAL_TYPE_LABEL: Record<string, string> = {
@@ -50,101 +31,6 @@ const MATERIAL_TYPE_LABEL: Record<string, string> = {
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
-  if (!amount) return null
-  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
-  const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.' }
-  return `${sym}${amount}${qualifier ? (q[qualifier] ?? '') : ''}`
-}
-
-function formatTotalLabel(amount: string | null, currency: string | null): string | null {
-  if (!amount) return null
-  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
-  return `${sym}${amount}`
-}
-
-function deriveScanSections(sections: MemoryViewSection[]): ScanViewSection[] {
-  return SCAN_SECTION_MAP
-    .map(({ key, label }) => {
-      const section = sections.find(s => s.key === key)
-      if (!section || section.items.length === 0) return null
-
-      const groupMap = new Map<string, MemoryViewItem[]>()
-      const separateItems: MemoryViewItem[] = []
-
-      const DECIMAL_RE = /^\d+(\.\d+)?$/
-      for (const item of section.items) {
-        const canGroup =
-          item.materialName != null &&
-          item.unit != null &&
-          DECIMAL_RE.test(item.quantity ?? '') &&
-          (item.uncertaintyFlags ?? []).length === 0
-
-        if (canGroup) {
-          const groupKey = `${item.materialName}|${item.unit}`
-          if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
-          groupMap.get(groupKey)!.push(item)
-        } else {
-          separateItems.push(item)
-        }
-      }
-
-      const scanItems: ScanViewItem[] = []
-
-      for (const groupItems of groupMap.values()) {
-        const first = groupItems[0]
-        if (groupItems.length === 1) {
-          scanItems.push({
-            materialName: first.materialName,
-            quantity: first.quantity,
-            unit: first.unit,
-            supplierName: first.supplierName,
-            costLabel: formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier),
-            totalCostLabel: formatTotalLabel(first.totalCostAmount, first.costCurrency),
-            uncertaintyFlags: [],
-            memoryItemIds: [first.id],
-          })
-        } else {
-          const totalQty = groupItems.reduce((sum, it) => sum + parseFloat(it.quantity!), 0)
-          const allSameCost = groupItems.every(it =>
-            it.costAmount === first.costAmount &&
-            it.costCurrency === first.costCurrency &&
-            it.costQualifier === first.costQualifier
-          )
-          const allSameTotal = groupItems.every(it => it.totalCostAmount === first.totalCostAmount)
-          const allSameSupplier = groupItems.every(it => it.supplierName === first.supplierName)
-          scanItems.push({
-            materialName: first.materialName,
-            quantity: String(Math.round(totalQty * 1000) / 1000),
-            unit: first.unit,
-            supplierName: allSameSupplier ? first.supplierName : null,
-            costLabel: allSameCost ? formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier) : null,
-            totalCostLabel: allSameTotal ? formatTotalLabel(first.totalCostAmount, first.costCurrency) : null,
-            uncertaintyFlags: [],
-            memoryItemIds: groupItems.map(it => it.id),
-          })
-        }
-      }
-
-      for (const item of separateItems) {
-        scanItems.push({
-          materialName: item.materialName,
-          quantity: item.quantity,
-          unit: item.unit,
-          supplierName: item.supplierName,
-          costLabel: formatCostLabel(item.costAmount, item.costCurrency, item.costQualifier),
-          totalCostLabel: formatTotalLabel(item.totalCostAmount, item.costCurrency),
-          uncertaintyFlags: item.uncertaintyFlags ?? [],
-          memoryItemIds: [item.id],
-        })
-      }
-
-      if (scanItems.length === 0) return null
-      return { key, label, items: scanItems }
-    })
-    .filter((s): s is ScanViewSection => s !== null)
 }
 
 function StructuredFields({ item }: { item: MemoryViewItem }) {
@@ -300,15 +186,23 @@ function MemSection({
 }
 
 function ScanItem({ item }: { item: ScanViewItem }) {
-  const desc = [
-    [item.quantity, item.unit].filter(Boolean).join(' '),
-    item.materialName,
+  // Material rows lead with quantity/material; prose groups lead with summary.
+  const desc = item.primaryText
+    ?? [[item.quantity, item.unit].filter(Boolean).join(' '), item.materialName].filter(Boolean).join(' · ')
+  // Secondary context chips (only what's present)
+  const meta = [
     item.supplierName,
-  ].filter(Boolean).join(' · ')
+    item.deliveryTiming,
+    item.locationOrUse,
+  ].filter(Boolean) as string[]
   const uncertain = item.uncertaintyFlags.length > 0
   return (
     <div className="mem-scan-item">
-      {desc && <span className="mem-scan-item-desc">{desc}</span>}
+      <span className="mem-scan-item-main">
+        {desc && <span className="mem-scan-item-desc">{desc}</span>}
+        {item.consolidated && <span className="mem-scan-item-tag">total</span>}
+      </span>
+      {meta.length > 0 && <span className="mem-scan-item-meta">{meta.join(' · ')}</span>}
       {item.costLabel && <span className="mem-scan-item-cost">{item.costLabel}</span>}
       {item.totalCostLabel && <span className="mem-scan-item-total">{item.totalCostLabel}</span>}
       {uncertain && <span className="mem-scan-item-uncertain">Worth checking</span>}
@@ -316,13 +210,12 @@ function ScanItem({ item }: { item: ScanViewItem }) {
   )
 }
 
-function ScanView({ data }: { data: MemoryViewResponse }) {
-  const sections = data.summarySections ?? deriveScanSections(data.sections)
+function ScanView({ sections }: { sections: ScanViewSection[] }) {
   if (sections.length === 0) return null
   return (
     <section className="mem-scan" aria-label="Memory scan">
       {sections.map(section => (
-        <div key={section.key} className="mem-scan-section">
+        <div key={section.key} className={`mem-scan-section mem-scan-section--${section.key}`}>
           <h3 className="mem-scan-heading">{section.label}</h3>
           {section.items.map((item, i) => <ScanItem key={i} item={item} />)}
         </div>
@@ -346,6 +239,7 @@ export default function JobMemoryScreen({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
+  const [showDetail, setShowDetail] = useState(false)
 
   function load() {
     setLoadState('loading')
@@ -396,6 +290,17 @@ export default function JobMemoryScreen({
     ? data.sections.some(s => s.items.length > 0)
     : false
 
+  // Scan summary is always derived from the trusted sections (never from
+  // stillToCheck, and never from backend summarySections which can drift after
+  // an edit). Both summary and detail therefore read the same source of truth.
+  const scanSections = useMemo(
+    () => (data ? deriveScanGroups(data.sections) : []),
+    [data],
+  )
+  const detailCount = data
+    ? data.sections.reduce((n, s) => n + s.items.length, 0)
+    : 0
+
   return (
     <div className="mem-page">
       <header className="mem-header">
@@ -421,9 +326,9 @@ export default function JobMemoryScreen({
 
       {loadState === 'ready' && data && (
         <>
-          {/* Still to check — shown above trusted memory, visually distinct */}
+          {/* Layer 1 — Pending review alert. Clearly NOT trusted memory. */}
           {data.stillToCheck.count > 0 && (
-            <div className="mem-still-to-check">
+            <div className="mem-still-to-check" role="region" aria-label="Still to check">
               <div className="mem-stc-row">
                 <span className="mem-stc-count">{data.stillToCheck.count} still to check</span>
                 <button
@@ -433,6 +338,7 @@ export default function JobMemoryScreen({
                   Review Things to check
                 </button>
               </div>
+              <p className="mem-stc-tag">Not remembered yet</p>
               {data.stillToCheck.items.map(item => (
                 <p key={item.id} className="mem-stc-item">
                   {item.timeLabel && <span className="mem-stc-time">{item.timeLabel}</span>}
@@ -442,30 +348,43 @@ export default function JobMemoryScreen({
             </div>
           )}
 
-          {hasMemory && <ScanView data={data} />}
+          {hasMemory ? (
+            <>
+              {/* Layer 2 — Memory at a glance (primary scan surface) */}
+              <ScanView sections={scanSections} />
 
-          {/* Trusted memory sections */}
-          {hasMemory
-            ? data.sections.map(s => (
-                <MemSection
-                  key={s.key}
-                  section={s}
-                  editingId={editingId}
-                  submittingId={submittingId}
-                  itemErrors={itemErrors}
-                  onStartEdit={setEditingId}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSave={handleSaveEdit}
-                />
-              ))
-            : (
-              <div className="mem-empty">
-                <p>No trusted memory yet. Review Things to check to save useful job details here.</p>
-                <button className="mem-stc-link" onClick={onOpenReviewQueue}>
-                  Go to Things to check
+              {/* Layer 3 — Remembered detail, de-emphasised behind a disclosure */}
+              <section className="mem-detail" aria-label="Remembered detail">
+                <button
+                  type="button"
+                  className="mem-detail-toggle"
+                  aria-expanded={showDetail}
+                  onClick={() => setShowDetail(o => !o)}
+                >
+                  {showDetail ? 'Hide details' : `Show details (${detailCount})`}
                 </button>
-              </div>
-            )}
+                {showDetail && data.sections.map(s => (
+                  <MemSection
+                    key={s.key}
+                    section={s}
+                    editingId={editingId}
+                    submittingId={submittingId}
+                    itemErrors={itemErrors}
+                    onStartEdit={setEditingId}
+                    onCancelEdit={() => setEditingId(null)}
+                    onSave={handleSaveEdit}
+                  />
+                ))}
+              </section>
+            </>
+          ) : (
+            <div className="mem-empty">
+              <p>No trusted memory yet. Review Things to check to save useful job details here.</p>
+              <button className="mem-stc-link" onClick={onOpenReviewQueue}>
+                Go to Things to check
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
