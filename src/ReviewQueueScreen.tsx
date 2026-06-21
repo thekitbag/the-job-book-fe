@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getReviewQueue, submitQueueDecision, updateMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
+import { formatCostLabel, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
 import type {
   AlreadyRememberedItem,
   CostQualifier,
@@ -54,15 +55,8 @@ const SECTION_CHIP_LABELS: Record<string, string> = {
 const chipLabel = (s: QueueSection) => SECTION_CHIP_LABELS[s.key] ?? s.label
 const draftCount = (s: QueueSection) => s.items.filter(it => it.status === 'draft').length
 
-// memoryType → section key, so already-remembered context can follow category focus
-const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
-  ordered_material: 'ordered_materials',
-  used_material: 'used_materials',
-  leftover_material: 'leftovers',
-  supplier_delivery_note: 'supplier_delivery_notes',
-  customer_change: 'customer_changes',
-  watch_out: 'watch_outs',
-}
+// MEMORY_TYPE_TO_SECTION_KEY (shared) maps memoryType → section key so
+// already-remembered context can follow the active category focus.
 
 function CategoryChips({
   sections,
@@ -103,19 +97,6 @@ function CategoryChips({
       })}
     </div>
   )
-}
-
-function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
-  if (!amount) return null
-  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
-  const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.' }
-  return `${sym}${amount}${qualifier ? (q[qualifier] ?? '') : ''}`
-}
-
-function formatTotalLabel(amount: string | null, currency: string | null): string | null {
-  if (!amount) return null
-  const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
-  return `${sym}${amount}`
 }
 
 function SourceContext({ contexts }: { contexts: QueueItem['sourceContext'] }) {

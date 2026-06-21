@@ -378,13 +378,20 @@ export interface MemoryViewStillToCheck {
 }
 
 export interface ScanViewItem {
+  memoryType: string
+  // Prose headline for non-material groups (supplier notes, changes, watch-outs)
+  primaryText: string | null
   materialName: string | null
   quantity: string | null
   unit: string | null
   supplierName: string | null
+  deliveryTiming: string | null
+  locationOrUse: string | null
   costLabel: string | null
   totalCostLabel: string | null
   uncertaintyFlags: string[]
+  // true when this row consolidates >1 remembered item (like-for-like total)
+  consolidated: boolean
   memoryItemIds: string[]
 }
 
