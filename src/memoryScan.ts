@@ -121,9 +121,15 @@ function buildMaterialRows(items: MemoryViewItem[], consolidate: boolean): ScanV
       it.costAmount === first.costAmount &&
       it.costCurrency === first.costCurrency &&
       it.costQualifier === first.costQualifier)
-    const allSameTotal = groupItems.every(it =>
-      it.totalCostAmount === first.totalCostAmount && it.costCurrency === first.costCurrency)
     const allSameSupplier = groupItems.every(it => it.supplierName === first.supplierName)
+    // Cost on a consolidated row must stay safe against the summed quantity:
+    //  - only an identical per-unit ('each') cost is shown — it still holds
+    //    for the combined quantity
+    //  - 'total' / 'approx' / 'unknown' (or unqualified) costs are hidden,
+    //    as they would misrepresent the total
+    //  - a single total amount is never shown on a consolidated row
+    // Full cost/total values remain visible on the underlying detail cards.
+    const showUnitCost = allSameCost && first.costQualifier === 'each'
     rows.push({
       memoryType: first.memoryType,
       primaryText: null,
@@ -133,9 +139,8 @@ function buildMaterialRows(items: MemoryViewItem[], consolidate: boolean): ScanV
       supplierName: allSameSupplier ? first.supplierName : null,
       deliveryTiming: null,
       locationOrUse: null,
-      // Conservative: only carry cost if identical across consolidated items.
-      costLabel: allSameCost ? formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier) : null,
-      totalCostLabel: allSameTotal ? formatTotalLabel(first.totalCostAmount, first.costCurrency) : null,
+      costLabel: showUnitCost ? formatCostLabel(first.costAmount, first.costCurrency, first.costQualifier) : null,
+      totalCostLabel: null,
       uncertaintyFlags: [],
       consolidated: true,
       memoryItemIds: groupItems.map(it => it.id),

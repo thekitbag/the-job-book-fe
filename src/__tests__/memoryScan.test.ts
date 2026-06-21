@@ -81,20 +81,59 @@ describe('deriveScanGroups — bought/ordered consolidation', () => {
     expect(groups[0].items).toHaveLength(2)
   })
 
-  it('keeps cost on a consolidated row only when identical, never summed', () => {
+  it('keeps an identical per-unit (each) cost on a consolidated row', () => {
     const same = deriveScanGroups(ordered([
       item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '5', costCurrency: 'GBP', costQualifier: 'each' }),
       item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '5', costCurrency: 'GBP', costQualifier: 'each' }),
     ]))[0].items[0]
+    expect(same.consolidated).toBe(true)
     expect(same.costLabel).toBe('£5 each')
+  })
 
+  it('omits cost from a consolidated row when costs differ (no fake spend total)', () => {
     const differ = deriveScanGroups(ordered([
       item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '5', costCurrency: 'GBP', costQualifier: 'each' }),
       item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '7', costCurrency: 'GBP', costQualifier: 'each' }),
     ]))[0].items[0]
-    // differing costs → omitted from the consolidated row (no fake spend total)
     expect(differ.costLabel).toBeNull()
     expect(differ.consolidated).toBe(true)
+  })
+
+  it('hides cost on a consolidated row when the identical qualifier is "total"', () => {
+    const row = deriveScanGroups(ordered([
+      item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '40', costCurrency: 'GBP', costQualifier: 'total' }),
+      item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '40', costCurrency: 'GBP', costQualifier: 'total' }),
+    ]))[0].items[0]
+    expect(row.consolidated).toBe(true)
+    expect(row.costLabel).toBeNull()
+  })
+
+  it('hides cost on a consolidated row for approx / unknown qualifiers', () => {
+    for (const qualifier of ['approx', 'unknown'] as const) {
+      const row = deriveScanGroups(ordered([
+        item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '5', costCurrency: 'GBP', costQualifier: qualifier }),
+        item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '5', costCurrency: 'GBP', costQualifier: qualifier }),
+      ]))[0].items[0]
+      expect(row.costLabel).toBeNull()
+    }
+  })
+
+  it('always hides the total amount on a consolidated row even when identical', () => {
+    const row = deriveScanGroups(ordered([
+      item({ materialName: 'p', quantity: '1', unit: 'u', totalCostAmount: '40', costCurrency: 'GBP' }),
+      item({ materialName: 'p', quantity: '1', unit: 'u', totalCostAmount: '40', costCurrency: 'GBP' }),
+    ]))[0].items[0]
+    expect(row.consolidated).toBe(true)
+    expect(row.totalCostLabel).toBeNull()
+  })
+
+  it('still surfaces a single ordered row’s total and non-each cost (only consolidation is restricted)', () => {
+    const row = deriveScanGroups(ordered([
+      item({ materialName: 'p', quantity: '1', unit: 'u', costAmount: '40', costCurrency: 'GBP', costQualifier: 'total', totalCostAmount: '40' }),
+    ]))[0].items[0]
+    expect(row.consolidated).toBe(false)
+    expect(row.costLabel).toBe('£40 total')
+    expect(row.totalCostLabel).toBe('£40')
   })
 })
 
