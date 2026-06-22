@@ -178,3 +178,18 @@ Your handoff must include, at minimum:
 If the brief asks for an example payload, browser/device evidence, provider configuration, or PWA/offline status, include it explicitly.
 
 For Story 1 specifically, report the actual phone/browser, permission behaviour, MIME type, playback result, and whether mobile web remains viable.
+
+The handoff must be self-contained in the conversation with the tech lead. Do not replace the handoff with "see the PR description". The PR description may repeat the same information, but it is not a substitute for reporting it directly.
+
+Frontend handoffs must include:
+
+- branch and PR link
+- files changed and what changed in each important file
+- UX decisions made and why
+- state/update behaviour for the changed flow
+- API assumptions, response-shape expectations, or mismatches
+- exact test/build/audit/e2e commands and results
+- manual or visual verification result, including phone-width checks for Mike-facing UI
+- risks, out-of-scope items, or follow-up needed
+
+If the active brief has a `Handoff Back` checklist, answer every item directly.
