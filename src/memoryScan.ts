@@ -1,4 +1,4 @@
-import type { MemoryViewItem, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
+import type { MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -15,6 +15,143 @@ export function formatTotalLabel(amount: string | null, currency: string | null)
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
   return `${sym}${amount}`
+}
+
+function currencySymbol(currency: string | null): string {
+  return currency === 'GBP' ? '£' : (currency ? `${currency} ` : '£')
+}
+
+// Money formatter for derived sums — trims a trailing .00, keeps real decimals.
+export function formatMoney(amount: number, currency: string | null): string {
+  const rounded = Math.round(amount * 100) / 100
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2)
+  return `${currencySymbol(currency)}${text}`
+}
+
+// Detail-card cost rows: distinguish unit cost from line total, and mark an
+// unclear basis as worth checking rather than a trusted figure. No bare numbers.
+export function costDetailRows(item: {
+  costAmount: string | null
+  costCurrency: string | null
+  costQualifier: string | null
+  totalCostAmount: string | null
+}): [string, string][] {
+  const rows: [string, string][] = []
+  const sym = currencySymbol(item.costCurrency)
+  const { costAmount: amount, costQualifier: qualifier, totalCostAmount: total } = item
+
+  if (amount && qualifier === 'each') {
+    rows.push(['Unit cost', `${sym}${amount} each`])
+  } else if (amount && qualifier === 'total') {
+    // amount is itself the line total; fold into the Total row below if no
+    // explicit total is set
+    if (!total) rows.push(['Total', `${sym}${amount}`])
+  } else if (amount) {
+    // approx / unknown / unqualified basis — show but flag, never as a total
+    rows.push(['Cost', `${sym}${amount} — worth checking`])
+  }
+
+  if (total) rows.push(['Total', `${sym}${total}`])
+  return rows
+}
+
+const DECIMAL = /^\d+(\.\d+)?$/
+
+/**
+ * Safe line total for a single bought/ordered memory item, mirroring the
+ * backend rules. Returns null when it is not safe to total (missing/approx
+ * quantity, missing unit, ambiguous basis, unresolved flags, missing currency).
+ */
+export function safeLineTotal(item: MemoryViewItem): { amount: number; currency: string } | null {
+  if ((item.uncertaintyFlags ?? []).length > 0) return null
+  const currency = item.costCurrency
+  if (!currency) return null
+
+  // 1. explicit, trusted line total
+  if (item.totalCostAmount && DECIMAL.test(item.totalCostAmount) && item.costQualifier !== 'approx' && item.costQualifier !== 'unknown') {
+    return { amount: parseFloat(item.totalCostAmount), currency }
+  }
+  // 2. safely derived from quantity × unit cost
+  if (
+    item.costQualifier === 'each' &&
+    item.costAmount && DECIMAL.test(item.costAmount) &&
+    item.quantity && DECIMAL.test(item.quantity) &&
+    item.unit
+  ) {
+    return { amount: parseFloat(item.quantity) * parseFloat(item.costAmount), currency }
+  }
+  return null
+}
+
+/**
+ * Frontend fallback that mirrors the backend memory-view.costSummary safe
+ * rules — used for mock/local resilience and to keep Known spend live after an
+ * in-place edit. Backend costSummary is preferred when present.
+ */
+export function deriveCostSummary(sections: MemoryViewSection[]): OrderedCostSummary {
+  const ordered = sections.find(s => s.key === 'ordered_materials')?.items ?? []
+  const currency = 'GBP'
+
+  const included: MemoryViewItem[] = []
+  const excludedMemoryItemIds: string[] = []
+  let missingCostCount = 0
+  let uncertainCostCount = 0
+  let total = 0
+
+  for (const item of ordered) {
+    const hasAnyCost = !!(item.costAmount || item.totalCostAmount)
+    const line = safeLineTotal(item)
+    if (line && line.currency === currency) {
+      included.push(item)
+      total += line.amount
+    } else if (!hasAnyCost) {
+      missingCostCount++
+      excludedMemoryItemIds.push(item.id)
+    } else {
+      // has a cost but it's not safe to total (uncertain / ambiguous basis)
+      uncertainCostCount++
+      excludedMemoryItemIds.push(item.id)
+    }
+  }
+
+  // Consolidate included items into like-for-like rows — only when BOTH
+  // material and unit are present (matches the backend rule). Items missing
+  // either stay standalone so we never merge unlike explicit totals.
+  const rowMap = new Map<string, { item: MemoryViewItem; amount: number; ids: string[] }>()
+  for (const item of included) {
+    const groupable = !!item.materialName && !!item.unit
+    const key = groupable ? `${item.materialName}|${item.unit}` : `__standalone__${item.id}`
+    const amount = safeLineTotal(item)!.amount
+    const existing = rowMap.get(key)
+    if (existing) {
+      existing.amount += amount
+      existing.ids.push(item.id)
+    } else {
+      rowMap.set(key, { item, amount, ids: [item.id] })
+    }
+  }
+  const rows = [...rowMap.entries()].map(([key, { item, amount, ids }]) => ({
+    key,
+    materialName: item.materialName ?? '',
+    quantity: item.quantity,
+    unit: item.unit,
+    lineTotalAmount: String(Math.round(amount * 100) / 100),
+    lineTotalCurrency: currency,
+    lineTotalLabel: `${formatMoney(amount, currency)} total`,
+    memoryItemIds: ids,
+  }))
+
+  const hasKnown = included.length > 0
+  return {
+    knownSpendAmount: hasKnown ? String(Math.round(total * 100) / 100) : null,
+    knownSpendCurrency: hasKnown ? currency : null,
+    knownSpendLabel: hasKnown ? `${formatMoney(total, currency)} known spend` : null,
+    includedMemoryItemIds: included.map(i => i.id),
+    missingCostCount,
+    uncertainCostCount,
+    excludedMemoryItemIds,
+    rows,
+  }
 }
 
 // memoryType → memory-view section key (used to re-home an item after a type edit)

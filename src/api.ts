@@ -806,9 +806,9 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
             supplierName: 'Jewson',
             deliveryTiming: 'Tuesday',
             locationOrUse: null,
-            costAmount: null,
+            costAmount: '50',
             costCurrency: 'GBP',
-            costQualifier: null,
+            costQualifier: 'each' as const,
             totalCostAmount: null,
             uncertaintyFlags: [],
             sourceCandidateFactId: 'fact-004',
@@ -827,9 +827,9 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
             supplierName: 'Jewson',
             deliveryTiming: 'Thursday',
             locationOrUse: null,
-            costAmount: null,
+            costAmount: '50',
             costCurrency: 'GBP',
-            costQualifier: null,
+            costQualifier: 'each' as const,
             totalCostAmount: null,
             uncertaintyFlags: [],
             sourceCandidateFactId: 'fact-005',
@@ -990,6 +990,31 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
           timeLabel: 'Today',
         },
       ],
+    },
+    // Backend-authoritative known spend: hardcore £40 + plasterboard 2×£600.
+    // Timber has no cost remembered (missing). Leftover sand is not ordered.
+    costSummary: {
+      orderedMaterials: {
+        knownSpendAmount: '1240',
+        knownSpendCurrency: 'GBP',
+        knownSpendLabel: '£1240 known spend',
+        includedMemoryItemIds: ['mem-view-001', 'mem-view-004', 'mem-view-005'],
+        missingCostCount: 1,
+        uncertainCostCount: 0,
+        excludedMemoryItemIds: ['mem-view-006'],
+        rows: [
+          {
+            key: 'hardcore|bags', materialName: 'hardcore', quantity: '8', unit: 'bags',
+            lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total',
+            memoryItemIds: ['mem-view-001'],
+          },
+          {
+            key: 'plasterboard|sheets', materialName: 'plasterboard', quantity: '24', unit: 'sheets',
+            lineTotalAmount: '1200', lineTotalCurrency: 'GBP', lineTotalLabel: '£1200 total',
+            memoryItemIds: ['mem-view-004', 'mem-view-005'],
+          },
+        ],
+      },
     },
   }
 }

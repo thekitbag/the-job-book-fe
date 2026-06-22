@@ -863,3 +863,158 @@ describe('JobMemoryScreen — Worth checking resolution', () => {
     expect(screen.getByText('Think there is about half a bag of sand left in the van.')).toBeTruthy()
   })
 })
+
+// ── Known spend (cost capture / consolidation) ──────────────────────────────
+
+function viewWithCost(overrides?: Partial<MemoryViewResponse>): MemoryViewResponse {
+  const orderedItems = [
+    {
+      id: 'mv-cost-1', memoryType: 'ordered_material', summary: 'plasterboard',
+      materialName: 'plasterboard', quantity: '12', unit: 'sheets', supplierName: 'Jewson',
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: '50', costCurrency: 'GBP', costQualifier: 'each' as const, totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    },
+    {
+      id: 'mv-cost-2', memoryType: 'ordered_material', summary: 'timber',
+      materialName: 'timber', quantity: '6', unit: 'lengths', supplierName: null,
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    },
+    {
+      id: 'mv-cost-3', memoryType: 'ordered_material', summary: 'screws cost was 50',
+      materialName: 'screws', quantity: null, unit: null, supplierName: null,
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: '50', costCurrency: 'GBP', costQualifier: 'unknown' as const, totalCostAmount: null,
+      uncertaintyFlags: ['cost_uncertain'], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    },
+  ]
+  return {
+    job: JOB,
+    generatedAt: '2026-06-22T10:00:00.000Z',
+    sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: orderedItems }],
+    stillToCheck: { count: 0, items: [] },
+    ...overrides,
+  }
+}
+
+describe('JobMemoryScreen — Known spend', () => {
+  beforeEach(() => {
+    mockUpdateMemoryItem.mockReset()
+    mockVerifyMemoryItem.mockReset()
+  })
+
+  it('shows "Known spend" (not "Total spend") derived from safe line totals', async () => {
+    mockGetMemoryView.mockResolvedValue(viewWithCost())
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    // plasterboard 12 × £50 = £600 (timber missing, screws worth-checking excluded)
+    expect(within(region).getByText('£600')).toBeTruthy()
+    expect(screen.queryByText(/total spend/i)).toBeNull()
+  })
+
+  it('calls out missing-cost and worth-checking bought items', async () => {
+    mockGetMemoryView.mockResolvedValue(viewWithCost())
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText(/1 bought item has no cost remembered/i)).toBeTruthy()
+    expect(within(region).getByText(/worth checking/i)).toBeTruthy()
+  })
+
+  it('prefers the backend cost summary when present and renders its line-total rows', async () => {
+    mockGetMemoryView.mockResolvedValue(viewWithCost({
+      costSummary: {
+        orderedMaterials: {
+          knownSpendAmount: '940', knownSpendCurrency: 'GBP', knownSpendLabel: '£940 known spend',
+          includedMemoryItemIds: ['mv-cost-1'], missingCostCount: 1, uncertainCostCount: 1,
+          excludedMemoryItemIds: ['mv-cost-2', 'mv-cost-3'],
+          rows: [
+            {
+              key: 'plasterboard|sheets', materialName: 'plasterboard', quantity: '24', unit: 'sheets',
+              lineTotalAmount: '1200', lineTotalCurrency: 'GBP', lineTotalLabel: '£1200 total',
+              memoryItemIds: ['mv-cost-1'],
+            },
+          ],
+        },
+      },
+    }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('£940')).toBeTruthy()
+    // the backend safe line-total row is shown, not just the aggregate
+    expect(within(region).getByText(/plasterboard · 24 sheets/)).toBeTruthy()
+    expect(within(region).getByText('£1200 total')).toBeTruthy()
+  })
+
+  it('detail card shows unit cost and total separately, never a bare number', async () => {
+    mockGetMemoryView.mockResolvedValue(viewWithCost())
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    expect(within(detail).getByText('Unit cost')).toBeTruthy()
+    expect(within(detail).getByText('£50 each')).toBeTruthy()
+    // screws cost basis is unknown → worth-checking note, not a bare "50"
+    expect(within(detail).getByText('£50 — worth checking')).toBeTruthy()
+    expect(within(detail).queryByText('50')).toBeNull()
+  })
+
+  it('fixing unit cost updates the known spend immediately', async () => {
+    mockGetMemoryView.mockResolvedValue(viewWithCost())
+    mockUpdateMemoryItem.mockResolvedValue({
+      id: 'mv-cost-1', memoryType: 'ordered_material', summary: 'plasterboard',
+      materialName: 'plasterboard', quantity: '12', unit: 'sheets', supplierName: 'Jewson',
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: '60', costCurrency: 'GBP', costQualifier: 'each', totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    })
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    const card = within(detail).getByText('£50 each').closest('.mem-card') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
+    const form = screen.getByRole('form', { name: /edit memory/i })
+    fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '60' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    // 12 × £60 = £720 now reflected in Known spend
+    await waitFor(() => {
+      expect(within(screen.getByRole('region', { name: /known spend/i })).getByText('£720')).toBeTruthy()
+    })
+  })
+
+  it('verifying a worth-checking ordered cost brings it into known spend', async () => {
+    // screws becomes a clean total once verified (flag cleared) — but unknown
+    // basis still won't total; use a derivable item flagged worth-checking
+    mockGetMemoryView.mockResolvedValue(viewWithCost({
+      sections: [{
+        key: 'ordered_materials', label: 'Ordered materials', items: [{
+          id: 'mv-v', memoryType: 'ordered_material', summary: 'bricks',
+          materialName: 'bricks', quantity: '10', unit: 'packs', supplierName: null,
+          deliveryTiming: null, locationOrUse: null,
+          costAmount: '20', costCurrency: 'GBP', costQualifier: 'each' as const, totalCostAmount: null,
+          uncertaintyFlags: ['cost_uncertain'], sourceCandidateFactId: null, reviewDecisionId: null,
+          createdAt: '', updatedAt: '', source: null,
+        }],
+      }],
+    }))
+    mockVerifyMemoryItem.mockResolvedValue({ uncertaintyFlags: [] })
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    // Before: excluded (worth checking), no known spend amount
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).queryByText('£200')).toBeNull()
+
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    fireEvent.click(within(detail).getByRole('button', { name: /this is right/i }))
+
+    // After verify: 10 × £20 = £200 now counted
+    await waitFor(() => {
+      expect(within(screen.getByRole('region', { name: /known spend/i })).getByText('£200')).toBeTruthy()
+    })
+  })
+})

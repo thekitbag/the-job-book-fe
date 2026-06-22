@@ -413,12 +413,38 @@ export interface ScanViewSection {
   items: ScanViewItem[]
 }
 
+// Backend-authoritative bought/ordered cost summary (memory-view.costSummary).
+export interface CostSummaryRow {
+  key: string
+  materialName: string
+  quantity: string | null
+  unit: string | null
+  lineTotalAmount: string
+  lineTotalCurrency: string
+  lineTotalLabel: string
+  memoryItemIds: string[]
+}
+export interface OrderedCostSummary {
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  knownSpendLabel: string | null
+  includedMemoryItemIds: string[]
+  missingCostCount: number
+  uncertainCostCount: number
+  excludedMemoryItemIds: string[]
+  rows: CostSummaryRow[]
+}
+export interface CostSummary {
+  orderedMaterials: OrderedCostSummary
+}
+
 export interface MemoryViewResponse {
   job: Job
   generatedAt: string
   sections: MemoryViewSection[]
   stillToCheck: MemoryViewStillToCheck
   summarySections?: ScanViewSection[]
+  costSummary?: CostSummary
 }
 
 // Request body for PATCH /api/jobs/:jobId/memory-items/:memoryItemId

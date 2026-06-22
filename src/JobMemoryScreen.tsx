@@ -3,14 +3,15 @@ import { getMemoryView, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import {
+  costDetailRows,
+  deriveCostSummary,
   deriveScanGroups,
-  formatCostLabel,
-  formatTotalLabel,
+  formatMoney,
   MEMORY_TYPE_TO_SECTION_KEY,
   SECTION_FULL_LABELS,
   SECTION_ORDER,
 } from './memoryScan'
-import type { Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, MemoryViewSection, ScanViewItem, ScanViewSection } from './types'
+import type { Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection } from './types'
 
 const SECTION_SHORT_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
@@ -41,10 +42,7 @@ function StructuredFields({ item }: { item: MemoryViewItem }) {
   if (item.supplierName) rows.push(['Supplier', item.supplierName])
   if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
   if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
-  const costLabel = formatCostLabel(item.costAmount, item.costCurrency, item.costQualifier)
-  if (costLabel) rows.push(['Cost', costLabel])
-  const totalLabel = formatTotalLabel(item.totalCostAmount, item.costCurrency)
-  if (totalLabel) rows.push(['Total', totalLabel])
+  rows.push(...costDetailRows(item))
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
 
   if (rows.length === 0 && !uncertain) return null
@@ -230,9 +228,44 @@ function ScanItem({ item }: { item: ScanViewItem }) {
       </span>
       {meta.length > 0 && <span className="mem-scan-item-meta">{meta.join(' · ')}</span>}
       {item.costLabel && <span className="mem-scan-item-cost">{item.costLabel}</span>}
-      {item.totalCostLabel && <span className="mem-scan-item-total">{item.totalCostLabel}</span>}
+      {item.totalCostLabel && <span className="mem-scan-item-total">{item.totalCostLabel} total</span>}
       {uncertain && <span className="mem-scan-item-uncertain">Worth checking</span>}
     </div>
+  )
+}
+
+// Known spend for bought/ordered materials. Deliberately not "Total spend" —
+// it's only the trusted line totals; missing/uncertain costs are called out.
+function KnownSpend({ summary, orderedCount }: { summary: OrderedCostSummary; orderedCount: number }) {
+  if (orderedCount === 0) return null
+  const notes: string[] = []
+  if (summary.missingCostCount === 1) notes.push('1 bought item has no cost remembered')
+  else if (summary.missingCostCount > 1) notes.push(`${summary.missingCostCount} bought items have no cost remembered`)
+  if (summary.uncertainCostCount === 1) notes.push('1 bought item has cost worth checking')
+  else if (summary.uncertainCostCount > 1) notes.push(`${summary.uncertainCostCount} bought items have cost worth checking`)
+
+  return (
+    <section className="mem-known-spend" aria-label="Known spend">
+      <p className="mem-known-spend-label">Known spend</p>
+      <p className="mem-known-spend-amount">
+        {summary.knownSpendAmount
+          ? formatMoney(parseFloat(summary.knownSpendAmount), summary.knownSpendCurrency)
+          : 'None known yet'}
+      </p>
+      {summary.rows.length > 0 && (
+        <ul className="mem-known-spend-rows">
+          {summary.rows.map(row => (
+            <li key={row.key} className="mem-known-spend-row">
+              <span className="mem-known-spend-row-item">
+                {[row.materialName, [row.quantity, row.unit].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
+              </span>
+              <span className="mem-known-spend-row-total">{row.lineTotalLabel}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {notes.length > 0 && <p className="mem-known-spend-note">{notes.join(' · ')}</p>}
+    </section>
   )
 }
 
@@ -304,7 +337,8 @@ export default function JobMemoryScreen({
         sections = sections.map(s => s.key === targetKey ? { ...s, items: [merged, ...s.items] } : s)
         sections.sort((a, b) =>
           ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
-        return { ...prev, sections }
+        // Drop the now-stale backend summary; Known spend recomputes locally.
+        return { ...prev, sections, costSummary: undefined }
       })
       setEditingId(null)
     } catch {
@@ -329,6 +363,8 @@ export default function JobMemoryScreen({
             ...s,
             items: s.items.map(it => it.id === memoryItemId ? { ...it, uncertaintyFlags: [] } : it),
           })),
+          // Resolving an item may bring it into Known spend; recompute locally.
+          costSummary: undefined,
         }
       })
     } catch {
@@ -349,6 +385,15 @@ export default function JobMemoryScreen({
     () => (data ? deriveScanGroups(data.sections) : []),
     [data],
   )
+  // Prefer the backend-authoritative cost summary on load; once a local edit
+  // drops it, recompute with the same safe rules so Known spend stays live.
+  const costSummary = useMemo<OrderedCostSummary | null>(
+    () => (data ? (data.costSummary?.orderedMaterials ?? deriveCostSummary(data.sections)) : null),
+    [data],
+  )
+  const orderedCount = data
+    ? (data.sections.find(s => s.key === 'ordered_materials')?.items.length ?? 0)
+    : 0
   const detailCount = data
     ? data.sections.reduce((n, s) => n + s.items.length, 0)
     : 0
@@ -402,6 +447,9 @@ export default function JobMemoryScreen({
 
           {hasMemory ? (
             <>
+              {/* Known bought/ordered spend — trusted line totals only */}
+              {costSummary && <KnownSpend summary={costSummary} orderedCount={orderedCount} />}
+
               {/* Layer 2 — Memory at a glance (primary scan surface) */}
               <ScanView sections={scanSections} />
 
