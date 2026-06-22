@@ -2872,6 +2872,42 @@ code {
 
 /* ── Memory scan view ── */
 
+/* ── Known spend — trusted bought/ordered line totals (not accounting) ── */
+
+.mem-known-spend {
+  margin: 0 1rem 1rem;
+  background:
+    radial-gradient(130% 130% at 0% 0%, var(--green-500) 0%, var(--green-600) 55%, var(--green-700) 100%);
+  color: #fff;
+  border-radius: var(--r-lg);
+  padding: 0.85rem 1.1rem;
+  box-shadow: var(--shadow-green);
+}
+
+.mem-known-spend-label {
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.mem-known-spend-amount {
+  margin: 0.1rem 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.mem-known-spend-note {
+  margin: 0.35rem 0 0;
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
 /* ── Memory at a glance — primary scan surface (the hero of the page) ── */
 
 .mem-scan {

@@ -72,6 +72,6 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await expect(scan.getByText('Bought / ordered')).toBeVisible()
     await expect(scan.getByText('hardcore')).toBeVisible()
     await expect(scan.getByText('£5 each', { exact: true })).toBeVisible()
-    await expect(scan.getByText('£40', { exact: true })).toBeVisible()
+    await expect(scan.getByText('£40 total', { exact: true })).toBeVisible()
   })
 })
