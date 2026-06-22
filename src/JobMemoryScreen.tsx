@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getMemoryView, updateMemoryItem } from './api'
+import { getMemoryView, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import {
@@ -100,18 +100,22 @@ function MemoryCard({
   item,
   isEditing,
   submitting,
+  verifying,
   errorMsg,
   onStartEdit,
   onCancelEdit,
   onSave,
+  onVerify,
 }: {
   item: MemoryViewItem
   isEditing: boolean
   submitting: boolean
+  verifying: boolean
   errorMsg: string | null
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
+  onVerify: () => void
 }) {
   const isMaterial = MATERIAL_TYPES.has(item.memoryType)
   const hasFields = !!(
@@ -120,6 +124,10 @@ function MemoryCard({
     item.costAmount || item.totalCostAmount ||
     (item.uncertaintyFlags ?? []).length > 0
   )
+  const uncertain = (item.uncertaintyFlags ?? []).length > 0
+  // Local acknowledgement of "Still unsure": hides the prompt but keeps the
+  // Worth-checking warning (the item genuinely stays unresolved).
+  const [ackUnsure, setAckUnsure] = useState(false)
 
   if (isEditing) {
     return (
@@ -131,13 +139,25 @@ function MemoryCard({
   }
 
   return (
-    <div className="mem-card">
+    <div className={`mem-card${uncertain ? ' mem-card--unresolved' : ''}`}>
       {isMaterial
         ? <p className="mem-card-type-label">{MATERIAL_TYPE_LABEL[item.memoryType]}</p>
         : <p className="mem-card-summary">{item.summary}</p>
       }
       <StructuredFields item={item} />
       {isMaterial && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
+
+      {uncertain && !ackUnsure && (
+        <div className="mem-resolve">
+          <button type="button" className="btn-mem-verify" onClick={onVerify} disabled={verifying}>
+            {verifying ? 'Saving…' : 'This is right'}
+          </button>
+          <button type="button" className="btn-mem-unsure" onClick={() => setAckUnsure(true)} disabled={verifying}>
+            Still unsure
+          </button>
+        </div>
+      )}
+
       <div className="mem-card-footer">
         <SourceContext item={item} />
         <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
@@ -151,18 +171,22 @@ function MemSection({
   section,
   editingId,
   submittingId,
+  verifyingId,
   itemErrors,
   onStartEdit,
   onCancelEdit,
   onSave,
+  onVerify,
 }: {
   section: MemoryViewSection
   editingId: string | null
   submittingId: string | null
+  verifyingId: string | null
   itemErrors: Record<string, string>
   onStartEdit: (id: string) => void
   onCancelEdit: () => void
   onSave: (id: string, edit: MemoryItemEdit) => void
+  onVerify: (id: string) => void
 }) {
   if (section.items.length === 0) return null
   const shortLabel = SECTION_SHORT_LABELS[section.key] ?? section.label
@@ -175,10 +199,12 @@ function MemSection({
           item={item}
           isEditing={editingId === item.id}
           submitting={submittingId === item.id}
+          verifying={verifyingId === item.id}
           errorMsg={itemErrors[item.id] ?? null}
           onStartEdit={() => onStartEdit(item.id)}
           onCancelEdit={onCancelEdit}
           onSave={edit => onSave(item.id, edit)}
+          onVerify={() => onVerify(item.id)}
         />
       ))}
     </section>
@@ -238,6 +264,7 @@ export default function JobMemoryScreen({
   const [errorMsg, setErrorMsg] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
   const [showDetail, setShowDetail] = useState(false)
 
@@ -260,7 +287,8 @@ export default function JobMemoryScreen({
     setSubmittingId(memoryItemId)
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
-      const updated = await updateMemoryItem(job.id, memoryItemId, edit)
+      // A normal Fix memory save also clears the Worth-checking warning.
+      const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
       setData(prev => {
         if (!prev) return prev
         // Preserve source linkage if the response omits it (mock returns null)
@@ -283,6 +311,30 @@ export default function JobMemoryScreen({
       setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
     } finally {
       setSubmittingId(null)
+    }
+  }, [job.id])
+
+  // Verify a Worth-checking item as right: clears the unresolved flags only,
+  // leaving structured fields (incl. approximate wording) untouched.
+  const handleVerify = useCallback(async (memoryItemId: string) => {
+    setVerifyingId(memoryItemId)
+    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      await verifyMemoryItem(job.id, memoryItemId)
+      setData(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          sections: prev.sections.map(s => ({
+            ...s,
+            items: s.items.map(it => it.id === memoryItemId ? { ...it, uncertaintyFlags: [] } : it),
+          })),
+        }
+      })
+    } catch {
+      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+    } finally {
+      setVerifyingId(null)
     }
   }, [job.id])
 
@@ -369,10 +421,12 @@ export default function JobMemoryScreen({
                     section={s}
                     editingId={editingId}
                     submittingId={submittingId}
+                    verifyingId={verifyingId}
                     itemErrors={itemErrors}
                     onStartEdit={setEditingId}
                     onCancelEdit={() => setEditingId(null)}
                     onSave={handleSaveEdit}
+                    onVerify={handleVerify}
                   />
                 ))}
               </section>

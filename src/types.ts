@@ -172,6 +172,7 @@ export interface AlreadyRememberedItem {
   costQualifier?: CostQualifier | null
   totalCostAmount?: string | null
   uncertaintyFlags?: string[]
+  sourceUncertaintyFlags?: string[]
 }
 
 export interface ReviewQueue {
@@ -183,11 +184,17 @@ export interface ReviewQueue {
 
 export type QueueDecisionAction = 'confirm' | 'correct' | 'dismiss'
 
+// How a Worth-checking item's unresolved state is settled when it becomes /
+// stays trusted memory. 'resolved' = Mike has dealt with it (clear the flag);
+// 'still_unsure' = keep it flagged.
+export type UncertaintyResolution = 'resolved' | 'still_unsure'
+
 export interface QueueDecision {
   queueItemId: string
   action: QueueDecisionAction
   corrected?: ProposedMemory
   reason?: string
+  uncertaintyResolution?: UncertaintyResolution
 }
 
 export interface QueueDecisionResponse {
@@ -350,7 +357,12 @@ export interface MemoryViewItem {
   costCurrency: string | null
   costQualifier: CostQualifier | null
   totalCostAmount: string | null
+  // Actionable unresolved flags (from memory_items.unresolvedFlags). Drives
+  // the "Worth checking" display; cleared when Mike resolves the item.
   uncertaintyFlags: string[]
+  // Provenance: the source candidate fact's original uncertainty. Preserved
+  // as evidence, not actionable. Optional until backend ships it.
+  sourceUncertaintyFlags?: string[]
   sourceCandidateFactId: string | null
   reviewDecisionId: string | null
   createdAt: string
@@ -424,4 +436,7 @@ export interface MemoryItemEdit {
   costCurrency: string | null
   costQualifier: CostQualifier | null
   totalCostAmount: string | null
+  // Clears (resolved) or keeps (still_unsure) memory_items.unresolvedFlags.
+  // Omitted preserves existing flags (backwards compatible).
+  uncertaintyResolution?: UncertaintyResolution
 }

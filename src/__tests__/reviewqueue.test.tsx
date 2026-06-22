@@ -7,6 +7,7 @@ import type { Job, QueueItem, ReviewQueue } from '../types'
 const mockGetReviewQueue = vi.mocked(api.getReviewQueue)
 const mockSubmitQueueDecision = vi.mocked(api.submitQueueDecision)
 const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
+const mockVerifyMemoryItem = vi.mocked(api.verifyMemoryItem)
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
@@ -15,6 +16,7 @@ vi.mock('../api', async (importOriginal) => {
     getReviewQueue: vi.fn(),
     submitQueueDecision: vi.fn(),
     updateMemoryItem: vi.fn(),
+    verifyMemoryItem: vi.fn(),
   }
 })
 
@@ -236,6 +238,7 @@ describe('ReviewQueueScreen', () => {
         action: 'confirm',
         corrected: undefined,
         reason: undefined,
+        uncertaintyResolution: 'resolved',
       })
     })
     await waitFor(() => {
@@ -261,6 +264,7 @@ describe('ReviewQueueScreen', () => {
         action: 'dismiss',
         corrected: undefined,
         reason: 'Not about this job',
+        uncertaintyResolution: undefined,
       })
     })
     await waitFor(() => {
@@ -1044,5 +1048,88 @@ describe('ReviewQueueScreen — Fix memory on remembered cards', () => {
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => expect(screen.getByText(/could not save/i)).toBeInTheDocument())
     expect(screen.getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
+  })
+})
+
+// ── Worth checking resolution in Things to check ────────────────────────────
+
+describe('ReviewQueueScreen — Worth checking resolution', () => {
+  const UNCERTAIN_DRAFT: QueueItem = {
+    ...ITEM_SINGLE,
+    id: 'qi-unc',
+    uncertaintyFlags: ['approximate_quantity'],
+  }
+
+  beforeEach(() => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-unc', action: 'confirm', status: 'confirmed',
+      memoryItemId: 'mem-x', sourceCandidateFactIds: [],
+    })
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [UNCERTAIN_DRAFT] }],
+    }))
+  })
+
+  it('confirming a Worth checking draft sends uncertaintyResolution: resolved', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getByRole('button', { name: /^remember this$/i }))
+    await waitFor(() => {
+      expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id,
+        expect.objectContaining({ action: 'confirm', uncertaintyResolution: 'resolved' }))
+    })
+  })
+
+  it('correcting a Worth checking draft sends uncertaintyResolution: resolved', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({
+      queueItemId: 'qi-unc', action: 'correct', status: 'corrected',
+      memoryItemId: 'mem-x', sourceCandidateFactIds: [],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getByRole('button', { name: /fix details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+    await waitFor(() => {
+      expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id,
+        expect.objectContaining({ action: 'correct', uncertaintyResolution: 'resolved' }))
+    })
+  })
+
+  it('Remember but still unsure sends uncertaintyResolution: still_unsure', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getByRole('button', { name: /still unsure/i }))
+    await waitFor(() => {
+      expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id,
+        expect.objectContaining({ action: 'confirm', uncertaintyResolution: 'still_unsure' }))
+    })
+  })
+
+  it('a non-uncertain draft has no Still unsure action', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue())
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    expect(screen.queryByRole('button', { name: /still unsure/i })).not.toBeInTheDocument()
+  })
+
+  it('verifying an uncertain already-remembered card clears its Worth checking', async () => {
+    mockVerifyMemoryItem.mockResolvedValue({ uncertaintyFlags: [] })
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [{
+        memoryItemId: 'mem-ord', summary: 'Ordered scaffolding from TCS',
+        memoryType: 'ordered_material', timeLabel: 'Yesterday',
+        materialName: 'scaffolding', uncertaintyFlags: ['approximate_quantity'],
+      }],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
+
+    const remembered = screen.getByRole('region', { name: /already remembered/i })
+    expect(within(remembered).getByText('Worth checking')).toBeInTheDocument()
+    fireEvent.click(within(remembered).getByRole('button', { name: /this is right/i }))
+
+    await waitFor(() => expect(mockVerifyMemoryItem).toHaveBeenCalledWith(MOCK_JOB.id, 'mem-ord'))
+    await waitFor(() => expect(within(remembered).queryByText('Worth checking')).not.toBeInTheDocument())
   })
 })

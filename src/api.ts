@@ -737,6 +737,27 @@ export async function updateMemoryItem(
   return res.json() as Promise<MemoryViewItem>
 }
 
+// POST /api/jobs/:jobId/memory-items/:memoryItemId/verify — mark a Worth-checking
+// item as right: clears unresolvedFlags without touching structured fields or
+// source candidate facts. Returns the normalized memory item.
+export async function verifyMemoryItem(
+  jobId: string,
+  memoryItemId: string,
+): Promise<{ uncertaintyFlags: string[] }> {
+  if (USE_MOCK) {
+    await delay(250)
+    return { uncertaintyFlags: [] }
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}/verify`, {
+    method: 'POST',
+  })
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Memory item not found', 404)
+  if (!res.ok) throw new ApiError(`POST verify memory-item → ${res.status}`, res.status)
+  return res.json() as Promise<MemoryViewItem>
+}
+
 function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
   const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
   return {
