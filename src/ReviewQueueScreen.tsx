@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getReviewQueue, submitQueueDecision, updateMemoryItem } from './api'
+import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
 import { formatCostLabel, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
@@ -14,6 +14,7 @@ import type {
   QueueItem,
   QueueSection,
   ReviewQueue,
+  UncertaintyResolution,
 } from './types'
 
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: string }[] = [
@@ -270,6 +271,7 @@ function QueueItemCard({
   submitting,
   errorMsg,
   onConfirm,
+  onConfirmStillUnsure,
   onStartEdit,
   onSubmitCorrection,
   onCancelEdit,
@@ -280,12 +282,14 @@ function QueueItemCard({
   submitting: boolean
   errorMsg: string | null
   onConfirm: () => void
+  onConfirmStillUnsure: () => void
   onStartEdit: () => void
   onSubmitCorrection: (corrected: ProposedMemory) => void
   onCancelEdit: () => void
   onDismiss: () => void
 }) {
   const resolved = item.status !== 'draft'
+  const uncertain = item.uncertaintyFlags.length > 0
   const memType = item.proposedMemory.memoryType
   const isMaterial = MATERIAL_TYPES.has(memType)
   const hasDetailFields = !!(
@@ -349,6 +353,14 @@ function QueueItemCard({
         </div>
       )}
 
+      {/* On a Worth-checking draft, "Remember this" confirms it as checked.
+          "Still unsure" remembers it but keeps the warning. */}
+      {!resolved && !isEditing && uncertain && (
+        <button className="btn-queue-unsure" onClick={onConfirmStillUnsure} disabled={submitting}>
+          Remember, but still unsure
+        </button>
+      )}
+
       {!resolved && isEditing && (
         <EditForm
           initial={item.proposedMemory}
@@ -367,20 +379,25 @@ function RememberedCard({
   item,
   isEditing,
   submitting,
+  verifying,
   errorMsg,
   onStartEdit,
   onCancelEdit,
   onSave,
+  onVerify,
 }: {
   item: AlreadyRememberedItem
   isEditing: boolean
   submitting: boolean
+  verifying: boolean
   errorMsg: string | null
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
+  onVerify: () => void
 }) {
   const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.shortLabel ?? item.memoryType
+  const [ackUnsure, setAckUnsure] = useState(false)
 
   if (isEditing) {
     return (
@@ -431,6 +448,16 @@ function RememberedCard({
           )}
         </dl>
       )}
+      {uncertain && !ackUnsure && (
+        <div className="mem-resolve">
+          <button type="button" className="btn-mem-verify" onClick={onVerify} disabled={verifying}>
+            {verifying ? 'Saving…' : 'This is right'}
+          </button>
+          <button type="button" className="btn-mem-unsure" onClick={() => setAckUnsure(true)} disabled={verifying}>
+            Still unsure
+          </button>
+        </div>
+      )}
       <div className="queue-remembered-card-footer">
         <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
       </div>
@@ -444,19 +471,23 @@ function AlreadyRememberedSection({
   focusedKey,
   editingId,
   submittingId,
+  verifyingId,
   itemErrors,
   onStartEdit,
   onCancelEdit,
   onSave,
+  onVerify,
 }: {
   items: AlreadyRememberedItem[]
   focusedKey: string | null
   editingId: string | null
   submittingId: string | null
+  verifyingId: string | null
   itemErrors: Record<string, string>
   onStartEdit: (id: string) => void
   onCancelEdit: () => void
   onSave: (id: string, edit: MemoryItemEdit) => void
+  onVerify: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
   // Already-remembered context follows the active category focus
@@ -483,10 +514,12 @@ function AlreadyRememberedSection({
               item={m}
               isEditing={editingId === m.memoryItemId}
               submitting={submittingId === m.memoryItemId}
+              verifying={verifyingId === m.memoryItemId}
               errorMsg={itemErrors[m.memoryItemId] ?? null}
               onStartEdit={() => onStartEdit(m.memoryItemId)}
               onCancelEdit={onCancelEdit}
               onSave={edit => onSave(m.memoryItemId, edit)}
+              onVerify={() => onVerify(m.memoryItemId)}
             />
           ))}
         </ul>
@@ -501,6 +534,7 @@ function SectionBlock({
   submittingId,
   itemErrors,
   onConfirm,
+  onConfirmStillUnsure,
   onStartEdit,
   onSubmitCorrection,
   onCancelEdit,
@@ -511,6 +545,7 @@ function SectionBlock({
   submittingId: string | null
   itemErrors: Record<string, string>
   onConfirm: (id: string) => void
+  onConfirmStillUnsure: (id: string) => void
   onStartEdit: (id: string) => void
   onSubmitCorrection: (id: string, corrected: ProposedMemory) => void
   onCancelEdit: () => void
@@ -528,6 +563,7 @@ function SectionBlock({
           submitting={submittingId === item.id}
           errorMsg={itemErrors[item.id] ?? null}
           onConfirm={() => onConfirm(item.id)}
+          onConfirmStillUnsure={() => onConfirmStillUnsure(item.id)}
           onStartEdit={() => onStartEdit(item.id)}
           onSubmitCorrection={corrected => onSubmitCorrection(item.id, corrected)}
           onCancelEdit={onCancelEdit}
@@ -548,6 +584,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   // Remembered-memory ("Fix memory") edit state — separate from draft review state
   const [editingMemId, setEditingMemId] = useState<string | null>(null)
   const [memSubmittingId, setMemSubmittingId] = useState<string | null>(null)
+  const [memVerifyingId, setMemVerifyingId] = useState<string | null>(null)
   const [memErrors, setMemErrors] = useState<Record<string, string>>({})
 
   const loadQueue = useCallback(() => {
@@ -563,6 +600,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     itemId: string,
     action: QueueDecisionAction,
     corrected?: ProposedMemory,
+    uncertaintyResolution?: UncertaintyResolution,
   ) => {
     if (!queue) return
     setSubmittingId(itemId)
@@ -573,6 +611,8 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         action,
         corrected,
         reason: action === 'dismiss' ? 'Not about this job' : undefined,
+        // Confirming/correcting a Worth-checking draft settles its uncertainty.
+        uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
       })
       setQueue(q => {
         if (!q) return q
@@ -602,7 +642,8 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     setMemSubmittingId(memoryItemId)
     setMemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
-      const updated = await updateMemoryItem(job.id, memoryItemId, edit)
+      // A normal Fix memory save also clears the Worth-checking warning.
+      const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
       setQueue(q => {
         if (!q) return q
         return {
@@ -616,6 +657,27 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
       setMemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
     } finally {
       setMemSubmittingId(null)
+    }
+  }, [job.id])
+
+  // Verify an already-remembered Worth-checking card as right (clears flag only).
+  const handleVerifyRemembered = useCallback(async (memoryItemId: string) => {
+    setMemVerifyingId(memoryItemId)
+    setMemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      await verifyMemoryItem(job.id, memoryItemId)
+      setQueue(q => {
+        if (!q) return q
+        return {
+          ...q,
+          alreadyRemembered: q.alreadyRemembered.map(m =>
+            m.memoryItemId === memoryItemId ? { ...m, uncertaintyFlags: [] } : m),
+        }
+      })
+    } catch {
+      setMemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+    } finally {
+      setMemVerifyingId(null)
     }
   }, [job.id])
 
@@ -701,9 +763,10 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                     editingItemId={editingItemId}
                     submittingId={submittingId}
                     itemErrors={itemErrors}
-                    onConfirm={id => handleDecision(id, 'confirm')}
+                    onConfirm={id => handleDecision(id, 'confirm', undefined, 'resolved')}
+                    onConfirmStillUnsure={id => handleDecision(id, 'confirm', undefined, 'still_unsure')}
                     onStartEdit={id => setEditingItemId(id)}
-                    onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected)}
+                    onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected, 'resolved')}
                     onCancelEdit={() => setEditingItemId(null)}
                     onDismiss={id => handleDecision(id, 'dismiss')}
                   />
@@ -717,10 +780,12 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                 focusedKey={focusedKey}
                 editingId={editingMemId}
                 submittingId={memSubmittingId}
+                verifyingId={memVerifyingId}
                 itemErrors={memErrors}
                 onStartEdit={setEditingMemId}
                 onCancelEdit={() => setEditingMemId(null)}
                 onSave={handleSaveRemembered}
+                onVerify={handleVerifyRemembered}
               />
             </>
           )}

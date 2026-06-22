@@ -10,11 +10,13 @@ vi.mock('../api', async (importOriginal) => {
     ...actual,
     getMemoryView: vi.fn(),
     updateMemoryItem: vi.fn(),
+    verifyMemoryItem: vi.fn(),
   }
 })
 
 const mockGetMemoryView = vi.mocked(api.getMemoryView)
 const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
+const mockVerifyMemoryItem = vi.mocked(api.verifyMemoryItem)
 
 const JOB: Job = {
   id: 'job-mem-001',
@@ -736,5 +738,128 @@ describe('JobMemoryScreen — Fix memory', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /fix memory/i })[0])
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => expect(screen.getByText(/could not save/i)).toBeInTheDocument())
+  })
+})
+
+// ── Worth checking resolution (verify / fix-clears / still unsure) ───────────
+
+const UNCERTAIN_VIEW: MemoryViewResponse = {
+  ...MEMORY_VIEW,
+  sections: MEMORY_VIEW.sections.map(s =>
+    s.key === 'leftovers'
+      ? {
+          ...s,
+          items: [{
+            id: 'mem-unc-1',
+            memoryType: 'leftover_material',
+            summary: 'About half a bag of sand left over',
+            materialName: 'sand',
+            quantity: 'about half',
+            unit: 'bag',
+            supplierName: null,
+            deliveryTiming: null,
+            locationOrUse: 'in the van',
+            costAmount: null,
+            costCurrency: null,
+            costQualifier: null as null,
+            totalCostAmount: null,
+            uncertaintyFlags: ['approximate_quantity'],
+            sourceUncertaintyFlags: ['approximate_quantity'],
+            sourceCandidateFactId: 'fact-unc',
+            reviewDecisionId: 'decision-unc',
+            createdAt: '2026-06-20T09:00:00.000Z',
+            updatedAt: '2026-06-20T09:00:00.000Z',
+            source: {
+              candidateFactId: 'fact-unc', noteId: 'note-unc', transcriptId: 'trans-unc',
+              capturedAt: '2026-06-20T08:50:00.000Z',
+              transcriptText: 'Think there is about half a bag of sand left in the van.',
+            },
+          }],
+        }
+      : s
+  ),
+  stillToCheck: { count: 0, items: [] },
+}
+
+describe('JobMemoryScreen — Worth checking resolution', () => {
+  beforeEach(() => {
+    mockGetMemoryView.mockResolvedValue(UNCERTAIN_VIEW)
+    mockVerifyMemoryItem.mockReset()
+    mockUpdateMemoryItem.mockReset()
+  })
+
+  it('shows Worth checking plus a verify action on an uncertain item', async () => {
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    expect(within(detail).getByText('Worth checking')).toBeTruthy()
+    expect(within(detail).getByRole('button', { name: /this is right/i })).toBeTruthy()
+    expect(within(detail).getByRole('button', { name: /still unsure/i })).toBeTruthy()
+  })
+
+  it('verifying clears Worth checking on the card and the scan roll-up but keeps approximate wording', async () => {
+    mockVerifyMemoryItem.mockResolvedValue({ uncertaintyFlags: [] })
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+
+    // Before: Worth checking roll-up present in the scan summary
+    await waitFor(() => screen.getByRole('region', { name: /memory scan/i }))
+    expect(screen.getByRole('region', { name: /memory scan/i }).textContent).toContain('Worth checking')
+
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    fireEvent.click(within(detail).getByRole('button', { name: /this is right/i }))
+
+    await waitFor(() => expect(mockVerifyMemoryItem).toHaveBeenCalledWith('job-mem-001', 'mem-unc-1'))
+    // Worth checking gone from card and scan; approximate value remains
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: /memory scan/i }).textContent).not.toContain('Worth checking')
+    })
+    expect(within(detail).queryByText('Worth checking')).toBeNull()
+    expect(within(detail).getByText('about half bag')).toBeTruthy()
+  })
+
+  it('Fix memory clears Worth checking and sends uncertaintyResolution: resolved', async () => {
+    mockUpdateMemoryItem.mockResolvedValue({
+      id: 'mem-unc-1', memoryType: 'leftover_material', summary: 'half a bag of sand',
+      materialName: 'sand', quantity: 'about half', unit: 'bag', supplierName: null,
+      deliveryTiming: null, locationOrUse: 'in the van',
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: 'fact-unc', reviewDecisionId: 'decision-unc',
+      createdAt: '', updatedAt: '', source: null,
+    })
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    const card = within(detail).getByText('in the van').closest('.mem-card') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateMemoryItem).toHaveBeenCalledWith('job-mem-001', 'mem-unc-1',
+        expect.objectContaining({ uncertaintyResolution: 'resolved' }))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: /memory scan/i }).textContent).not.toContain('Worth checking')
+    })
+  })
+
+  it('Still unsure keeps Worth checking visible', async () => {
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    fireEvent.click(within(detail).getByRole('button', { name: /still unsure/i }))
+    // No backend call; warning remains, verify prompt dismissed
+    expect(mockVerifyMemoryItem).not.toHaveBeenCalled()
+    expect(within(detail).getByText('Worth checking')).toBeTruthy()
+    expect(within(detail).queryByRole('button', { name: /this is right/i })).toBeNull()
+  })
+
+  it('source context remains available on an uncertain item', async () => {
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    const card = within(detail).getByText('in the van').closest('.mem-card') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /show source/i }))
+    expect(screen.getByText('Think there is about half a bag of sand left in the van.')).toBeTruthy()
   })
 })
