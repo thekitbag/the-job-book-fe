@@ -252,6 +252,18 @@ function KnownSpend({ summary, orderedCount }: { summary: OrderedCostSummary; or
           ? formatMoney(parseFloat(summary.knownSpendAmount), summary.knownSpendCurrency)
           : 'None known yet'}
       </p>
+      {summary.rows.length > 0 && (
+        <ul className="mem-known-spend-rows">
+          {summary.rows.map(row => (
+            <li key={row.key} className="mem-known-spend-row">
+              <span className="mem-known-spend-row-item">
+                {[row.materialName, [row.quantity, row.unit].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
+              </span>
+              <span className="mem-known-spend-row-total">{row.lineTotalLabel}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {notes.length > 0 && <p className="mem-known-spend-note">{notes.join(' · ')}</p>}
     </section>
   )

@@ -267,6 +267,25 @@ describe('deriveCostSummary (Known spend)', () => {
     ])
     expect(s.knownSpendAmount).toBeNull()
   })
+
+  it('does not consolidate two explicit-total ordered items with null unit', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'a', materialName: 'sundries', quantity: null, unit: null, totalCostAmount: '30', costCurrency: 'GBP' }),
+      orderedItem({ id: 'b', materialName: 'sundries', quantity: null, unit: null, totalCostAmount: '20', costCurrency: 'GBP' }),
+    ]))
+    // both are safe (explicit totals) so still counted, but kept as separate rows
+    expect(s.knownSpendAmount).toBe('50')
+    expect(s.rows).toHaveLength(2)
+    expect(s.rows.map(r => r.memoryItemIds)).toEqual([['a'], ['b']])
+  })
+
+  it('does not consolidate ordered items with null materialName', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'a', materialName: null, unit: 'job', totalCostAmount: '30', costCurrency: 'GBP' }),
+      orderedItem({ id: 'b', materialName: null, unit: 'job', totalCostAmount: '20', costCurrency: 'GBP' }),
+    ]))
+    expect(s.rows).toHaveLength(2)
+  })
 })
 
 describe('costDetailRows', () => {

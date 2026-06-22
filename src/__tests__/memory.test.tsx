@@ -925,19 +925,29 @@ describe('JobMemoryScreen — Known spend', () => {
     expect(within(region).getByText(/worth checking/i)).toBeTruthy()
   })
 
-  it('prefers the backend cost summary when present', async () => {
+  it('prefers the backend cost summary when present and renders its line-total rows', async () => {
     mockGetMemoryView.mockResolvedValue(viewWithCost({
       costSummary: {
         orderedMaterials: {
           knownSpendAmount: '940', knownSpendCurrency: 'GBP', knownSpendLabel: '£940 known spend',
           includedMemoryItemIds: ['mv-cost-1'], missingCostCount: 1, uncertainCostCount: 1,
-          excludedMemoryItemIds: ['mv-cost-2', 'mv-cost-3'], rows: [],
+          excludedMemoryItemIds: ['mv-cost-2', 'mv-cost-3'],
+          rows: [
+            {
+              key: 'plasterboard|sheets', materialName: 'plasterboard', quantity: '24', unit: 'sheets',
+              lineTotalAmount: '1200', lineTotalCurrency: 'GBP', lineTotalLabel: '£1200 total',
+              memoryItemIds: ['mv-cost-1'],
+            },
+          ],
         },
       },
     }))
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     const region = await screen.findByRole('region', { name: /known spend/i })
     expect(within(region).getByText('£940')).toBeTruthy()
+    // the backend safe line-total row is shown, not just the aggregate
+    expect(within(region).getByText(/plasterboard · 24 sheets/)).toBeTruthy()
+    expect(within(region).getByText('£1200 total')).toBeTruthy()
   })
 
   it('detail card shows unit cost and total separately, never a bare number', async () => {

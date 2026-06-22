@@ -27,6 +27,15 @@ test.describe('Cost capture & Known spend', () => {
     await expect(page.getByText(/total spend/i)).toHaveCount(0)
   })
 
+  test('renders backend safe line-total rows under Known spend', async ({ page }) => {
+    await openJobMemory(page)
+    const region = page.getByRole('region', { name: /known spend/i })
+    // backend costSummary.rows: plasterboard · 24 sheets · £1200 total
+    await expect(region.getByText(/plasterboard · 24 sheets/)).toBeVisible()
+    await expect(region.getByText('£1200 total')).toBeVisible()
+    await expect(region.getByText(/hardcore · 8 bags/)).toBeVisible()
+  })
+
   test('a bought/ordered detail card shows unit cost and total, not a bare number', async ({ page }) => {
     await openJobMemory(page)
     await page.getByRole('button', { name: /show details/i }).click()

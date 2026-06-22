@@ -114,10 +114,13 @@ export function deriveCostSummary(sections: MemoryViewSection[]): OrderedCostSum
     }
   }
 
-  // Consolidate included items into like-for-like rows (material + unit).
+  // Consolidate included items into like-for-like rows — only when BOTH
+  // material and unit are present (matches the backend rule). Items missing
+  // either stay standalone so we never merge unlike explicit totals.
   const rowMap = new Map<string, { item: MemoryViewItem; amount: number; ids: string[] }>()
   for (const item of included) {
-    const key = `${item.materialName ?? ''}|${item.unit ?? ''}`
+    const groupable = !!item.materialName && !!item.unit
+    const key = groupable ? `${item.materialName}|${item.unit}` : `__standalone__${item.id}`
     const amount = safeLineTotal(item)!.amount
     const existing = rowMap.get(key)
     if (existing) {
