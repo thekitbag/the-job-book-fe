@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test'
 // Mock memory-view costSummary (Known spend clarity fix) spans the five cases:
 //  - hardcore       — included cost item (£40)
 //  - plasterboard×2 — trusted money-total row, consolidated to £1200
-//  - timber         — no-cost item (No cost remembered)
+//  - timber         — no-cost, currency-null item (No cost remembered)
 //  - insulation     — approximate, untrusted cost (Cost worth checking)
 //  - membrane×2     — consolidated quantity rollup (10 rolls) with no trusted cost
 // Known spend = hardcore £40 + plasterboard £1200 = £1240.
@@ -79,7 +79,7 @@ test.describe('Cost capture & Known spend', () => {
     await expect(hardcore.getByText('Total')).toBeVisible()
   })
 
-  test('correcting an excluded cost moves it into Known spend via the refetched summary', async ({ page }) => {
+  test('correcting a currency-null excluded cost defaults GBP and moves it into Known spend', async ({ page }) => {
     await openJobMemory(page)
     const region = page.getByRole('region', { name: /known spend/i })
     await expect(region.getByText('£1240')).toBeVisible()
@@ -90,6 +90,8 @@ test.describe('Cost capture & Known spend', () => {
     const timber = page.locator('.mem-card', { hasText: 'timber' })
     await timber.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
+    // timber starts currency-null; the GBP cue is shown and GBP is submitted.
+    await expect(form.getByText(/Cost amount \(£\)/)).toBeVisible()
     await form.locator('input[name="costAmount"]').fill('10')
     await form.locator('select').nth(1).selectOption('each') // cost qualifier
     await page.getByRole('button', { name: /save memory/i }).click()

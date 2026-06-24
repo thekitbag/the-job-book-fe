@@ -38,11 +38,22 @@ export default function MemoryEditForm({
   const setStr = (k: Exclude<keyof MemoryItemEdit, 'memoryType' | 'costQualifier'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
 
+  // Pilot is GBP, but preserve any non-GBP currency already on the item.
+  const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
+
+  // When a cost is entered on an item with no currency yet, default it to GBP so
+  // the figure can count towards Known spend. Never clobber an existing currency.
+  const handleSubmit = () => {
+    const hasCost = !!(form.costAmount || form.totalCostAmount)
+    const costCurrency = form.costCurrency || (hasCost ? 'GBP' : null)
+    onSubmit({ ...form, costCurrency })
+  }
+
   return (
     <form
       className="queue-edit-form"
       aria-label="Edit memory"
-      onSubmit={e => { e.preventDefault(); onSubmit(form) }}
+      onSubmit={e => { e.preventDefault(); handleSubmit() }}
     >
       <label className="queue-field">
         <span className="queue-field-label">Type</span>
@@ -79,7 +90,7 @@ export default function MemoryEditForm({
         <input className="queue-field-input" name="locationOrUse" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
       </label>
       <label className="queue-field">
-        <span className="queue-field-label">Cost amount</span>
+        <span className="queue-field-label">Cost amount {currencyCue}</span>
         <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
       </label>
       <label className="queue-field">
@@ -93,7 +104,7 @@ export default function MemoryEditForm({
         </select>
       </label>
       <label className="queue-field">
-        <span className="queue-field-label">Total cost</span>
+        <span className="queue-field-label">Total cost {currencyCue}</span>
         <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
       </label>
       <div className="queue-edit-actions">

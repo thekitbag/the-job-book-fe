@@ -834,7 +834,9 @@ function buildMockSections(): MemoryViewSection[] {
             deliveryTiming: null,
             locationOrUse: null,
             costAmount: null,
-            costCurrency: 'GBP',
+            // Genuinely currency-null: adding a cost must default the currency to
+            // GBP so the line can count towards Known spend.
+            costCurrency: null,
             costQualifier: null,
             totalCostAmount: null,
             uncertaintyFlags: [],
