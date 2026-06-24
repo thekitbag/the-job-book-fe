@@ -1,4 +1,4 @@
-import type { MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection } from './types'
+import type { ExcludedSpendRow, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -55,6 +55,17 @@ export function costDetailRows(item: {
   return rows
 }
 
+// Map a backend exclusion reason to builder-facing copy. An unknown future
+// reason is treated as the safe "Cost worth checking" — never as included — and
+// surfaced in dev/tests so the unmapped value is observable.
+export function spendExclusionCopy(reason: string): string {
+  if (reason === 'no_cost_remembered') return 'No cost remembered'
+  if (reason !== 'cost_worth_checking' && import.meta.env.DEV) {
+    console.warn(`Unknown spend exclusion reason: ${reason}`)
+  }
+  return 'Cost worth checking'
+}
+
 const DECIMAL = /^\d+(\.\d+)?$/
 
 /**
@@ -94,6 +105,7 @@ export function deriveCostSummary(sections: MemoryViewSection[]): OrderedCostSum
 
   const included: MemoryViewItem[] = []
   const excludedMemoryItemIds: string[] = []
+  const excludedRows: ExcludedSpendRow[] = []
   let missingCostCount = 0
   let uncertainCostCount = 0
   let total = 0
@@ -107,33 +119,39 @@ export function deriveCostSummary(sections: MemoryViewSection[]): OrderedCostSum
     } else if (!hasAnyCost) {
       missingCostCount++
       excludedMemoryItemIds.push(item.id)
+      excludedRows.push(excludedRow(item, 'no_cost_remembered'))
     } else {
       // has a cost but it's not safe to total (uncertain / ambiguous basis)
       uncertainCostCount++
       excludedMemoryItemIds.push(item.id)
+      excludedRows.push(excludedRow(item, 'cost_worth_checking'))
     }
   }
 
   // Consolidate included items into like-for-like rows — only when BOTH
   // material and unit are present (matches the backend rule). Items missing
   // either stay standalone so we never merge unlike explicit totals.
-  const rowMap = new Map<string, { item: MemoryViewItem; amount: number; ids: string[] }>()
+  const rowMap = new Map<string, { item: MemoryViewItem; amount: number; quantity: number; ids: string[] }>()
   for (const item of included) {
     const groupable = !!item.materialName && !!item.unit
     const key = groupable ? `${item.materialName}|${item.unit}` : `__standalone__${item.id}`
     const amount = safeLineTotal(item)!.amount
+    const qty = DECIMAL.test(item.quantity ?? '') ? parseFloat(item.quantity!) : NaN
     const existing = rowMap.get(key)
     if (existing) {
       existing.amount += amount
+      existing.quantity += qty
       existing.ids.push(item.id)
     } else {
-      rowMap.set(key, { item, amount, ids: [item.id] })
+      rowMap.set(key, { item, amount, quantity: qty, ids: [item.id] })
     }
   }
-  const rows = [...rowMap.entries()].map(([key, { item, amount, ids }]) => ({
+  const rows = [...rowMap.entries()].map(([key, { item, amount, quantity, ids }]) => ({
     key,
     materialName: item.materialName ?? '',
-    quantity: item.quantity,
+    // Consolidated rows show the summed quantity, not the first item's, so the
+    // displayed total quantity matches the summed line total.
+    quantity: Number.isFinite(quantity) ? String(Math.round(quantity * 1000) / 1000) : item.quantity,
     unit: item.unit,
     lineTotalAmount: String(Math.round(amount * 100) / 100),
     lineTotalCurrency: currency,
@@ -151,6 +169,22 @@ export function deriveCostSummary(sections: MemoryViewSection[]): OrderedCostSum
     uncertainCostCount,
     excludedMemoryItemIds,
     rows,
+    excludedRows,
+  }
+}
+
+// One named exclusion row per excluded memory item (never consolidated — each
+// item may have a distinct reason or correction path). itemLabel prefers a
+// trimmed material name and falls back to the remembered summary; never blank.
+function excludedRow(item: MemoryViewItem, reason: SpendExclusionReason): ExcludedSpendRow {
+  const label = item.materialName?.trim() || item.summary?.trim() || 'Bought item'
+  return {
+    memoryItemId: item.id,
+    itemLabel: label,
+    materialName: item.materialName,
+    quantity: item.quantity,
+    unit: item.unit,
+    reason,
   }
 }
 

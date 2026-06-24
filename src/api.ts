@@ -1,4 +1,5 @@
-import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import { deriveCostSummary, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -681,7 +682,7 @@ function MOCK_INSPECTION_DATA(jobId: string): InspectionData {
 export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> {
   if (USE_MOCK) {
     await delay(500)
-    return MOCK_MEMORY_VIEW(jobId)
+    return mockMemoryView(jobId)
   }
   const res = await apiFetch(`/api/jobs/${jobId}/memory-view`)
   if (res.status === 401) throw new ApiError('Unauthenticated', 401)
@@ -701,28 +702,7 @@ export async function updateMemoryItem(
 ): Promise<MemoryViewItem> {
   if (USE_MOCK) {
     await delay(300)
-    const now = new Date().toISOString()
-    return {
-      id: memoryItemId,
-      memoryType: edit.memoryType,
-      summary: edit.summary ?? '',
-      materialName: edit.materialName,
-      quantity: edit.quantity,
-      unit: edit.unit,
-      supplierName: edit.supplierName,
-      deliveryTiming: edit.deliveryTiming,
-      locationOrUse: edit.locationOrUse,
-      costAmount: edit.costAmount,
-      costCurrency: edit.costCurrency,
-      costQualifier: edit.costQualifier,
-      totalCostAmount: edit.totalCostAmount,
-      uncertaintyFlags: [],
-      sourceCandidateFactId: null,
-      reviewDecisionId: null,
-      createdAt: now,
-      updatedAt: now,
-      source: null,
-    }
+    return mockUpdateMemoryItem(jobId, memoryItemId, edit)
   }
   const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}`, {
     method: 'PATCH',
@@ -746,6 +726,7 @@ export async function verifyMemoryItem(
 ): Promise<{ uncertaintyFlags: string[] }> {
   if (USE_MOCK) {
     await delay(250)
+    mockVerifyMemoryItem(jobId, memoryItemId)
     return { uncertaintyFlags: [] }
   }
   const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}/verify`, {
@@ -758,12 +739,15 @@ export async function verifyMemoryItem(
   return res.json() as Promise<MemoryViewItem>
 }
 
-function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
-  const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
-  return {
-    job,
-    generatedAt: new Date().toISOString(),
-    sections: [
+// Canonical seed for the stateful mock memory-view. The bought/ordered section
+// deliberately spans the five Known-spend cases the pilot fix must distinguish:
+//  - hardcore: an included cost item (£40)
+//  - plasterboard ×2: a trusted money-total row, consolidated to £1200
+//  - timber: a no-cost item (No cost remembered)
+//  - insulation: an approximate, untrusted cost (Cost worth checking)
+//  - membrane ×2: a consolidated quantity row with no trusted cost
+function buildMockSections(): MemoryViewSection[] {
+  return [
       {
         key: 'ordered_materials',
         label: 'Ordered materials',
@@ -850,7 +834,9 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
             deliveryTiming: null,
             locationOrUse: null,
             costAmount: null,
-            costCurrency: 'GBP',
+            // Genuinely currency-null: adding a cost must default the currency to
+            // GBP so the line can count towards Known spend.
+            costCurrency: null,
             costQualifier: null,
             totalCostAmount: null,
             uncertaintyFlags: [],
@@ -858,6 +844,75 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
             reviewDecisionId: 'decision-006',
             createdAt: '2026-06-13T09:40:00.000Z',
             updatedAt: '2026-06-13T09:40:00.000Z',
+            source: null,
+          },
+          // Has a remembered cost, but only as an approximate basis → not safe to
+          // total, so it is excluded as "Cost worth checking". No uncertaintyFlags,
+          // so it does NOT appear in the scan "Worth checking" roll-up.
+          {
+            id: 'mem-view-009',
+            memoryType: 'ordered_material',
+            summary: 'Ordered 4 packs of insulation, roughly £120',
+            materialName: 'insulation',
+            quantity: '4',
+            unit: 'packs',
+            supplierName: 'Jewson',
+            deliveryTiming: null,
+            locationOrUse: null,
+            costAmount: '120',
+            costCurrency: 'GBP',
+            costQualifier: 'approx' as const,
+            totalCostAmount: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-009',
+            reviewDecisionId: 'decision-009',
+            createdAt: '2026-06-13T09:42:00.000Z',
+            updatedAt: '2026-06-13T09:42:00.000Z',
+            source: null,
+          },
+          // Two like-for-like membrane rows with no cost → consolidate to a single
+          // quantity row (10 rolls total) that carries no money, and both are
+          // excluded from Known spend as "No cost remembered".
+          {
+            id: 'mem-view-010',
+            memoryType: 'ordered_material',
+            summary: 'Ordered 5 rolls of DPM membrane',
+            materialName: 'membrane',
+            quantity: '5',
+            unit: 'rolls',
+            supplierName: 'Travis Perkins',
+            deliveryTiming: null,
+            locationOrUse: null,
+            costAmount: null,
+            costCurrency: 'GBP',
+            costQualifier: null,
+            totalCostAmount: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-010',
+            reviewDecisionId: 'decision-010',
+            createdAt: '2026-06-13T09:44:00.000Z',
+            updatedAt: '2026-06-13T09:44:00.000Z',
+            source: null,
+          },
+          {
+            id: 'mem-view-011',
+            memoryType: 'ordered_material',
+            summary: 'Ordered 5 more rolls of DPM membrane',
+            materialName: 'membrane',
+            quantity: '5',
+            unit: 'rolls',
+            supplierName: 'Travis Perkins',
+            deliveryTiming: null,
+            locationOrUse: null,
+            costAmount: null,
+            costCurrency: 'GBP',
+            costQualifier: null,
+            totalCostAmount: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-011',
+            reviewDecisionId: 'decision-011',
+            createdAt: '2026-06-13T09:45:00.000Z',
+            updatedAt: '2026-06-13T09:45:00.000Z',
             source: null,
           },
         ],
@@ -978,7 +1033,41 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
           },
         ],
       },
-    ],
+    ]
+}
+
+// Per-job mutable memory state so a post-edit refetch reflects the edit, the way
+// a real backend would. Module-level, so it resets on every full page load
+// (each Playwright test starts with page.goto) — no cross-test leakage.
+let mockMemoryByJob: Map<string, MemoryViewSection[]> | null = null
+
+function mockSectionsFor(jobId: string): MemoryViewSection[] {
+  if (!mockMemoryByJob) mockMemoryByJob = new Map()
+  if (!mockMemoryByJob.has(jobId)) mockMemoryByJob.set(jobId, buildMockSections())
+  return mockMemoryByJob.get(jobId)!
+}
+
+// Test seam: drop any accumulated mock edits.
+export function _resetMockMemoryForTesting(): void {
+  mockMemoryByJob = null
+}
+
+function findMockItem(sections: MemoryViewSection[], id: string): MemoryViewItem | undefined {
+  for (const s of sections) {
+    const found = s.items.find(it => it.id === id)
+    if (found) return found
+  }
+  return undefined
+}
+
+function mockMemoryView(jobId: string): MemoryViewResponse {
+  const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
+  const sections = mockSectionsFor(jobId)
+  return {
+    job,
+    generatedAt: new Date().toISOString(),
+    // Deep-ish copy so callers cannot mutate the stored fixture in place.
+    sections: sections.map(s => ({ ...s, items: s.items.map(it => ({ ...it })) })),
     stillToCheck: {
       count: 2,
       items: [
@@ -991,32 +1080,54 @@ function MOCK_MEMORY_VIEW(jobId: string): MemoryViewResponse {
         },
       ],
     },
-    // Backend-authoritative known spend: hardcore £40 + plasterboard 2×£600.
-    // Timber has no cost remembered (missing). Leftover sand is not ordered.
-    costSummary: {
-      orderedMaterials: {
-        knownSpendAmount: '1240',
-        knownSpendCurrency: 'GBP',
-        knownSpendLabel: '£1240 known spend',
-        includedMemoryItemIds: ['mem-view-001', 'mem-view-004', 'mem-view-005'],
-        missingCostCount: 1,
-        uncertainCostCount: 0,
-        excludedMemoryItemIds: ['mem-view-006'],
-        rows: [
-          {
-            key: 'hardcore|bags', materialName: 'hardcore', quantity: '8', unit: 'bags',
-            lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total',
-            memoryItemIds: ['mem-view-001'],
-          },
-          {
-            key: 'plasterboard|sheets', materialName: 'plasterboard', quantity: '24', unit: 'sheets',
-            lineTotalAmount: '1200', lineTotalCurrency: 'GBP', lineTotalLabel: '£1200 total',
-            memoryItemIds: ['mem-view-004', 'mem-view-005'],
-          },
-        ],
-      },
-    },
+    // Authoritative known spend, derived from current state so an edit changes it.
+    costSummary: { orderedMaterials: deriveCostSummary(sections) },
   }
+}
+
+function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryItemEdit): MemoryViewItem {
+  const sections = mockSectionsFor(jobId)
+  const existing = findMockItem(sections, memoryItemId)
+  const now = new Date().toISOString()
+  const updated: MemoryViewItem = {
+    id: memoryItemId,
+    memoryType: edit.memoryType,
+    summary: edit.summary ?? existing?.summary ?? '',
+    materialName: edit.materialName,
+    quantity: edit.quantity,
+    unit: edit.unit,
+    supplierName: edit.supplierName,
+    deliveryTiming: edit.deliveryTiming,
+    locationOrUse: edit.locationOrUse,
+    costAmount: edit.costAmount,
+    costCurrency: edit.costCurrency,
+    costQualifier: edit.costQualifier,
+    totalCostAmount: edit.totalCostAmount,
+    // A Fix-memory save also resolves any worth-checking flags.
+    uncertaintyFlags: [],
+    sourceCandidateFactId: existing?.sourceCandidateFactId ?? null,
+    reviewDecisionId: existing?.reviewDecisionId ?? null,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    source: existing?.source ?? null,
+  }
+  // Remove from its current section, then re-home by the (possibly new) type.
+  for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
+  const targetKey = MEMORY_TYPE_TO_SECTION_KEY[updated.memoryType] ?? updated.memoryType
+  let target = sections.find(s => s.key === targetKey)
+  if (!target) {
+    target = { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }
+    sections.push(target)
+    sections.sort((a, b) =>
+      ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
+  }
+  target.items.unshift(updated)
+  return { ...updated }
+}
+
+function mockVerifyMemoryItem(jobId: string, memoryItemId: string): void {
+  const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
+  if (item) item.uncertaintyFlags = []
 }
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {

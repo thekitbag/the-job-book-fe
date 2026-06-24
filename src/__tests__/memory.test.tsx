@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import JobMemoryScreen from '../JobMemoryScreen'
 import * as api from '../api'
@@ -917,12 +917,17 @@ describe('JobMemoryScreen — Known spend', () => {
     expect(screen.queryByText(/total spend/i)).toBeNull()
   })
 
-  it('calls out missing-cost and worth-checking bought items', async () => {
+  it('names each excluded bought item under "Not included yet" with its reason', async () => {
+    // viewWithCost has no backend costSummary → local fallback derives excludedRows.
     mockGetMemoryView.mockResolvedValue(viewWithCost())
     render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
     const region = await screen.findByRole('region', { name: /known spend/i })
-    expect(within(region).getByText(/1 bought item has no cost remembered/i)).toBeTruthy()
-    expect(within(region).getByText(/worth checking/i)).toBeTruthy()
+    expect(within(region).getByText('Not included yet')).toBeTruthy()
+    // timber has no cost at all; screws has an untrusted (unknown-basis) cost
+    expect(within(region).getByText(/timber/)).toBeTruthy()
+    expect(within(region).getByText('No cost remembered')).toBeTruthy()
+    expect(within(region).getByText(/screws/)).toBeTruthy()
+    expect(within(region).getByText('Cost worth checking')).toBeTruthy()
   })
 
   it('prefers the backend cost summary when present and renders its line-total rows', async () => {
@@ -1016,5 +1021,234 @@ describe('JobMemoryScreen — Known spend', () => {
     await waitFor(() => {
       expect(within(screen.getByRole('region', { name: /known spend/i })).getByText('£200')).toBeTruthy()
     })
+  })
+})
+
+// ── Known spend clarity (Included / Not included yet) ────────────────────────
+
+describe('JobMemoryScreen — Known spend clarity', () => {
+  beforeEach(() => {
+    mockUpdateMemoryItem.mockReset()
+    mockVerifyMemoryItem.mockReset()
+  })
+
+  // A backend summary carrying the additive excludedRows contract.
+  function summaryView(over?: Partial<import('../types').OrderedCostSummary>): MemoryViewResponse {
+    return viewWithCost({
+      costSummary: {
+        orderedMaterials: {
+          knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend',
+          includedMemoryItemIds: ['inc'], missingCostCount: 1, uncertainCostCount: 1,
+          excludedMemoryItemIds: ['miss', 'unsure'],
+          rows: [
+            { key: 'hardcore|bags', materialName: 'hardcore', quantity: '8', unit: 'bags',
+              lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total', memoryItemIds: ['inc'] },
+          ],
+          excludedRows: [
+            { memoryItemId: 'miss', itemLabel: 'timber', materialName: 'timber', quantity: '6', unit: 'lengths', reason: 'no_cost_remembered' },
+            { memoryItemId: 'unsure', itemLabel: 'insulation', materialName: 'insulation', quantity: '4', unit: 'packs', reason: 'cost_worth_checking' },
+          ],
+          ...over,
+        },
+      },
+    })
+  }
+
+  it('shows an Included row with its money total and a Not included yet group with reasons', async () => {
+    mockGetMemoryView.mockResolvedValue(summaryView())
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('Included')).toBeTruthy()
+    expect(within(region).getByText(/hardcore · 8 bags/)).toBeTruthy()
+    expect(within(region).getByText('£40 total')).toBeTruthy()
+    expect(within(region).getByText('Not included yet')).toBeTruthy()
+    expect(within(region).getByText(/timber · 6 lengths/)).toBeTruthy()
+    expect(within(region).getByText('No cost remembered')).toBeTruthy()
+    expect(within(region).getByText(/insulation · 4 packs/)).toBeTruthy()
+    expect(within(region).getByText('Cost worth checking')).toBeTruthy()
+  })
+
+  it('shows None known yet with named exclusions when nothing is included', async () => {
+    mockGetMemoryView.mockResolvedValue(summaryView({
+      knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null,
+      includedMemoryItemIds: [], rows: [],
+    }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('None known yet')).toBeTruthy()
+    expect(within(region).queryByText('Included')).toBeNull()
+    expect(within(region).getByText('Not included yet')).toBeTruthy()
+    expect(within(region).getByText(/timber/)).toBeTruthy()
+  })
+
+  it('does not render the Not included yet group when there are no exclusions', async () => {
+    mockGetMemoryView.mockResolvedValue(summaryView({
+      missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], excludedRows: [],
+    }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('Included')).toBeTruthy()
+    expect(within(region).queryByText('Not included yet')).toBeNull()
+  })
+
+  it('keeps the count-based copy for an older backend without excludedRows', async () => {
+    const older = summaryView()
+    // Simulate an older backend: drop the additive field entirely.
+    delete (older.costSummary!.orderedMaterials as { excludedRows?: unknown }).excludedRows
+    mockGetMemoryView.mockResolvedValue(older)
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).queryByText('Not included yet')).toBeNull()
+    expect(within(region).getByText(/1 bought item has no cost remembered/i)).toBeTruthy()
+    expect(within(region).getByText(/1 bought item has cost worth checking/i)).toBeTruthy()
+  })
+
+  it('renders an unknown future reason as the safe "Cost worth checking" without crashing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockGetMemoryView.mockResolvedValue(summaryView({
+      excludedRows: [
+        { memoryItemId: 'x', itemLabel: 'mystery', materialName: 'mystery', quantity: '1', unit: 'unit', reason: 'some_future_reason' },
+      ],
+    }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText(/mystery/)).toBeTruthy()
+    expect(within(region).getByText('Cost worth checking')).toBeTruthy()
+    warn.mockRestore()
+  })
+
+  it('does not show a standalone "total" badge on a consolidated quantity rollup', async () => {
+    // Two like-for-like no-cost rows consolidate to a quantity rollup in the scan.
+    mockGetMemoryView.mockResolvedValue(viewWithCost({
+      sections: [{
+        key: 'ordered_materials', label: 'Ordered materials', items: [
+          { id: 'r1', memoryType: 'ordered_material', summary: 'membrane', materialName: 'membrane', quantity: '5', unit: 'rolls', supplierName: null, deliveryTiming: null, locationOrUse: null, costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null, uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null, createdAt: '', updatedAt: '', source: null },
+          { id: 'r2', memoryType: 'ordered_material', summary: 'membrane', materialName: 'membrane', quantity: '5', unit: 'rolls', supplierName: null, deliveryTiming: null, locationOrUse: null, costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null, uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null, createdAt: '', updatedAt: '', source: null },
+        ],
+      }],
+    }))
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const scan = await screen.findByRole('region', { name: /memory scan/i })
+    // Quantity is expressed inline ("10 rolls total"), and the old badge element is gone.
+    expect(within(scan).getByText(/10 rolls total/)).toBeTruthy()
+    expect(scan.querySelector('.mem-scan-item-tag')).toBeNull()
+  })
+
+  it('adopts the refetched backend summary after an edit (authoritative inclusion + amount)', async () => {
+    // Before: timber excluded, £40. After edit + refetch: timber included, £100.
+    const after = summaryView({
+      knownSpendAmount: '100', knownSpendLabel: '£100 known spend',
+      includedMemoryItemIds: ['inc', 'miss'], missingCostCount: 0, uncertainCostCount: 1,
+      excludedMemoryItemIds: ['unsure'],
+      rows: [
+        { key: 'hardcore|bags', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total', memoryItemIds: ['inc'] },
+        { key: 'timber|lengths', materialName: 'timber', quantity: '6', unit: 'lengths', lineTotalAmount: '60', lineTotalCurrency: 'GBP', lineTotalLabel: '£60 total', memoryItemIds: ['miss'] },
+      ],
+      excludedRows: [
+        { memoryItemId: 'unsure', itemLabel: 'insulation', materialName: 'insulation', quantity: '4', unit: 'packs', reason: 'cost_worth_checking' },
+      ],
+    })
+    mockGetMemoryView.mockResolvedValueOnce(summaryView()).mockResolvedValue(after)
+    mockUpdateMemoryItem.mockResolvedValue({
+      id: 'mv-cost-2', memoryType: 'ordered_material', summary: 'timber', materialName: 'timber',
+      quantity: '6', unit: 'lengths', supplierName: null, deliveryTiming: null, locationOrUse: null,
+      costAmount: '10', costCurrency: 'GBP', costQualifier: 'each', totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    })
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('£40')).toBeTruthy()
+
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    const card = within(detail).getByText('timber').closest('.mem-card') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => {
+      const r = screen.getByRole('region', { name: /known spend/i })
+      expect(within(r).getByText('£100')).toBeTruthy()
+      // timber moved to Included; only insulation remains excluded
+      expect(within(r).getByText(/timber · 6 lengths/)).toBeTruthy()
+    })
+    expect(within(screen.getByRole('region', { name: /known spend/i })).queryByText('No cost remembered')).toBeNull()
+  })
+
+  it('on refetch failure keeps the last server summary and offers a retry', async () => {
+    mockGetMemoryView.mockResolvedValueOnce(summaryView()).mockRejectedValue(new Error('offline'))
+    mockUpdateMemoryItem.mockResolvedValue({
+      id: 'mv-cost-2', memoryType: 'ordered_material', summary: 'timber', materialName: 'timber',
+      quantity: '6', unit: 'lengths', supplierName: null, deliveryTiming: null, locationOrUse: null,
+      costAmount: '10', costCurrency: 'GBP', costQualifier: 'each', totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    })
+    render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    const card = within(detail).getByText('timber').closest('.mem-card') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    const region = await screen.findByRole('region', { name: /known spend/i })
+    // Recoverable banner appears; the last server-confirmed £40 is still shown.
+    await waitFor(() => expect(within(region).getByText(/couldn’t refresh spend/i)).toBeTruthy())
+    expect(within(region).getByText('£40')).toBeTruthy()
+    expect(within(region).getByRole('button', { name: /try again/i })).toBeTruthy()
+  })
+
+  it('does not merge an in-flight refresh into a different job after a job switch', async () => {
+    const JOB_B: Job = { ...JOB, id: 'job-mem-002', title: 'Kitchen Extension' }
+    // Job B has its own distinct, authoritative known spend.
+    const viewB = summaryView({
+      knownSpendAmount: '200', knownSpendLabel: '£200 known spend',
+      rows: [{ key: 'bricks|packs', materialName: 'bricks', quantity: '10', unit: 'packs', lineTotalAmount: '200', lineTotalCurrency: 'GBP', lineTotalLabel: '£200 total', memoryItemIds: ['b1'] }],
+    })
+    // The stale refresh for job A would (if not guarded) overwrite B with £999.
+    const staleA = summaryView({ knownSpendAmount: '999', knownSpendLabel: '£999 known spend' })
+
+    let resolveRefresh!: (v: MemoryViewResponse) => void
+    const refreshPromise = new Promise<MemoryViewResponse>(r => { resolveRefresh = r })
+    mockGetMemoryView
+      .mockResolvedValueOnce(summaryView())   // 1) initial load — job A (£40)
+      .mockReturnValueOnce(refreshPromise)    // 2) post-edit refresh — job A (deferred)
+      .mockResolvedValue(viewB)               // 3) load — job B (£200)
+    mockUpdateMemoryItem.mockResolvedValue({
+      id: 'mv-cost-2', memoryType: 'ordered_material', summary: 'timber', materialName: 'timber',
+      quantity: '6', unit: 'lengths', supplierName: null, deliveryTiming: null, locationOrUse: null,
+      costAmount: '10', costCurrency: 'GBP', costQualifier: 'each', totalCostAmount: null,
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '', updatedAt: '', source: null,
+    })
+
+    const { rerender } = render(<JobMemoryScreen job={JOB} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    let region = await screen.findByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('£40')).toBeTruthy()
+
+    // Edit on job A → fires the (deferred) refresh for job A.
+    await openDetail()
+    const detail = screen.getByRole('region', { name: /remembered detail/i })
+    const card = within(detail).getByText('timber').closest('.mem-card') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    await waitFor(() => expect(mockGetMemoryView).toHaveBeenCalledTimes(2))
+
+    // Switch to job B and let its load settle (£200).
+    rerender(<JobMemoryScreen job={JOB_B} onClose={mockClose} onOpenReviewQueue={mockOpenReviewQueue} />)
+    await waitFor(() => {
+      expect(within(screen.getByRole('region', { name: /known spend/i })).getByText('£200')).toBeTruthy()
+    })
+
+    // Now the stale job-A refresh resolves — it must be discarded, not merged.
+    await act(async () => {
+      resolveRefresh(staleA)
+      await refreshPromise
+    })
+
+    region = screen.getByRole('region', { name: /known spend/i })
+    expect(within(region).getByText('£200')).toBeTruthy()
+    expect(screen.queryByText('£999')).toBeNull()
   })
 })

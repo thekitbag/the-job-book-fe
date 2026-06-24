@@ -424,6 +424,20 @@ export interface CostSummaryRow {
   lineTotalLabel: string
   memoryItemIds: string[]
 }
+// Why a trusted bought/ordered item is not in Known spend. Kept as an open
+// union (string) so an unknown future reason from the backend never crashes the
+// UI — it falls back to the safe "Cost worth checking" copy.
+export type SpendExclusionReason = 'no_cost_remembered' | 'cost_worth_checking'
+
+export interface ExcludedSpendRow {
+  memoryItemId: string
+  itemLabel: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  reason: SpendExclusionReason | string
+}
+
 export interface OrderedCostSummary {
   knownSpendAmount: string | null
   knownSpendCurrency: string | null
@@ -433,6 +447,9 @@ export interface OrderedCostSummary {
   uncertainCostCount: number
   excludedMemoryItemIds: string[]
   rows: CostSummaryRow[]
+  // Additive (Known spend clarity). Absent on older backends → the UI keeps the
+  // count-based explanation. Present → each excluded item is named with a reason.
+  excludedRows?: ExcludedSpendRow[]
 }
 export interface CostSummary {
   orderedMaterials: OrderedCostSummary
