@@ -2901,12 +2901,27 @@ code {
   letter-spacing: -0.02em;
 }
 
-/* Per-material safe line totals behind the aggregate */
-.mem-known-spend-rows {
-  list-style: none;
+/* Included / Not included yet groupings under the aggregate */
+.mem-known-spend-group {
   margin: 0.6rem 0 0;
   padding: 0.6rem 0 0;
   border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.mem-known-spend-group-label {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Per-material safe line totals behind the aggregate */
+.mem-known-spend-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -2927,11 +2942,44 @@ code {
   white-space: nowrap;
 }
 
+/* The reason an item is not in Known spend — readable, not a trusted figure */
+.mem-known-spend-row-reason {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.78);
+}
+
 .mem-known-spend-note {
   margin: 0.5rem 0 0;
   font-size: var(--text-sm);
   color: rgba(255, 255, 255, 0.9);
   line-height: 1.4;
+}
+
+/* Post-edit refetch failure — the figure may be stale until a retry succeeds */
+.mem-known-spend-refresh {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mem-known-spend-retry {
+  font: inherit;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: var(--r-sm);
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
 }
 
 /* ── Memory at a glance — primary scan surface (the hero of the page) ── */
@@ -2984,18 +3032,6 @@ code {
 }
 
 .mem-scan-item-desc { color: var(--ink-900); font-weight: 600; }
-
-.mem-scan-item-tag {
-  font-size: var(--text-2xs);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--green-700);
-  background: var(--green-50);
-  border: 1px solid var(--green-100);
-  padding: 0.05rem 0.4rem;
-  border-radius: var(--r-pill);
-}
 
 .mem-scan-item-meta {
   color: var(--ink-500);

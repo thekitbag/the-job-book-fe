@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getMemoryView, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
@@ -7,6 +7,7 @@ import {
   deriveCostSummary,
   deriveScanGroups,
   formatMoney,
+  spendExclusionCopy,
   MEMORY_TYPE_TO_SECTION_KEY,
   SECTION_FULL_LABELS,
   SECTION_ORDER,
@@ -210,9 +211,14 @@ function MemSection({
 }
 
 function ScanItem({ item }: { item: ScanViewItem }) {
+  // A consolidated row sums a quantity, not a cost — say so in the quantity
+  // phrase ("24 sheets total") rather than a bare "total" badge that could be
+  // misread as a money total next to Known spend.
+  const qtyPhrase = [item.quantity, item.unit].filter(Boolean).join(' ')
+  const qtyText = item.consolidated && qtyPhrase ? `${qtyPhrase} total` : qtyPhrase
   // Material rows lead with quantity/material; prose groups lead with summary.
   const desc = item.primaryText
-    ?? [[item.quantity, item.unit].filter(Boolean).join(' '), item.materialName].filter(Boolean).join(' · ')
+    ?? [qtyText, item.materialName].filter(Boolean).join(' · ')
   // Secondary context chips (only what's present)
   const meta = [
     item.supplierName,
@@ -224,7 +230,6 @@ function ScanItem({ item }: { item: ScanViewItem }) {
     <div className="mem-scan-item">
       <span className="mem-scan-item-main">
         {desc && <span className="mem-scan-item-desc">{desc}</span>}
-        {item.consolidated && <span className="mem-scan-item-tag">total</span>}
       </span>
       {meta.length > 0 && <span className="mem-scan-item-meta">{meta.join(' · ')}</span>}
       {item.costLabel && <span className="mem-scan-item-cost">{item.costLabel}</span>}
@@ -234,15 +239,39 @@ function ScanItem({ item }: { item: ScanViewItem }) {
   )
 }
 
-// Known spend for bought/ordered materials. Deliberately not "Total spend" —
-// it's only the trusted line totals; missing/uncertain costs are called out.
-function KnownSpend({ summary, orderedCount }: { summary: OrderedCostSummary; orderedCount: number }) {
+function itemIdentity(materialName: string | null, label: string | null, quantity: string | null, unit: string | null) {
+  const name = materialName?.trim() || label?.trim() || ''
+  const qty = [quantity, unit].filter(Boolean).join(' ')
+  return [name, qty].filter(Boolean).join(' · ')
+}
+
+// Known spend for bought/ordered materials. Deliberately not "Total spend" — it
+// is only the trusted line totals. Every trusted bought/ordered item is shown as
+// either Included (with its money total) or Not included yet (with the reason it
+// is missing), so the figure is auditable without opening remembered detail.
+function KnownSpend({
+  summary,
+  orderedCount,
+  refreshError,
+  onRetryRefresh,
+}: {
+  summary: OrderedCostSummary
+  orderedCount: number
+  refreshError: boolean
+  onRetryRefresh: () => void
+}) {
   if (orderedCount === 0) return null
+  // Named exclusions supersede the anonymous counts. Only fall back to the
+  // count-based copy for an older backend that has not sent excludedRows.
+  const excludedRows = summary.excludedRows
+  const hasNamedExclusions = Array.isArray(excludedRows)
   const notes: string[] = []
-  if (summary.missingCostCount === 1) notes.push('1 bought item has no cost remembered')
-  else if (summary.missingCostCount > 1) notes.push(`${summary.missingCostCount} bought items have no cost remembered`)
-  if (summary.uncertainCostCount === 1) notes.push('1 bought item has cost worth checking')
-  else if (summary.uncertainCostCount > 1) notes.push(`${summary.uncertainCostCount} bought items have cost worth checking`)
+  if (!hasNamedExclusions) {
+    if (summary.missingCostCount === 1) notes.push('1 bought item has no cost remembered')
+    else if (summary.missingCostCount > 1) notes.push(`${summary.missingCostCount} bought items have no cost remembered`)
+    if (summary.uncertainCostCount === 1) notes.push('1 bought item has cost worth checking')
+    else if (summary.uncertainCostCount > 1) notes.push(`${summary.uncertainCostCount} bought items have cost worth checking`)
+  }
 
   return (
     <section className="mem-known-spend" aria-label="Known spend">
@@ -252,19 +281,47 @@ function KnownSpend({ summary, orderedCount }: { summary: OrderedCostSummary; or
           ? formatMoney(parseFloat(summary.knownSpendAmount), summary.knownSpendCurrency)
           : 'None known yet'}
       </p>
+
       {summary.rows.length > 0 && (
-        <ul className="mem-known-spend-rows">
-          {summary.rows.map(row => (
-            <li key={row.key} className="mem-known-spend-row">
-              <span className="mem-known-spend-row-item">
-                {[row.materialName, [row.quantity, row.unit].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
-              </span>
-              <span className="mem-known-spend-row-total">{row.lineTotalLabel}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="mem-known-spend-group">
+          <p className="mem-known-spend-group-label">Included</p>
+          <ul className="mem-known-spend-rows">
+            {summary.rows.map(row => (
+              <li key={row.key} className="mem-known-spend-row">
+                <span className="mem-known-spend-row-item">
+                  {itemIdentity(row.materialName, null, row.quantity, row.unit)}
+                </span>
+                <span className="mem-known-spend-row-total">{row.lineTotalLabel}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
+
+      {hasNamedExclusions && excludedRows!.length > 0 && (
+        <div className="mem-known-spend-group mem-known-spend-group--excluded">
+          <p className="mem-known-spend-group-label">Not included yet</p>
+          <ul className="mem-known-spend-rows">
+            {excludedRows!.map(row => (
+              <li key={row.memoryItemId} className="mem-known-spend-row">
+                <span className="mem-known-spend-row-item">
+                  {itemIdentity(row.materialName, row.itemLabel, row.quantity, row.unit)}
+                </span>
+                <span className="mem-known-spend-row-reason">{spendExclusionCopy(row.reason)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {notes.length > 0 && <p className="mem-known-spend-note">{notes.join(' · ')}</p>}
+
+      {refreshError && (
+        <div className="mem-known-spend-refresh" role="alert">
+          <span>Couldn’t refresh spend — this may be out of date.</span>
+          <button type="button" className="mem-known-spend-retry" onClick={onRetryRefresh}>Try again</button>
+        </div>
+      )}
     </section>
   )
 }
@@ -300,10 +357,18 @@ export default function JobMemoryScreen({
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
   const [showDetail, setShowDetail] = useState(false)
+  // Set when a post-edit memory-view refetch fails: the on-screen Known spend
+  // is the last server-confirmed figure and may be stale until a retry succeeds.
+  const [refreshError, setRefreshError] = useState(false)
+  // Always holds the currently-selected job id, so a refetch that resolves after
+  // a job switch can detect it is stale and not write into the new job's view.
+  const currentJobIdRef = useRef(job.id)
+  currentJobIdRef.current = job.id
 
   function load() {
     setLoadState('loading')
     setErrorMsg('')
+    setRefreshError(false)
     getMemoryView(job.id)
       .then(d => { setData(d); setLoadState('ready') })
       .catch((err: unknown) => {
@@ -313,6 +378,26 @@ export default function JobMemoryScreen({
   }
 
   useEffect(() => { load() }, [job.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // After an edit/verify that can change spend inclusion, pull the authoritative
+  // memory-view and adopt its costSummary so Known spend reflects the backend
+  // rather than a local recompute. The optimistic item/section update stays as-is
+  // (the edit is already persisted). On failure we keep the last server-confirmed
+  // summary and offer a retry — never presenting a local total as backend truth.
+  const refreshSummary = useCallback(async () => {
+    const requestedJobId = job.id
+    setRefreshError(false)
+    try {
+      const fresh = await getMemoryView(requestedJobId)
+      // The user may have switched jobs while this was in flight — never merge a
+      // stale job's summary into the now-current view.
+      if (currentJobIdRef.current !== requestedJobId) return
+      setData(prev => (prev ? { ...prev, costSummary: fresh.costSummary } : fresh))
+    } catch {
+      if (currentJobIdRef.current !== requestedJobId) return
+      setRefreshError(true)
+    }
+  }, [job.id])
 
   // Edit trusted memory in place. Updates the visible item from the API
   // response and re-homes it if its type changed — never re-queues it.
@@ -337,16 +422,19 @@ export default function JobMemoryScreen({
         sections = sections.map(s => s.key === targetKey ? { ...s, items: [merged, ...s.items] } : s)
         sections.sort((a, b) =>
           ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
-        // Drop the now-stale backend summary; Known spend recomputes locally.
-        return { ...prev, sections, costSummary: undefined }
+        // Keep the last server-confirmed costSummary in place; the refetch below
+        // replaces it with the authoritative figure once it returns.
+        return { ...prev, sections }
       })
       setEditingId(null)
+      // Spend inclusion may have changed — pull the authoritative summary.
+      void refreshSummary()
     } catch {
       setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
     } finally {
       setSubmittingId(null)
     }
-  }, [job.id])
+  }, [job.id, refreshSummary])
 
   // Verify a Worth-checking item as right: clears the unresolved flags only,
   // leaving structured fields (incl. approximate wording) untouched.
@@ -363,16 +451,18 @@ export default function JobMemoryScreen({
             ...s,
             items: s.items.map(it => it.id === memoryItemId ? { ...it, uncertaintyFlags: [] } : it),
           })),
-          // Resolving an item may bring it into Known spend; recompute locally.
-          costSummary: undefined,
+          // Keep the last server-confirmed costSummary; the refetch below makes
+          // the authoritative figure once it returns.
         }
       })
+      // Resolving an item may bring it into Known spend — refetch to confirm.
+      void refreshSummary()
     } catch {
       setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
     } finally {
       setVerifyingId(null)
     }
-  }, [job.id])
+  }, [job.id, refreshSummary])
 
   const hasMemory = data
     ? data.sections.some(s => s.items.length > 0)
@@ -385,8 +475,9 @@ export default function JobMemoryScreen({
     () => (data ? deriveScanGroups(data.sections) : []),
     [data],
   )
-  // Prefer the backend-authoritative cost summary on load; once a local edit
-  // drops it, recompute with the same safe rules so Known spend stays live.
+  // Prefer the backend-authoritative cost summary (adopted on load and after each
+  // edit/verify refetch). Only when a backend has not supplied one — e.g. an older
+  // API — recompute locally with the same safe rules so Known spend stays live.
   const costSummary = useMemo<OrderedCostSummary | null>(
     () => (data ? (data.costSummary?.orderedMaterials ?? deriveCostSummary(data.sections)) : null),
     [data],
@@ -448,7 +539,14 @@ export default function JobMemoryScreen({
           {hasMemory ? (
             <>
               {/* Known bought/ordered spend — trusted line totals only */}
-              {costSummary && <KnownSpend summary={costSummary} orderedCount={orderedCount} />}
+              {costSummary && (
+                <KnownSpend
+                  summary={costSummary}
+                  orderedCount={orderedCount}
+                  refreshError={refreshError}
+                  onRetryRefresh={refreshSummary}
+                />
+              )}
 
               {/* Layer 2 — Memory at a glance (primary scan surface) */}
               <ScanView sections={scanSections} />

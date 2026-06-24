@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { costDetailRows, deriveCostSummary, deriveScanGroups, safeLineTotal } from '../memoryScan'
+import { describe, it, expect, vi } from 'vitest'
+import { costDetailRows, deriveCostSummary, deriveScanGroups, safeLineTotal, spendExclusionCopy } from '../memoryScan'
 import type { MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -285,6 +285,84 @@ describe('deriveCostSummary (Known spend)', () => {
       orderedItem({ id: 'b', materialName: null, unit: 'job', totalCostAmount: '20', costCurrency: 'GBP' }),
     ]))
     expect(s.rows).toHaveLength(2)
+  })
+
+  it('sums the quantity on a consolidated included row (not the first item only)', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'a', materialName: 'plasterboard', quantity: '12', unit: 'sheets', costAmount: '50', costQualifier: 'each', costCurrency: 'GBP' }),
+      orderedItem({ id: 'b', materialName: 'plasterboard', quantity: '12', unit: 'sheets', costAmount: '50', costQualifier: 'each', costCurrency: 'GBP' }),
+    ]))
+    expect(s.rows[0].quantity).toBe('24')
+  })
+})
+
+describe('deriveCostSummary — excludedRows (Known spend clarity)', () => {
+  it('names a no-cost item with reason no_cost_remembered', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 't', materialName: 'timber', quantity: '6', unit: 'lengths' }),
+    ]))
+    expect(s.excludedRows).toEqual([
+      { memoryItemId: 't', itemLabel: 'timber', materialName: 'timber', quantity: '6', unit: 'lengths', reason: 'no_cost_remembered' },
+    ])
+  })
+
+  it('names an untrusted-cost item with reason cost_worth_checking', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'i', materialName: 'insulation', quantity: '4', unit: 'packs', costAmount: '120', costQualifier: 'approx', costCurrency: 'GBP' }),
+    ]))
+    expect(s.excludedRows).toEqual([
+      { memoryItemId: 'i', itemLabel: 'insulation', materialName: 'insulation', quantity: '4', unit: 'packs', reason: 'cost_worth_checking' },
+    ])
+  })
+
+  it('keeps one excluded row per item — does not consolidate exclusions', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'm1', materialName: 'membrane', quantity: '5', unit: 'rolls' }),
+      orderedItem({ id: 'm2', materialName: 'membrane', quantity: '5', unit: 'rolls' }),
+    ]))
+    expect(s.excludedRows).toHaveLength(2)
+    expect(s.excludedRows!.map(r => r.memoryItemId)).toEqual(['m1', 'm2'])
+  })
+
+  it('falls back to the summary for itemLabel when material name is absent', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'x', materialName: null, summary: 'Misc sundries from the merchant' }),
+    ]))
+    expect(s.excludedRows![0].itemLabel).toBe('Misc sundries from the merchant')
+  })
+
+  it('produces an empty excludedRows array when nothing is excluded', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'a', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP' }),
+    ]))
+    expect(s.excludedRows).toEqual([])
+  })
+
+  it('every trusted item appears exactly once across rows and excludedRows', () => {
+    const s = deriveCostSummary(ordered([
+      orderedItem({ id: 'inc', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP' }),
+      orderedItem({ id: 'miss', materialName: 'timber', quantity: '6', unit: 'lengths' }),
+      orderedItem({ id: 'unsure', materialName: 'insulation', costAmount: '120', costQualifier: 'approx', costCurrency: 'GBP' }),
+    ]))
+    const includedIds = s.rows.flatMap(r => r.memoryItemIds)
+    const excludedIds = s.excludedRows!.map(r => r.memoryItemId)
+    expect([...includedIds, ...excludedIds].sort()).toEqual(['inc', 'miss', 'unsure'])
+    expect(s.includedMemoryItemIds.sort()).toEqual(includedIds.sort())
+    expect(s.excludedMemoryItemIds.sort()).toEqual(excludedIds.sort())
+  })
+})
+
+describe('spendExclusionCopy', () => {
+  it('maps the two known reasons to product copy', () => {
+    expect(spendExclusionCopy('no_cost_remembered')).toBe('No cost remembered')
+    expect(spendExclusionCopy('cost_worth_checking')).toBe('Cost worth checking')
+  })
+
+  it('falls back to "Cost worth checking" for an unknown future reason and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(spendExclusionCopy('some_future_reason')).toBe('Cost worth checking')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('some_future_reason'))
+    warn.mockRestore()
   })
 })
 
