@@ -132,7 +132,7 @@ describe('JobMemoryScreen — shell', () => {
     renderScreen()
     await boughtTab()
     expect(screen.getByText('Job memory')).toBeTruthy()
-    expect(screen.getByRole('tab', { name: /what i've bought/i })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Spend' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: /used & left over/i })).toBeTruthy()
     expect(screen.getByRole('tab', { name: /notes/i })).toBeTruthy()
   })
@@ -199,7 +199,7 @@ describe('JobMemoryScreen — Bought tab', () => {
 
   it('lists uncategorised counted spend and not-counted bought items separately', async () => {
     renderScreen()
-    const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
+    const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
     expect(within(counted).getByText(/hardcore/)).toBeTruthy()
     const notCounted = screen.getByRole('region', { name: /not in known spend/i })
     expect(within(notCounted).getByText(/timber/)).toBeTruthy()
@@ -264,7 +264,7 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
   it('assigns an uncategorised item to a category and refreshes the breakdown', async () => {
     mockAssignMemoryItemCategory.mockResolvedValue(orderedItem({ id: 'mem-hardcore', budgetCategoryId: 'c1' }))
     renderScreen()
-    const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
+    const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
     fireEvent.change(within(counted).getByLabelText(/budget category for hardcore/i), { target: { value: 'c1' } })
     await waitFor(() => expect(mockAssignMemoryItemCategory).toHaveBeenCalledWith('job-mem-001', 'mem-hardcore', 'c1'))
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
@@ -292,7 +292,10 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
 
   it('adopts the refetched costSummary after an edit (authoritative spend)', async () => {
     const after = memoryView()
-    after.costSummary = { orderedMaterials: { ...memoryView().costSummary!.orderedMaterials, knownSpendAmount: '1500', knownSpendLabel: '£1500 known spend' } }
+    after.costSummary = {
+      orderedMaterials: { ...memoryView().costSummary!.orderedMaterials, knownSpendAmount: '1500', knownSpendLabel: '£1500 known spend' },
+      totalKnownCost: { knownSpendAmount: '1500', knownSpendCurrency: 'GBP', knownSpendLabel: '£1500 known spend', includedMemoryItemIds: [] },
+    }
     mockGetMemoryView.mockResolvedValueOnce(memoryView()).mockResolvedValue(after)
     mockUpdateMemoryItem.mockResolvedValue(orderedItem({ id: 'mem-timber', materialName: 'timber', costAmount: '10', costQualifier: 'each', costCurrency: 'GBP' }))
     renderScreen()
@@ -329,5 +332,73 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
     await act(async () => { resolveB(stale); await deferred })
     expect(screen.queryByText('STALE')).toBeNull()
+  })
+})
+
+// ── Labour in Job memory (Spend tab) ────────────────────────────────────────
+
+function labourItem(over: Partial<MemoryViewItem>): MemoryViewItem {
+  return orderedItem({ memoryType: 'labour', ...over })
+}
+
+function labourView(): MemoryViewResponse {
+  return {
+    job: JOB, generatedAt: '',
+    sections: [
+      { key: 'ordered_materials', label: 'Ordered materials', items: [
+        orderedItem({ id: 'mem-hardcore', summary: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP' }),
+      ] },
+      { key: 'labour', label: 'Labour', items: [
+        labourItem({ id: 'lab-hours', summary: '6 hours fitting cladding', labourHours: '6', labourTask: 'fitting cladding' }),
+        labourItem({ id: 'lab-rated', summary: 'Tom 8h electrics', labourPerson: 'Tom', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP', totalCostAmount: '280' }),
+      ] },
+      { key: 'used_materials', label: 'Used materials', items: [] },
+      { key: 'leftovers', label: 'Leftovers', items: [] },
+      { key: 'supplier_delivery_notes', label: 'Supplier delivery notes', items: [] },
+      { key: 'customer_changes', label: 'Customer changes', items: [] },
+      { key: 'watch_outs', label: 'Watch outs', items: [] },
+    ],
+    stillToCheck: { count: 0, items: [] },
+    costSummary: {
+      orderedMaterials: { knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend', includedMemoryItemIds: ['mem-hardcore'], missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], rows: [{ key: 'hardcore|bags', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total', memoryItemIds: ['mem-hardcore'] }], excludedRows: [] },
+      labour: {
+        knownSpendAmount: '280', knownSpendCurrency: 'GBP', knownSpendLabel: '£280 known spend',
+        includedMemoryItemIds: ['lab-rated'],
+        rows: [{ memoryItemId: 'lab-rated', itemLabel: 'electrics', labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' }],
+        excludedRows: [{ memoryItemId: 'lab-hours', itemLabel: 'fitting cladding', labourHours: '6', labourPerson: null, labourTask: 'fitting cladding', reason: 'no_rate_or_cost' }],
+      },
+      totalKnownCost: { knownSpendAmount: '320', knownSpendCurrency: 'GBP', knownSpendLabel: '£320 known spend', includedMemoryItemIds: ['mem-hardcore', 'lab-rated'] },
+    },
+  }
+}
+
+describe('JobMemoryScreen — labour', () => {
+  beforeEach(() => {
+    mockGetMemoryView.mockResolvedValue(labourView())
+    mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
+  })
+
+  it('hero Known spend is bought + rated labour (excludes hours-only)', async () => {
+    renderScreen()
+    const hero = await boughtTab()
+    expect(within(hero).getByText(/£320/)).toBeTruthy()
+  })
+
+  it('shows a Labour section separate from bought materials, with hours and person', async () => {
+    renderScreen()
+    const labour = await screen.findByRole('region', { name: /^labour$/i })
+    expect(within(labour).getByText('Tom')).toBeTruthy()
+    expect(within(labour).getByText('electrics')).toBeTruthy()
+    // hours-only labour is shown but flagged as not counted
+    expect(within(labour).getByText(/Hours only — no cost/i)).toBeTruthy()
+    // labour is NOT under the bought sections
+    expect(screen.queryByRole('region', { name: /uncategorised bought/i })).toBeTruthy()
+  })
+
+  it('labour notes show their hours', async () => {
+    renderScreen()
+    const labour = await screen.findByRole('region', { name: /^labour$/i })
+    expect(within(labour).getByText('6')).toBeTruthy()
+    expect(within(labour).getByText('8')).toBeTruthy()
   })
 })

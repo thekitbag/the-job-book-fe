@@ -46,11 +46,12 @@ export type FactType =
   | 'supplier_delivery_note'
   | 'customer_change'
   | 'watch_out'
+  | 'labour'
   | 'unclear'
 
 export type ConfidenceLabel = 'high' | 'medium' | 'low'
 
-export type CostQualifier = 'each' | 'total' | 'approx' | 'unknown'
+export type CostQualifier = 'each' | 'total' | 'approx' | 'unknown' | 'per_hour'
 
 // ── Review types (Story 7) ───────────────────────────────────────────────────
 
@@ -132,6 +133,10 @@ export interface ProposedMemory {
   costCurrency: string | null
   costQualifier: CostQualifier | null
   totalCostAmount: string | null
+  // Labour-specific fields (only meaningful for memoryType 'labour').
+  labourHours?: string | null
+  labourPerson?: string | null
+  labourTask?: string | null
   // Additive: the suggested/default category for this review item (not stored on
   // the candidate fact). null when there is no strong suggestion.
   budgetCategoryId?: string | null
@@ -184,6 +189,9 @@ export interface AlreadyRememberedItem {
   costCurrency?: string | null
   costQualifier?: CostQualifier | null
   totalCostAmount?: string | null
+  labourHours?: string | null
+  labourPerson?: string | null
+  labourTask?: string | null
   uncertaintyFlags?: string[]
   sourceUncertaintyFlags?: string[]
   // The confirmed category on this remembered item, if any.
@@ -386,6 +394,10 @@ export interface MemoryViewItem {
   sourceUncertaintyFlags?: string[]
   sourceCandidateFactId: string | null
   reviewDecisionId: string | null
+  // Labour-specific fields (only meaningful for memoryType 'labour').
+  labourHours?: string | null
+  labourPerson?: string | null
+  labourTask?: string | null
   // The budget category this trusted item is assigned to, if any (zero or one).
   // Present on memory-view items so Job memory can show/edit assignment inline.
   budgetCategoryId?: string | null
@@ -475,8 +487,47 @@ export interface OrderedCostSummary {
   // count-based explanation. Present → each excluded item is named with a reason.
   excludedRows?: ExcludedSpendRow[]
 }
+// Labour money summary (additive). Mirrors the known-spend-clarity shape but
+// for labour: rows that contribute, and excluded rows with a labour reason.
+export interface LabourSpendRow {
+  memoryItemId: string
+  itemLabel: string
+  labourHours: string | null
+  labourPerson: string | null
+  labourTask: string | null
+  lineTotalAmount: string
+  lineTotalCurrency: string
+  lineTotalLabel: string
+}
+export type LabourExclusionReason = 'no_rate_or_cost' | 'cost_worth_checking'
+export interface LabourExcludedRow {
+  memoryItemId: string
+  itemLabel: string
+  labourHours: string | null
+  labourPerson: string | null
+  labourTask: string | null
+  reason: LabourExclusionReason
+}
+export interface LabourCostSummary {
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  knownSpendLabel: string | null
+  includedMemoryItemIds: string[]
+  rows: LabourSpendRow[]
+  excludedRows: LabourExcludedRow[]
+}
+export interface TotalKnownCost {
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  knownSpendLabel: string | null
+  includedMemoryItemIds: string[]
+}
 export interface CostSummary {
   orderedMaterials: OrderedCostSummary
+  // Additive: present once the backend supports labour money.
+  labour?: LabourCostSummary
+  // Additive: bought + labour trusted monetary cost; drives the spend hero.
+  totalKnownCost?: TotalKnownCost
 }
 
 // ── Budget categories & known spend by category ─────────────────────────────
@@ -498,10 +549,15 @@ export interface BudgetCategory {
 // One contributing memory item under a category / uncategorised (not consolidated).
 export interface BudgetSpendRow {
   memoryItemId: string
+  // Additive: distinguishes bought vs labour contributions in a category.
+  memoryType?: string
   itemLabel: string
   materialName: string | null
   quantity: string | null
   unit: string | null
+  labourHours?: string | null
+  labourPerson?: string | null
+  labourTask?: string | null
   lineTotalAmount: string
   lineTotalCurrency: string
   lineTotalLabel: string
@@ -585,6 +641,10 @@ export interface MemoryItemEdit {
   costCurrency: string | null
   costQualifier: CostQualifier | null
   totalCostAmount: string | null
+  // Labour-specific fields (sent when memoryType is 'labour').
+  labourHours?: string | null
+  labourPerson?: string | null
+  labourTask?: string | null
   // Clears (resolved) or keeps (still_unsure) memory_items.unresolvedFlags.
   // Omitted preserves existing flags (backwards compatible).
   uncertaintyResolution?: UncertaintyResolution

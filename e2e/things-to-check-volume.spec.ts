@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 
 // All tests run at 390px (playwright.config.ts) with VITE_USE_MOCK_API=true.
-// The mock review queue returns: Ordered 2, Used 1, Left over 0, Watch-outs 1
-// (4 pending) plus already-remembered context. (One ordered draft is timber,
+// The mock review queue returns: Ordered 2, Labour 2, Used 1, Left over 0, Watch-outs 1
+// (6 pending) plus already-remembered context. (One ordered draft is timber,
 // which suggests the seeded 'timber' budget category.)
 
 async function openQueue(page: import('@playwright/test').Page) {
@@ -22,12 +22,12 @@ async function openQueue(page: import('@playwright/test').Page) {
 test.describe('Things to check — real-use volume', () => {
   test('total pending count is visible across categories', async ({ page }) => {
     await openQueue(page)
-    await expect(page.getByText('4 waiting')).toBeVisible()
+    await expect(page.getByText('6 waiting')).toBeVisible()
   })
 
   test('category chips show per-category counts', async ({ page }) => {
     await openQueue(page)
-    await expect(page.getByRole('button', { name: 'All 4' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'All 6' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Ordered 2' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Left over 0' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Watch-outs 1' })).toBeVisible()
@@ -39,7 +39,7 @@ test.describe('Things to check — real-use volume', () => {
     await expect(page.getByText('OSB')).toBeVisible()
     await expect(page.getByText('Bought / ordered')).not.toBeVisible()
     // total still visible while focused
-    await expect(page.getByText('4 waiting')).toBeVisible()
+    await expect(page.getByText('6 waiting')).toBeVisible()
   })
 
   test('focusing an empty category shows "Nothing waiting here"', async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe('Things to check — real-use volume', () => {
     await openQueue(page)
     await page.getByRole('button', { name: /remember this/i }).first().click()
     await page.waitForTimeout(600)
-    await expect(page.getByText('3 waiting')).toBeVisible()
+    await expect(page.getByText('5 waiting')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Ordered 1' })).toBeVisible()
   })
 

@@ -52,16 +52,16 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     await expect(hardcore.getByText(/saved to trusted memory/i)).toBeVisible()
   })
 
-  test('Job memory bought tab shows one Known spend with a category breakdown', async ({ page }) => {
+  test('Job memory Spend tab shows one Known spend with category cards', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
     await page.getByRole('button', { name: /job memory/i }).click()
     await page.waitForTimeout(900)
 
-    // single job-level Known spend (categorised £1200 + uncategorised £40)
-    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£1240/)).toBeVisible()
+    // single job-level Known spend (bought £1240 + labour £880 = £2120)
+    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2120/)).toBeVisible()
     await expect(page.getByRole('region', { name: /budget category cladding/i }).getByText('£1200 known spend')).toBeVisible()
-    await expect(page.getByRole('region', { name: /uncategorised spend/i }).getByText('hardcore')).toBeVisible()
+    await expect(page.getByRole('region', { name: /uncategorised bought/i }).getByText('hardcore')).toBeVisible()
   })
 
   test('there is no separate Budget destination — one spend model', async ({ page }) => {

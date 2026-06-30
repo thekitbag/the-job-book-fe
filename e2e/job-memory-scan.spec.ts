@@ -29,8 +29,8 @@ test.describe('Job memory tabs', () => {
 
   test('opens on the bought tab with a single Known spend figure', async ({ page }) => {
     await openJobMemory(page)
-    await expect(page.getByRole('tab', { name: /what i've bought/i })).toBeVisible()
-    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£1240/)).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Spend' })).toBeVisible()
+    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2120/)).toBeVisible()
   })
 
   test('Used & left over tab lists used + leftover, flagging worth-checking', async ({ page }) => {
@@ -49,7 +49,7 @@ test.describe('Job memory tabs', () => {
 
   test('bought notes keep Fix memory and a collapsed source', async ({ page }) => {
     await openJobMemory(page)
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    const hardcore = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'hardcore' })
     await expect(hardcore.getByRole('button', { name: /fix memory/i })).toBeVisible()
     await expect(hardcore.getByText('This came from your note')).not.toBeVisible()
     await hardcore.getByRole('button', { name: /show source/i }).click()
@@ -58,12 +58,12 @@ test.describe('Job memory tabs', () => {
 
   test('editing a bought note updates it in place', async ({ page }) => {
     await openJobMemory(page)
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    const hardcore = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'hardcore' })
     await hardcore.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="supplierName"]').fill('Selco')
     await page.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(600)
-    await expect(page.getByRole('region', { name: /uncategorised spend/i }).getByText('Selco')).toBeVisible()
+    await expect(page.getByRole('region', { name: /uncategorised bought/i }).getByText('Selco')).toBeVisible()
   })
 })

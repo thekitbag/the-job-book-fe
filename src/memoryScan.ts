@@ -1,4 +1,4 @@
-import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, LabourCostSummary, LabourExcludedRow, LabourExclusionReason, LabourSpendRow, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -7,7 +7,7 @@ import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, B
 export function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
-  const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.' }
+  const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.', per_hour: '/hour' }
   return `${sym}${amount}${qualifier ? (q[qualifier] ?? '') : ''}`
 }
 
@@ -42,6 +42,8 @@ export function costDetailRows(item: {
 
   if (amount && qualifier === 'each') {
     rows.push(['Unit cost', `${sym}${amount} each`])
+  } else if (amount && qualifier === 'per_hour') {
+    rows.push(['Rate', `${sym}${amount}/hour`])
   } else if (amount && qualifier === 'total') {
     // amount is itself the line total; fold into the Total row below if no
     // explicit total is set
@@ -90,6 +92,38 @@ export function safeLineTotal(item: MemoryViewItem): { amount: number; currency:
     item.unit
   ) {
     return { amount: parseFloat(item.quantity) * parseFloat(item.costAmount), currency }
+  }
+  return null
+}
+
+const POS_DECIMAL = (s: string | null | undefined) => !!s && DECIMAL.test(s) && parseFloat(s) > 0
+
+// Labour exclusion reason → builder copy. Unknown future reason → safe fallback.
+export function labourExclusionCopy(reason: string): string {
+  if (reason === 'no_rate_or_cost') return 'Hours only — no cost'
+  if (reason !== 'cost_worth_checking' && import.meta.env.DEV) {
+    console.warn(`Unknown labour exclusion reason: ${reason}`)
+  }
+  return 'Cost worth checking'
+}
+
+/**
+ * Safe monetary cost for a single labour memory item, mirroring the backend
+ * rules. Returns null unless GBP, no unresolved flags, and either an explicit
+ * trusted total or (hours × per_hour rate) can be safely derived.
+ */
+export function safeLabourCost(item: MemoryViewItem): { amount: number; currency: string } | null {
+  if (item.memoryType !== 'labour') return null
+  if ((item.uncertaintyFlags ?? []).length > 0) return null
+  const currency = item.costCurrency
+  if (currency !== 'GBP') return null
+  // explicit, trusted total
+  if (item.totalCostAmount && DECIMAL.test(item.totalCostAmount) && item.costQualifier !== 'approx' && item.costQualifier !== 'unknown') {
+    return { amount: parseFloat(item.totalCostAmount), currency }
+  }
+  // hours × hourly rate
+  if (item.costQualifier === 'per_hour' && POS_DECIMAL(item.labourHours) && POS_DECIMAL(item.costAmount)) {
+    return { amount: parseFloat(item.labourHours!) * parseFloat(item.costAmount!), currency }
   }
   return null
 }
@@ -194,12 +228,18 @@ function excludedRow(item: MemoryViewItem, reason: SpendExclusionReason): Exclud
 // response — it never treats this local recompute as confirmed truth.
 
 function budgetSpendRow(item: MemoryViewItem, amount: number, currency: string): BudgetSpendRow {
+  const isLabour = item.memoryType === 'labour'
+  const fallback = isLabour ? 'Labour' : 'Bought item'
   return {
     memoryItemId: item.id,
-    itemLabel: item.materialName?.trim() || item.summary?.trim() || 'Bought item',
+    memoryType: item.memoryType,
+    itemLabel: (isLabour ? item.labourTask : item.materialName)?.trim() || item.summary?.trim() || fallback,
     materialName: item.materialName,
     quantity: item.quantity,
     unit: item.unit,
+    labourHours: item.labourHours ?? null,
+    labourPerson: item.labourPerson ?? null,
+    labourTask: item.labourTask ?? null,
     lineTotalAmount: String(Math.round(amount * 100) / 100),
     lineTotalCurrency: currency,
     lineTotalLabel: `${formatMoney(amount, currency)} total`,
@@ -227,14 +267,23 @@ export function deriveBudgetSummary(
   const active = categories.filter(c => !c.isArchived)
   const activeIds = new Set(active.map(c => c.id))
   const ordered = sections.find(s => s.key === 'ordered_materials')?.items ?? []
+  const labour = sections.find(s => s.key === 'labour')?.items ?? []
 
   const rowsByCategory = new Map<string, BudgetSpendRow[]>()
   const uncategorizedRows: BudgetSpendRow[] = []
 
+  // Both bought/ordered and labour with a safe GBP monetary cost contribute.
+  const contributions: Array<{ item: MemoryViewItem; amount: number }> = []
   for (const item of ordered) {
     const line = safeLineTotal(item)
-    if (!line || line.currency !== currency) continue // excluded from category totals
-    const row = budgetSpendRow(item, line.amount, line.currency)
+    if (line && line.currency === currency) contributions.push({ item, amount: line.amount })
+  }
+  for (const item of labour) {
+    const line = safeLabourCost(item)
+    if (line && line.currency === currency) contributions.push({ item, amount: line.amount })
+  }
+  for (const { item, amount } of contributions) {
+    const row = budgetSpendRow(item, amount, currency)
     const catId = item.budgetCategoryId
     if (catId && activeIds.has(catId)) {
       const list = rowsByCategory.get(catId) ?? []
@@ -302,6 +351,67 @@ export function deriveBudgetSummary(
   }
 }
 
+// Labour money summary, mirroring the backend additive costSummary.labour shape.
+// Trusted labour money → rows; hours-only / ambiguous → excludedRows with reason.
+export function deriveLabourSummary(sections: MemoryViewSection[]): LabourCostSummary {
+  const currency = 'GBP'
+  const labour = sections.find(s => s.key === 'labour')?.items ?? []
+  const rows: LabourSpendRow[] = []
+  const excludedRows: LabourExcludedRow[] = []
+  let total = 0
+
+  for (const item of labour) {
+    const label = item.labourTask?.trim() || item.labourPerson?.trim() || item.summary?.trim() || 'Labour'
+    const line = safeLabourCost(item)
+    if (line) {
+      total += line.amount
+      rows.push({
+        memoryItemId: item.id, itemLabel: label,
+        labourHours: item.labourHours ?? null, labourPerson: item.labourPerson ?? null, labourTask: item.labourTask ?? null,
+        lineTotalAmount: String(Math.round(line.amount * 100) / 100), lineTotalCurrency: currency,
+        lineTotalLabel: `${formatMoney(line.amount, currency)} total`,
+      })
+    } else {
+      const hasMoney = !!(item.costAmount || item.totalCostAmount)
+      const reason: LabourExclusionReason = hasMoney ? 'cost_worth_checking' : 'no_rate_or_cost'
+      excludedRows.push({
+        memoryItemId: item.id, itemLabel: label,
+        labourHours: item.labourHours ?? null, labourPerson: item.labourPerson ?? null, labourTask: item.labourTask ?? null,
+        reason,
+      })
+    }
+  }
+
+  const has = rows.length > 0
+  return {
+    knownSpendAmount: has ? String(Math.round(total * 100) / 100) : null,
+    knownSpendCurrency: has ? currency : null,
+    knownSpendLabel: has ? `${formatMoney(total, currency)} known spend` : null,
+    includedMemoryItemIds: rows.map(r => r.memoryItemId),
+    rows,
+    excludedRows,
+  }
+}
+
+// Total trusted monetary cost = bought/ordered safe spend + labour safe spend.
+// Drives the spend hero so rated labour is included, hours-only labour is not.
+export function deriveTotalKnownCost(sections: MemoryViewSection[]): TotalKnownCost {
+  const currency = 'GBP'
+  const ordered = deriveCostSummary(sections)
+  const labour = deriveLabourSummary(sections)
+  const orderedAmt = ordered.knownSpendAmount ? parseFloat(ordered.knownSpendAmount) : 0
+  const labourAmt = labour.knownSpendAmount ? parseFloat(labour.knownSpendAmount) : 0
+  const total = orderedAmt + labourAmt
+  const ids = [...ordered.includedMemoryItemIds, ...labour.includedMemoryItemIds]
+  const has = ids.length > 0
+  return {
+    knownSpendAmount: has ? String(Math.round(total * 100) / 100) : null,
+    knownSpendCurrency: has ? currency : null,
+    knownSpendLabel: has ? `${formatMoney(total, currency)} known spend` : null,
+    includedMemoryItemIds: ids,
+  }
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -315,33 +425,35 @@ function escapeRegExp(s: string): string {
  * A single material-name match wins over summary matches; otherwise multiple
  * matches yield no suggestion. No fuzzy/substring/supplier/AI matching.
  */
+function matchActiveCategory(primary: string | null, summary: string, active: BudgetCategory[]): BudgetCategorySuggestion | null {
+  const key = primary?.trim().toLowerCase() ?? ''
+  const exact = key ? active.filter(c => c.name.trim().toLowerCase() === key) : []
+  if (exact.length === 1) return { budgetCategoryId: exact[0].id, categoryName: exact[0].name, reason: 'material_name_match' }
+  if (exact.length > 1) return null
+  const summaryMatches = active.filter(c => {
+    const name = c.name.trim()
+    return name && new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i').test(summary ?? '')
+  })
+  if (summaryMatches.length === 1) return { budgetCategoryId: summaryMatches[0].id, categoryName: summaryMatches[0].name, reason: 'summary_match' }
+  return null
+}
+
 export function suggestBudgetCategory(
-  proposed: { memoryType: string; materialName: string | null; summary: string },
+  proposed: { memoryType: string; materialName: string | null; summary: string; labourTask?: string | null },
   categories: BudgetCategory[],
 ): BudgetCategorySuggestion | null {
-  if (proposed.memoryType !== 'ordered_material') return null
   const active = categories.filter(c => !c.isArchived)
   if (active.length === 0) return null
 
-  const material = proposed.materialName?.trim().toLowerCase() ?? ''
-  const materialMatches = material
-    ? active.filter(c => c.name.trim().toLowerCase() === material)
-    : []
-  if (materialMatches.length === 1) {
-    const c = materialMatches[0]
-    return { budgetCategoryId: c.id, categoryName: c.name, reason: 'material_name_match' }
+  if (proposed.memoryType === 'ordered_material') {
+    return matchActiveCategory(proposed.materialName, proposed.summary, active)
   }
-  if (materialMatches.length > 1) return null // ambiguous
-
-  const summary = proposed.summary ?? ''
-  const summaryMatches = active.filter(c => {
-    const name = c.name.trim()
-    if (!name) return false
-    return new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i').test(summary)
-  })
-  if (summaryMatches.length === 1) {
-    const c = summaryMatches[0]
-    return { budgetCategoryId: c.id, categoryName: c.name, reason: 'summary_match' }
+  if (proposed.memoryType === 'labour') {
+    // Prefer an active category literally named "labour"; else match the task.
+    const named = active.filter(c => c.name.trim().toLowerCase() === 'labour')
+    if (named.length === 1) return { budgetCategoryId: named[0].id, categoryName: named[0].name, reason: 'material_name_match' }
+    if (named.length > 1) return null
+    return matchActiveCategory(proposed.labourTask ?? null, proposed.summary, active)
   }
   return null
 }
@@ -354,15 +466,17 @@ export const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
   supplier_delivery_note: 'supplier_delivery_notes',
   customer_change: 'customer_changes',
   watch_out: 'watch_outs',
+  labour: 'labour',
 }
 
 export const SECTION_ORDER = [
-  'ordered_materials', 'used_materials', 'leftovers',
+  'ordered_materials', 'labour', 'used_materials', 'leftovers',
   'supplier_delivery_notes', 'customer_changes', 'watch_outs',
 ]
 
 export const SECTION_FULL_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered materials',
+  labour: 'Labour',
   used_materials: 'Used materials',
   leftovers: 'Leftovers',
   supplier_delivery_notes: 'Supplier delivery notes',

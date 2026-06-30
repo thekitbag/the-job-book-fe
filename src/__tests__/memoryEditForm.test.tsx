@@ -102,3 +102,34 @@ describe('MemoryEditForm — budget category', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'used_material', budgetCategoryId: null }))
   })
 })
+
+describe('MemoryEditForm — labour', () => {
+  it('shows labour fields (not material) when type is labour, and saves them', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', materialName: null }), CATS)
+    expect(screen.getByLabelText('Hours')).toBeTruthy()
+    expect(screen.getByLabelText('Person / role')).toBeTruthy()
+    expect(screen.getByLabelText('Task / work area')).toBeTruthy()
+    expect(screen.queryByLabelText('Material')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Hours'), { target: { value: '8' } })
+    fireEvent.change(screen.getByLabelText('Task / work area'), { target: { value: 'electrics' } })
+    fireEvent.change(screen.getByLabelText('Cost qualifier'), { target: { value: 'per_hour' } })
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '35' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      memoryType: 'labour', labourHours: '8', labourTask: 'electrics', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP',
+    }))
+  })
+
+  it('supports a budget category for labour', () => {
+    setup(initialEdit({ memoryType: 'labour' }), CATS)
+    expect(screen.getByLabelText('Budget category')).toBeTruthy()
+  })
+
+  it('clears labour fields when type changes away from labour', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', labourHours: '8', labourTask: 'electrics' }), CATS)
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'used_material' } })
+    expect(screen.queryByLabelText('Hours')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'used_material', labourHours: null, labourTask: null }))
+  })
+})

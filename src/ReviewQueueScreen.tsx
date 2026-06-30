@@ -22,6 +22,7 @@ const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: strin
   { value: 'used_material', label: 'Used material', shortLabel: 'Used' },
   { value: 'ordered_material', label: 'Ordered material', shortLabel: 'Ordered' },
   { value: 'leftover_material', label: 'Leftover material', shortLabel: 'Leftover' },
+  { value: 'labour', label: 'Labour', shortLabel: 'Labour' },
   { value: 'supplier_delivery_note', label: 'Supplier / delivery note', shortLabel: 'Supplier' },
   { value: 'customer_change', label: 'Customer change', shortLabel: 'Customer' },
   { value: 'watch_out', label: 'Watch out', shortLabel: 'Watch out' },
@@ -30,22 +31,28 @@ const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: strin
 const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: '— not stated —' },
   { value: 'each', label: 'Each (per item)' },
+  { value: 'per_hour', label: 'Per hour' },
   { value: 'total', label: 'Total' },
   { value: 'approx', label: 'Approximate' },
   { value: 'unknown', label: 'Not clear' },
 ]
 
 const MATERIAL_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material'])
+// Types that lead with a structured type label + detail rows (not a prose summary).
+const STRUCTURED_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material', 'labour'])
+const CATEGORY_TYPES = new Set<MemoryType>(['ordered_material', 'labour'])
 
 const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
   ordered_material: 'Bought / ordered',
   used_material: 'Used',
   leftover_material: 'Left over',
+  labour: 'Labour',
 }
 
 // Plain builder labels for the category focus chips, keyed by section key.
 const SECTION_CHIP_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
+  labour: 'Labour',
   used_materials: 'Used',
   leftovers: 'Left over',
   supplier_delivery_notes: 'Supplier notes',
@@ -146,14 +153,21 @@ function ItemKindBadge({ item }: { item: QueueItem }) {
 
 function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncertaintyFlags: string[] }) {
   const rows: [string, string][] = []
-  if (pm.materialName) rows.push(['Item', pm.materialName])
-  const qty = [pm.quantity, pm.unit].filter(Boolean).join(' ')
-  if (qty) rows.push(['Quantity', qty])
-  if (pm.supplierName) rows.push(['Supplier', pm.supplierName])
-  if (pm.deliveryTiming) rows.push(['Delivery', pm.deliveryTiming])
-  if (pm.locationOrUse) rows.push(['Location', pm.locationOrUse])
+  const isLabour = pm.memoryType === 'labour'
+  if (isLabour) {
+    if (pm.labourHours) rows.push(['Hours', pm.labourHours])
+    if (pm.labourPerson) rows.push(['Person', pm.labourPerson])
+    if (pm.labourTask) rows.push(['Task', pm.labourTask])
+  } else {
+    if (pm.materialName) rows.push(['Item', pm.materialName])
+    const qty = [pm.quantity, pm.unit].filter(Boolean).join(' ')
+    if (qty) rows.push(['Quantity', qty])
+    if (pm.supplierName) rows.push(['Supplier', pm.supplierName])
+    if (pm.deliveryTiming) rows.push(['Delivery', pm.deliveryTiming])
+    if (pm.locationOrUse) rows.push(['Location', pm.locationOrUse])
+  }
   const costLabel = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
-  if (costLabel) rows.push(['Cost', costLabel])
+  if (costLabel) rows.push([isLabour ? 'Rate' : 'Cost', costLabel])
   const totalLabel = formatTotalLabel(pm.totalCostAmount, pm.costCurrency)
   if (totalLabel) rows.push(['Total', totalLabel])
   const uncertain = uncertaintyFlags.length > 0
@@ -193,12 +207,13 @@ function EditForm({
   const [form, setForm] = useState<ProposedMemory>(initial)
   const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType' | 'costQualifier'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
-  // Changing type away from bought/ordered clears any category.
+  // Changing type away from a category-bearing type clears any category.
   const setType = (v: string) =>
-    setForm(f => ({ ...f, memoryType: v as MemoryType, budgetCategoryId: v === 'ordered_material' ? (f.budgetCategoryId ?? null) : null }))
+    setForm(f => ({ ...f, memoryType: v as MemoryType, budgetCategoryId: CATEGORY_TYPES.has(v as MemoryType) ? (f.budgetCategoryId ?? null) : null }))
   const setCostQualifier = (v: string) =>
     setForm(f => ({ ...f, costQualifier: (v as CostQualifier) || null }))
-  const showCategory = form.memoryType === 'ordered_material' && categories.length > 0
+  const isLabour = form.memoryType === 'labour'
+  const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
 
   return (
     <form
@@ -223,32 +238,51 @@ function EditForm({
           </select>
         </label>
       )}
+      {isLabour ? (
+        <>
+          <label className="queue-field">
+            <span className="queue-field-label">Hours</span>
+            <input className="queue-field-input" name="labourHours" value={form.labourHours ?? ''} inputMode="decimal" onChange={e => setStr('labourHours', e.target.value)} placeholder="e.g. 8" />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Person / role</span>
+            <input className="queue-field-input" name="labourPerson" value={form.labourPerson ?? ''} onChange={e => setStr('labourPerson', e.target.value)} placeholder="e.g. Tom" />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Task / work area</span>
+            <input className="queue-field-input" name="labourTask" value={form.labourTask ?? ''} onChange={e => setStr('labourTask', e.target.value)} placeholder="e.g. electrics" />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="queue-field">
+            <span className="queue-field-label">Material</span>
+            <input className="queue-field-input" name="materialName" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Quantity</span>
+            <input className="queue-field-input" name="quantity" value={form.quantity ?? ''} onChange={e => setStr('quantity', e.target.value)} />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Unit</span>
+            <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Supplier</span>
+            <input className="queue-field-input" name="supplierName" value={form.supplierName ?? ''} onChange={e => setStr('supplierName', e.target.value)} />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Delivery timing</span>
+            <input className="queue-field-input" name="deliveryTiming" value={form.deliveryTiming ?? ''} onChange={e => setStr('deliveryTiming', e.target.value)} />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Location / use</span>
+            <input className="queue-field-input" name="locationOrUse" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
+          </label>
+        </>
+      )}
       <label className="queue-field">
-        <span className="queue-field-label">Material</span>
-        <input className="queue-field-input" name="materialName" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Quantity</span>
-        <input className="queue-field-input" name="quantity" value={form.quantity ?? ''} onChange={e => setStr('quantity', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Unit</span>
-        <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Supplier</span>
-        <input className="queue-field-input" name="supplierName" value={form.supplierName ?? ''} onChange={e => setStr('supplierName', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Delivery timing</span>
-        <input className="queue-field-input" name="deliveryTiming" value={form.deliveryTiming ?? ''} onChange={e => setStr('deliveryTiming', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Location / use</span>
-        <input className="queue-field-input" name="locationOrUse" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Cost amount</span>
+        <span className="queue-field-label">{isLabour ? 'Rate / cost amount' : 'Cost amount'}</span>
         <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
       </label>
       <label className="queue-field">
@@ -307,12 +341,12 @@ function QueueItemCard({
   const resolved = item.status !== 'draft'
   const uncertain = item.uncertaintyFlags.length > 0
   const memType = item.proposedMemory.memoryType
-  const isMaterial = MATERIAL_TYPES.has(memType)
-  // Category selection for bought/ordered drafts. Default to the backend
+  const isStructured = STRUCTURED_TYPES.has(memType)
+  // Category selection for bought/ordered + labour drafts. Default to the backend
   // suggestion (set once, so a later suggestion can't override Mike's choice).
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(item.proposedMemory.budgetCategoryId ?? null)
   const suggestion = item.proposedMemory.budgetCategorySuggestion ?? null
-  const showCategory = memType === 'ordered_material' && categories.length > 0 && !resolved && !isEditing
+  const showCategory = CATEGORY_TYPES.has(memType) && categories.length > 0 && !resolved && !isEditing
   const hasDetailFields = !!(
     item.proposedMemory.materialName ||
     item.proposedMemory.quantity ||
@@ -320,6 +354,9 @@ function QueueItemCard({
     item.proposedMemory.supplierName ||
     item.proposedMemory.deliveryTiming ||
     item.proposedMemory.locationOrUse ||
+    item.proposedMemory.labourHours ||
+    item.proposedMemory.labourPerson ||
+    item.proposedMemory.labourTask ||
     item.proposedMemory.costAmount ||
     item.proposedMemory.totalCostAmount ||
     item.uncertaintyFlags.length > 0
@@ -335,7 +372,7 @@ function QueueItemCard({
         {item.timeLabel && <span className="queue-time-label">{item.timeLabel}</span>}
       </div>
 
-      {isMaterial
+      {isStructured
         ? <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>
         : <p className="queue-item-summary">{item.summary}</p>
       }
@@ -344,7 +381,7 @@ function QueueItemCard({
         <QueueItemDetails pm={item.proposedMemory} uncertaintyFlags={item.uncertaintyFlags} />
       )}
 
-      {isMaterial && !hasDetailFields && !isEditing && (
+      {isStructured && !hasDetailFields && !isEditing && (
         <p className="queue-item-summary">{item.summary}</p>
       )}
 
@@ -672,7 +709,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
       // Category applies only to bought/ordered memory, and only when the job has
       // categories at all — otherwise omit it entirely (backwards-compatible).
       const finalType = corrected?.memoryType ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory.memoryType
-      const category = action === 'dismiss' || finalType !== 'ordered_material' || activeCategories.length === 0
+      const category = action === 'dismiss' || !(finalType === 'ordered_material' || finalType === 'labour') || activeCategories.length === 0
         ? undefined
         : (budgetCategoryId ?? null)
       const result = await submitQueueDecision(job.id, {
