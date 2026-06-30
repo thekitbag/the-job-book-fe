@@ -1,5 +1,5 @@
-import type { AlreadyRememberedItem, CandidateFact, ConfidenceLabel, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
-import { deriveCostSummary, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER } from './memoryScan'
+import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import { deriveBudgetSummary, deriveCostSummary, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -415,6 +415,42 @@ const MOCK_QUEUE_ITEMS: QueueItem[] = [
       },
     ],
   },
+  // Bought/ordered draft whose material exactly matches a seeded category
+  // ('timber') → a material-name category suggestion during review.
+  {
+    id: 'queue-item-mock-004',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'What I picked up today',
+    timeLabel: 'Today',
+    summary: 'Ordered 6 lengths of timber from Travis Perkins at £20 each',
+    proposedMemory: {
+      memoryType: 'ordered_material' as MemoryType,
+      summary: 'Ordered 6 lengths of timber from Travis Perkins at £20 each',
+      materialName: 'timber',
+      quantity: '6',
+      unit: 'lengths',
+      supplierName: 'Travis Perkins',
+      deliveryTiming: null,
+      locationOrUse: null,
+      costAmount: '20',
+      costCurrency: 'GBP',
+      costQualifier: 'each',
+      totalCostAmount: null,
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-005'],
+    sourceContext: [
+      {
+        candidateFactId: 'mock-fact-005',
+        noteId: 'mock-note-004',
+        transcriptId: 'mock-trans-004',
+        capturedAt: new Date().toISOString(),
+        transcriptText: 'Got six lengths of timber from Travis Perkins, twenty quid each.',
+      },
+    ],
+  },
 ]
 
 const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
@@ -434,6 +470,8 @@ const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
     costQualifier: null,
     totalCostAmount: null,
     uncertaintyFlags: [],
+    // A remembered item that already carries a category (set in the seed job).
+    budgetCategoryId: 'cat-cladding',
   },
   {
     memoryItemId: 'mem-mock-002',
@@ -458,16 +496,31 @@ const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
 export async function getReviewQueue(jobId: string): Promise<ReviewQueue> {
   if (USE_MOCK) {
     await delay(500)
+    const budgetCategories = mockBudgetCategoriesFor(jobId).filter(c => !c.isArchived)
+    // Compute a response-time category suggestion for each bought/ordered draft.
+    const enrich = (item: QueueItem): QueueItem => {
+      if (item.proposedMemory.memoryType !== 'ordered_material') return item
+      const suggestion = suggestBudgetCategory(item.proposedMemory, budgetCategories)
+      return {
+        ...item,
+        proposedMemory: {
+          ...item.proposedMemory,
+          budgetCategoryId: suggestion?.budgetCategoryId ?? null,
+          budgetCategorySuggestion: suggestion,
+        },
+      }
+    }
     return {
       jobId,
       generatedAt: new Date().toISOString(),
+      budgetCategories,
       sections: [
-        { key: 'ordered_materials', label: 'Ordered materials', items: [MOCK_QUEUE_ITEMS[0]] },
+        { key: 'ordered_materials', label: 'Ordered materials', items: [enrich(MOCK_QUEUE_ITEMS[0]), enrich(MOCK_QUEUE_ITEMS[3])] },
         { key: 'used_materials', label: 'Used materials', items: [MOCK_QUEUE_ITEMS[1]] },
         { key: 'leftovers', label: 'Leftovers', items: [] },
         { key: 'watch_outs', label: 'Watch outs', items: [MOCK_QUEUE_ITEMS[2]] },
       ],
-      alreadyRemembered: MOCK_REMEMBERED,
+      alreadyRemembered: MOCK_REMEMBERED.map(m => ({ ...m })),
     }
   }
   const res = await apiFetch(`/api/jobs/${jobId}/review-queue`)
@@ -482,14 +535,7 @@ export async function submitQueueDecision(
 ): Promise<QueueDecisionResponse> {
   if (USE_MOCK) {
     await delay(300)
-    const statusMap = { confirm: 'confirmed', correct: 'corrected', dismiss: 'dismissed' } as const
-    return {
-      queueItemId: decision.queueItemId,
-      action: decision.action,
-      status: statusMap[decision.action],
-      memoryItemId: decision.action !== 'dismiss' ? `mem-${decision.queueItemId}` : undefined,
-      sourceCandidateFactIds: [],
-    }
+    return mockSubmitQueueDecision(jobId, decision)
   }
   const res = await apiFetch(`/api/jobs/${jobId}/review-queue-decisions`, {
     method: 'POST',
@@ -736,6 +782,97 @@ export async function verifyMemoryItem(
   if (res.status === 403) throw new ApiError('Forbidden', 403)
   if (res.status === 404) throw new ApiError('Memory item not found', 404)
   if (!res.ok) throw new ApiError(`POST verify memory-item → ${res.status}`, res.status)
+  return res.json() as Promise<MemoryViewItem>
+}
+
+// ── Budget categories & summary ─────────────────────────────────────────────
+
+// GET /api/jobs/:jobId/budget-categories — active categories only.
+export async function getBudgetCategories(jobId: string): Promise<BudgetCategory[]> {
+  if (USE_MOCK) {
+    await delay(200)
+    return mockBudgetCategoriesFor(jobId).filter(c => !c.isArchived).map(c => ({ ...c }))
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/budget-categories`)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Job not found', 404)
+  if (!res.ok) throw new ApiError(`GET budget-categories → ${res.status}`, res.status)
+  return res.json() as Promise<BudgetCategory[]>
+}
+
+// POST /api/jobs/:jobId/budget-categories — create a category.
+export async function createBudgetCategory(jobId: string, req: CreateBudgetCategoryRequest): Promise<BudgetCategory> {
+  if (USE_MOCK) {
+    await delay(250)
+    return mockCreateBudgetCategory(jobId, req)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/budget-categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (res.status === 400) throw new ApiError('Invalid category', 400)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Job not found', 404)
+  if (!res.ok) throw new ApiError(`POST budget-category → ${res.status}`, res.status)
+  return res.json() as Promise<BudgetCategory>
+}
+
+// PATCH /api/jobs/:jobId/budget-categories/:categoryId — edit or archive.
+export async function patchBudgetCategory(jobId: string, categoryId: string, req: PatchBudgetCategoryRequest): Promise<BudgetCategory> {
+  if (USE_MOCK) {
+    await delay(250)
+    return mockPatchBudgetCategory(jobId, categoryId, req)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/budget-categories/${categoryId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (res.status === 400) throw new ApiError('Invalid category', 400)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Category not found', 404)
+  if (!res.ok) throw new ApiError(`PATCH budget-category → ${res.status}`, res.status)
+  return res.json() as Promise<BudgetCategory>
+}
+
+// GET /api/jobs/:jobId/budget-summary — backend-authoritative spend by category.
+export async function getBudgetSummary(jobId: string): Promise<BudgetSummaryResponse> {
+  if (USE_MOCK) {
+    await delay(400)
+    return mockBudgetSummary(jobId)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/budget-summary`)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Job not found', 404)
+  if (!res.ok) throw new ApiError(`GET budget-summary → ${res.status}`, res.status)
+  return res.json() as Promise<BudgetSummaryResponse>
+}
+
+// PATCH /api/jobs/:jobId/memory-items/:memoryItemId — assign/clear category only.
+export async function assignMemoryItemCategory(
+  jobId: string,
+  memoryItemId: string,
+  budgetCategoryId: string | null,
+): Promise<MemoryViewItem> {
+  if (USE_MOCK) {
+    await delay(250)
+    return mockAssignMemoryItemCategory(jobId, memoryItemId, budgetCategoryId)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ budgetCategoryId }),
+  })
+  if (res.status === 400) throw new ApiError('Invalid category assignment', 400)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Memory item not found', 404)
+  if (!res.ok) throw new ApiError(`PATCH memory-item category → ${res.status}`, res.status)
   return res.json() as Promise<MemoryViewItem>
 }
 
@@ -1050,6 +1187,7 @@ function mockSectionsFor(jobId: string): MemoryViewSection[] {
 // Test seam: drop any accumulated mock edits.
 export function _resetMockMemoryForTesting(): void {
   mockMemoryByJob = null
+  mockBudgetByJob = null
 }
 
 function findMockItem(sections: MemoryViewSection[], id: string): MemoryViewItem | undefined {
@@ -1105,6 +1243,8 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
     totalCostAmount: edit.totalCostAmount,
     // A Fix-memory save also resolves any worth-checking flags.
     uncertaintyFlags: [],
+    // Preserve the existing category unless this edit explicitly changes it.
+    budgetCategoryId: edit.budgetCategoryId !== undefined ? edit.budgetCategoryId : (existing?.budgetCategoryId ?? null),
     sourceCandidateFactId: existing?.sourceCandidateFactId ?? null,
     reviewDecisionId: existing?.reviewDecisionId ?? null,
     createdAt: existing?.createdAt ?? now,
@@ -1128,6 +1268,164 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
 function mockVerifyMemoryItem(jobId: string, memoryItemId: string): void {
   const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
   if (item) item.uncertaintyFlags = []
+}
+
+// ── Stateful mock: budget categories ────────────────────────────────────────
+// Resets on every full page load (module re-init), so Playwright tests that
+// start with page.goto get a clean fixture with no cross-test leakage.
+
+const MOCK_BUDGET_SEED_JOB = 'job-pilot-garden-room-001'
+let mockBudgetByJob: Map<string, BudgetCategory[]> | null = null
+let mockCategorySeq = 0
+
+function mockBudgetCategoriesFor(jobId: string): BudgetCategory[] {
+  if (!mockBudgetByJob) mockBudgetByJob = new Map()
+  if (!mockBudgetByJob.has(jobId)) {
+    const now = '2026-06-28T08:00:00.000Z'
+    if (jobId === MOCK_BUDGET_SEED_JOB) {
+      // timber (budget, no spend), cladding (budget + spend), electrics (no budget).
+      mockBudgetByJob.set(jobId, [
+        { id: 'cat-timber', jobId, name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: now, updatedAt: now },
+        { id: 'cat-cladding', jobId, name: 'cladding', budgetAmount: '2000', budgetCurrency: 'GBP', sortOrder: 1, isArchived: false, createdAt: now, updatedAt: now },
+        { id: 'cat-electrics', jobId, name: 'electrics', budgetAmount: null, budgetCurrency: null, sortOrder: 2, isArchived: false, createdAt: now, updatedAt: now },
+      ])
+      // Seed one safe assigned item: plasterboard (£1200) → cladding. Leaves
+      // hardcore (£40) safe-but-uncategorised, and the rest excluded.
+      const sections = mockSectionsFor(jobId)
+      for (const s of sections) for (const it of s.items) {
+        if (it.id === 'mem-view-004' || it.id === 'mem-view-005') it.budgetCategoryId = 'cat-cladding'
+      }
+    } else {
+      mockBudgetByJob.set(jobId, []) // a job with no budget categories
+    }
+  }
+  return mockBudgetByJob.get(jobId)!
+}
+
+function mockCreateBudgetCategory(jobId: string, req: CreateBudgetCategoryRequest): BudgetCategory {
+  const cats = mockBudgetCategoriesFor(jobId)
+  const name = (req.name ?? '').trim()
+  if (!name) throw new ApiError('Category name is required', 400)
+  const now = new Date().toISOString()
+  const hasBudget = req.budgetAmount != null && req.budgetAmount !== ''
+  const created: BudgetCategory = {
+    id: `cat-new-${++mockCategorySeq}`,
+    jobId,
+    name,
+    budgetAmount: hasBudget ? req.budgetAmount! : null,
+    budgetCurrency: hasBudget ? (req.budgetCurrency ?? 'GBP') : null,
+    sortOrder: req.sortOrder ?? cats.length,
+    isArchived: false,
+    createdAt: now,
+    updatedAt: now,
+  }
+  cats.push(created)
+  return { ...created }
+}
+
+function mockPatchBudgetCategory(jobId: string, categoryId: string, req: PatchBudgetCategoryRequest): BudgetCategory {
+  const cats = mockBudgetCategoriesFor(jobId)
+  const cat = cats.find(c => c.id === categoryId)
+  if (!cat) throw new ApiError('Category not found', 404)
+  if (req.name !== undefined) {
+    const name = req.name.trim()
+    if (!name) throw new ApiError('Category name is required', 400)
+    cat.name = name
+  }
+  if (req.budgetAmount !== undefined) {
+    const hasBudget = req.budgetAmount != null && req.budgetAmount !== ''
+    cat.budgetAmount = hasBudget ? req.budgetAmount : null
+    cat.budgetCurrency = hasBudget ? (req.budgetCurrency ?? cat.budgetCurrency ?? 'GBP') : null
+  }
+  if (req.sortOrder !== undefined) cat.sortOrder = req.sortOrder
+  if (req.isArchived) {
+    cat.isArchived = true
+    // Archiving clears existing assignments so the spend moves to Uncategorised.
+    const sections = mockSectionsFor(jobId)
+    for (const s of sections) for (const it of s.items) {
+      if (it.budgetCategoryId === categoryId) it.budgetCategoryId = null
+    }
+  }
+  cat.updatedAt = new Date().toISOString()
+  return { ...cat }
+}
+
+function mockBudgetSummary(jobId: string): BudgetSummaryResponse {
+  return deriveBudgetSummary(jobId, mockSectionsFor(jobId), mockBudgetCategoriesFor(jobId))
+}
+
+function mockAssignMemoryItemCategory(jobId: string, memoryItemId: string, budgetCategoryId: string | null): MemoryViewItem {
+  const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
+  if (!item) throw new ApiError('Memory item not found', 404)
+  if (budgetCategoryId) {
+    const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === budgetCategoryId)
+    if (!cat || cat.isArchived) throw new ApiError('Invalid category assignment', 400)
+  }
+  item.budgetCategoryId = budgetCategoryId
+  item.updatedAt = new Date().toISOString()
+  return { ...item }
+}
+
+// Confirming/correcting a review item creates trusted memory (like the backend),
+// carrying the selected category, so Job memory / budget reflect it immediately.
+function mockSubmitQueueDecision(jobId: string, decision: QueueDecision): QueueDecisionResponse {
+  const statusMap = { confirm: 'confirmed', correct: 'corrected', dismiss: 'dismissed' } as const
+  if (decision.action === 'dismiss') {
+    return { queueItemId: decision.queueItemId, action: 'dismiss', status: 'dismissed', sourceCandidateFactIds: [] }
+  }
+
+  const source = decision.corrected
+    ?? MOCK_QUEUE_ITEMS.find(i => i.id === decision.queueItemId)?.proposedMemory
+  const memoryItemId = `mem-${decision.queueItemId}`
+  if (source) {
+    const now = new Date().toISOString()
+    const isOrdered = source.memoryType === 'ordered_material'
+    const category = isOrdered ? (decision.budgetCategoryId ?? decision.corrected?.budgetCategoryId ?? null) : null
+    const queueItem = MOCK_QUEUE_ITEMS.find(i => i.id === decision.queueItemId)
+    const keepFlags = decision.uncertaintyResolution === 'still_unsure' ? (queueItem?.uncertaintyFlags ?? []) : []
+    const item: MemoryViewItem = {
+      id: memoryItemId,
+      memoryType: source.memoryType,
+      summary: source.summary,
+      materialName: source.materialName,
+      quantity: source.quantity,
+      unit: source.unit,
+      supplierName: source.supplierName,
+      deliveryTiming: source.deliveryTiming,
+      locationOrUse: source.locationOrUse,
+      costAmount: source.costAmount,
+      costCurrency: source.costCurrency,
+      costQualifier: source.costQualifier,
+      totalCostAmount: source.totalCostAmount,
+      uncertaintyFlags: keepFlags,
+      budgetCategoryId: category,
+      sourceCandidateFactId: null,
+      reviewDecisionId: null,
+      createdAt: now,
+      updatedAt: now,
+      source: null,
+    }
+    const sections = mockSectionsFor(jobId)
+    const targetKey = MEMORY_TYPE_TO_SECTION_KEY[item.memoryType] ?? item.memoryType
+    let target = sections.find(s => s.key === targetKey)
+    if (!target) {
+      target = { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }
+      sections.push(target)
+      sections.sort((a, b) =>
+        ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
+    }
+    // Replace any prior decision for the same queue item (idempotent re-confirm).
+    for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
+    target.items.unshift(item)
+  }
+
+  return {
+    queueItemId: decision.queueItemId,
+    action: decision.action,
+    status: statusMap[decision.action],
+    memoryItemId,
+    sourceCandidateFactIds: [],
+  }
 }
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {

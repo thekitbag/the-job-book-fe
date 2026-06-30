@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import ReviewQueueScreen from '../ReviewQueueScreen'
 import * as api from '../api'
-import type { Job, QueueItem, ReviewQueue } from '../types'
+import type { BudgetCategory, Job, QueueItem, ReviewQueue } from '../types'
 
 const mockGetReviewQueue = vi.mocked(api.getReviewQueue)
 const mockSubmitQueueDecision = vi.mocked(api.submitQueueDecision)
@@ -1131,5 +1131,97 @@ describe('ReviewQueueScreen — Worth checking resolution', () => {
 
     await waitFor(() => expect(mockVerifyMemoryItem).toHaveBeenCalledWith(MOCK_JOB.id, 'mem-ord'))
     await waitFor(() => expect(within(remembered).queryByText('Worth checking')).not.toBeInTheDocument())
+  })
+})
+
+// ── Review-time budget category selection ───────────────────────────────────
+
+const REVIEW_CATS: BudgetCategory[] = [
+  { id: 'c1', jobId: 'job-001', name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' },
+  { id: 'c2', jobId: 'job-001', name: 'cladding', budgetAmount: null, budgetCurrency: null, sortOrder: 1, isArchived: false, createdAt: '', updatedAt: '' },
+]
+
+// An ordered draft (timber) with a material-name suggestion for category c1.
+const ITEM_TIMBER: QueueItem = {
+  ...ITEM_SINGLE,
+  id: 'qi-timber',
+  summary: 'Ordered 6 lengths of timber',
+  proposedMemory: {
+    ...ITEM_SINGLE.proposedMemory,
+    summary: 'Ordered 6 lengths of timber',
+    materialName: 'timber',
+    quantity: '6',
+    unit: 'lengths',
+    budgetCategoryId: 'c1',
+    budgetCategorySuggestion: { budgetCategoryId: 'c1', categoryName: 'timber', reason: 'material_name_match' },
+  },
+}
+
+function categoryQueue(): ReviewQueue {
+  return {
+    jobId: MOCK_JOB.id,
+    generatedAt: '2026-06-07T12:00:00Z',
+    budgetCategories: REVIEW_CATS,
+    sections: [
+      { key: 'ordered_materials', label: 'Ordered materials', items: [ITEM_TIMBER] },
+      { key: 'used_materials', label: 'Used materials', items: [ITEM_DUPLICATE] },
+    ],
+    alreadyRemembered: [],
+  }
+}
+
+describe('ReviewQueueScreen — budget category in review', () => {
+  beforeEach(() => {
+    mockGetReviewQueue.mockResolvedValue(categoryQueue())
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-timber', action: 'confirm', status: 'confirmed', memoryItemId: 'mem-qi-timber', sourceCandidateFactIds: [] })
+  })
+
+  it('shows the suggested category and defaults the selector to it', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const card = await screen.findByTestId('queue-item-qi-timber')
+    expect(within(card).getByText('Suggested: timber')).toBeTruthy()
+    expect((within(card).getByLabelText('Budget category') as HTMLSelectElement).value).toBe('c1')
+  })
+
+  it('does not show category controls for non-ordered memory', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const card = await screen.findByTestId('queue-item-qi-002') // used material
+    expect(within(card).queryByLabelText('Budget category')).toBeNull()
+  })
+
+  it('does not show category controls when there are no active categories', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue()) // no budgetCategories
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const card = await screen.findByTestId('queue-item-qi-001')
+    expect(within(card).queryByLabelText('Budget category')).toBeNull()
+  })
+
+  it('confirms with the suggested category by default', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const card = await screen.findByTestId('queue-item-qi-timber')
+    fireEvent.click(within(card).getByRole('button', { name: /remember this/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({
+      queueItemId: 'qi-timber', action: 'confirm', budgetCategoryId: 'c1',
+    })))
+  })
+
+  it('lets Mike change the category before remembering', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const card = await screen.findByTestId('queue-item-qi-timber')
+    fireEvent.change(within(card).getByLabelText('Budget category'), { target: { value: 'c2' } })
+    fireEvent.click(within(card).getByRole('button', { name: /remember this/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({
+      budgetCategoryId: 'c2',
+    })))
+  })
+
+  it('lets Mike clear the category before remembering', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const card = await screen.findByTestId('queue-item-qi-timber')
+    fireEvent.change(within(card).getByLabelText('Budget category'), { target: { value: '' } })
+    fireEvent.click(within(card).getByRole('button', { name: /remember this/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({
+      budgetCategoryId: null,
+    })))
   })
 })

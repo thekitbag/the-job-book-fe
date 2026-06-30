@@ -15,6 +15,7 @@ export function memoryItemToEdit(item: MemoryViewItem): MemoryItemEdit {
     costCurrency: item.costCurrency,
     costQualifier: item.costQualifier,
     totalCostAmount: item.totalCostAmount,
+    budgetCategoryId: item.budgetCategoryId ?? null,
   }
 }
 
@@ -33,6 +34,7 @@ export function rememberedItemToEdit(item: AlreadyRememberedItem): MemoryItemEdi
     costCurrency: item.costCurrency ?? null,
     costQualifier: item.costQualifier ?? null,
     totalCostAmount: item.totalCostAmount ?? null,
+    budgetCategoryId: item.budgetCategoryId ?? null,
   }
 }
 
@@ -55,6 +57,7 @@ export function applyEditToRemembered(
     costCurrency: updated.costCurrency,
     costQualifier: updated.costQualifier,
     totalCostAmount: updated.totalCostAmount,
+    budgetCategoryId: updated.budgetCategoryId ?? null,
     uncertaintyFlags: updated.uncertaintyFlags ?? prev.uncertaintyFlags ?? [],
   }
 }

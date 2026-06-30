@@ -1,4 +1,4 @@
-import type { ExcludedSpendRow, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -186,6 +186,164 @@ function excludedRow(item: MemoryViewItem, reason: SpendExclusionReason): Exclud
     unit: item.unit,
     reason,
   }
+}
+
+// ── Budget summary derivation ───────────────────────────────────────────────
+// Emulates the backend budget-summary contract so the mock API behaves like the
+// real one and so the rules are unit-testable. The live UI consumes the backend
+// response — it never treats this local recompute as confirmed truth.
+
+function budgetSpendRow(item: MemoryViewItem, amount: number, currency: string): BudgetSpendRow {
+  return {
+    memoryItemId: item.id,
+    itemLabel: item.materialName?.trim() || item.summary?.trim() || 'Bought item',
+    materialName: item.materialName,
+    quantity: item.quantity,
+    unit: item.unit,
+    lineTotalAmount: String(Math.round(amount * 100) / 100),
+    lineTotalCurrency: currency,
+    lineTotalLabel: `${formatMoney(amount, currency)} total`,
+  }
+}
+
+function sumRows(rows: BudgetSpendRow[]): number {
+  return rows.reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
+}
+
+/**
+ * Build a budget summary from trusted memory sections and active categories,
+ * mirroring backend rules:
+ *  - only trusted bought/ordered items with a safe GBP line total contribute
+ *  - one row per contributing item (no consolidation)
+ *  - items with no/archived/unknown category fall into uncategorised
+ *  - remaining/over-budget only when a category (or the total) has a budget
+ */
+export function deriveBudgetSummary(
+  jobId: string,
+  sections: MemoryViewSection[],
+  categories: BudgetCategory[],
+): BudgetSummaryResponse {
+  const currency = 'GBP'
+  const active = categories.filter(c => !c.isArchived)
+  const activeIds = new Set(active.map(c => c.id))
+  const ordered = sections.find(s => s.key === 'ordered_materials')?.items ?? []
+
+  const rowsByCategory = new Map<string, BudgetSpendRow[]>()
+  const uncategorizedRows: BudgetSpendRow[] = []
+
+  for (const item of ordered) {
+    const line = safeLineTotal(item)
+    if (!line || line.currency !== currency) continue // excluded from category totals
+    const row = budgetSpendRow(item, line.amount, line.currency)
+    const catId = item.budgetCategoryId
+    if (catId && activeIds.has(catId)) {
+      const list = rowsByCategory.get(catId) ?? []
+      list.push(row)
+      rowsByCategory.set(catId, list)
+    } else {
+      uncategorizedRows.push(row)
+    }
+  }
+
+  const categorySummaries: BudgetCategorySummary[] = [...active]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(category => {
+      const rows = rowsByCategory.get(category.id) ?? []
+      const spend = sumRows(rows)
+      const hasSpend = rows.length > 0
+      const budget = category.budgetAmount && DECIMAL.test(category.budgetAmount)
+        ? parseFloat(category.budgetAmount) : null
+      const hasBudget = budget !== null
+      const remaining = hasBudget ? budget - spend : null
+      return {
+        category,
+        knownSpendAmount: hasSpend ? String(Math.round(spend * 100) / 100) : null,
+        knownSpendCurrency: hasSpend ? currency : null,
+        knownSpendLabel: hasSpend ? `${formatMoney(spend, currency)} known spend` : null,
+        budgetAmount: category.budgetAmount,
+        budgetCurrency: hasBudget ? (category.budgetCurrency ?? currency) : category.budgetCurrency,
+        budgetLabel: hasBudget ? `${formatMoney(budget, currency)} budget` : null,
+        remainingAmount: remaining !== null ? String(Math.round(remaining * 100) / 100) : null,
+        remainingLabel: remaining !== null ? `${formatMoney(Math.abs(remaining), currency)} ${remaining < 0 ? 'over budget' : 'remaining'}` : null,
+        overBudget: hasBudget && spend > budget,
+        rows,
+      }
+    })
+
+  const uncatSpend = sumRows(uncategorizedRows)
+  const hasUncat = uncategorizedRows.length > 0
+
+  // Totals: budget = sum of active category budgets; known spend = all safe rows.
+  const totalBudget = active.reduce((n, c) =>
+    n + (c.budgetAmount && DECIMAL.test(c.budgetAmount) ? parseFloat(c.budgetAmount) : 0), 0)
+  const anyBudget = active.some(c => c.budgetAmount && DECIMAL.test(c.budgetAmount))
+  const totalSpend = categorySummaries.reduce((n, c) => n + sumRows(c.rows), 0) + uncatSpend
+  const totalRemaining = anyBudget ? totalBudget - totalSpend : null
+
+  return {
+    jobId,
+    generatedAt: new Date().toISOString(),
+    categories: categorySummaries,
+    uncategorized: {
+      knownSpendAmount: hasUncat ? String(Math.round(uncatSpend * 100) / 100) : null,
+      knownSpendCurrency: hasUncat ? currency : null,
+      knownSpendLabel: hasUncat ? `${formatMoney(uncatSpend, currency)} known spend` : null,
+      rows: uncategorizedRows,
+    },
+    totals: {
+      budgetAmount: anyBudget ? String(Math.round(totalBudget * 100) / 100) : null,
+      budgetCurrency: anyBudget ? currency : null,
+      knownSpendAmount: String(Math.round(totalSpend * 100) / 100),
+      knownSpendCurrency: currency,
+      remainingAmount: totalRemaining !== null ? String(Math.round(totalRemaining * 100) / 100) : null,
+      remainingLabel: totalRemaining !== null ? `${formatMoney(Math.abs(totalRemaining), currency)} ${totalRemaining < 0 ? 'over budget' : 'remaining'}` : null,
+      overBudget: anyBudget && totalSpend > totalBudget,
+    },
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Deterministic budget-category suggestion for a proposed bought/ordered review
+ * item (mirrors the backend rule; used by the mock and unit-testable). Only
+ * suggests on a strong, unambiguous match:
+ *  - exact case-insensitive trimmed materialName == category name, or
+ *  - exact case-insensitive token/phrase match of the category name in summary.
+ * A single material-name match wins over summary matches; otherwise multiple
+ * matches yield no suggestion. No fuzzy/substring/supplier/AI matching.
+ */
+export function suggestBudgetCategory(
+  proposed: { memoryType: string; materialName: string | null; summary: string },
+  categories: BudgetCategory[],
+): BudgetCategorySuggestion | null {
+  if (proposed.memoryType !== 'ordered_material') return null
+  const active = categories.filter(c => !c.isArchived)
+  if (active.length === 0) return null
+
+  const material = proposed.materialName?.trim().toLowerCase() ?? ''
+  const materialMatches = material
+    ? active.filter(c => c.name.trim().toLowerCase() === material)
+    : []
+  if (materialMatches.length === 1) {
+    const c = materialMatches[0]
+    return { budgetCategoryId: c.id, categoryName: c.name, reason: 'material_name_match' }
+  }
+  if (materialMatches.length > 1) return null // ambiguous
+
+  const summary = proposed.summary ?? ''
+  const summaryMatches = active.filter(c => {
+    const name = c.name.trim()
+    if (!name) return false
+    return new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i').test(summary)
+  })
+  if (summaryMatches.length === 1) {
+    const c = summaryMatches[0]
+    return { budgetCategoryId: c.id, categoryName: c.name, reason: 'summary_match' }
+  }
+  return null
 }
 
 // memoryType → memory-view section key (used to re-home an item after a type edit)

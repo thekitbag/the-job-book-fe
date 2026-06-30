@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import MemoryEditForm from '../MemoryEditForm'
-import type { MemoryItemEdit } from '../types'
+import type { BudgetCategory, MemoryItemEdit } from '../types'
 
 function initialEdit(over: Partial<MemoryItemEdit> = {}): MemoryItemEdit {
   return {
@@ -14,9 +14,14 @@ function initialEdit(over: Partial<MemoryItemEdit> = {}): MemoryItemEdit {
   }
 }
 
-function setup(initial: MemoryItemEdit) {
+const CATS: BudgetCategory[] = [
+  { id: 'c1', jobId: 'j', name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' },
+  { id: 'c2', jobId: 'j', name: 'cladding', budgetAmount: null, budgetCurrency: null, sortOrder: 1, isArchived: false, createdAt: '', updatedAt: '' },
+]
+
+function setup(initial: MemoryItemEdit, categories?: BudgetCategory[]) {
   const onSubmit = vi.fn()
-  render(<MemoryEditForm initial={initial} submitting={false} onSubmit={onSubmit} onCancel={() => {}} />)
+  render(<MemoryEditForm initial={initial} submitting={false} categories={categories} onSubmit={onSubmit} onCancel={() => {}} />)
   return { onSubmit }
 }
 
@@ -58,5 +63,42 @@ describe('MemoryEditForm — cost currency', () => {
   it('shows the actual currency in the cue for a non-GBP item', () => {
     setup(initialEdit({ costAmount: '5', costCurrency: 'EUR' }))
     expect(screen.getByText(/Cost amount \(EUR\)/)).toBeTruthy()
+  })
+})
+
+describe('MemoryEditForm — budget category', () => {
+  it('shows no category control when there are no categories', () => {
+    setup(initialEdit({ budgetCategoryId: null }), [])
+    expect(screen.queryByLabelText('Budget category')).toBeNull()
+  })
+
+  it('shows no category control for non-ordered memory', () => {
+    setup(initialEdit({ memoryType: 'used_material' }), CATS)
+    expect(screen.queryByLabelText('Budget category')).toBeNull()
+  })
+
+  it('shows the current category for a bought/ordered item and saves a change', () => {
+    const { onSubmit } = setup(initialEdit({ budgetCategoryId: 'c1' }), CATS)
+    const select = screen.getByLabelText('Budget category') as HTMLSelectElement
+    expect(select.value).toBe('c1')
+    fireEvent.change(select, { target: { value: 'c2' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ budgetCategoryId: 'c2' }))
+  })
+
+  it('can clear the category', () => {
+    const { onSubmit } = setup(initialEdit({ budgetCategoryId: 'c1' }), CATS)
+    fireEvent.change(screen.getByLabelText('Budget category'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ budgetCategoryId: null }))
+  })
+
+  it('clears and hides the category when memory type changes away from bought/ordered', () => {
+    const { onSubmit } = setup(initialEdit({ budgetCategoryId: 'c1' }), CATS)
+    expect(screen.getByLabelText('Budget category')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'used_material' } })
+    expect(screen.queryByLabelText('Budget category')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'used_material', budgetCategoryId: null }))
   })
 })

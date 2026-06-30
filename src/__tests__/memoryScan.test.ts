@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveCostSummary, deriveScanGroups, safeLineTotal, spendExclusionCopy } from '../memoryScan'
-import type { MemoryViewItem, MemoryViewSection } from '../types'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveScanGroups, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
   return {
@@ -384,5 +384,174 @@ describe('costDetailRows', () => {
 
   it('returns nothing when there is no cost', () => {
     expect(costDetailRows({ costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null })).toEqual([])
+  })
+})
+
+// ── Budget summary derivation ───────────────────────────────────────────────
+
+function cat(over: Partial<BudgetCategory>): BudgetCategory {
+  return {
+    id: 'cat-x', jobId: 'job-1', name: 'cat', budgetAmount: null, budgetCurrency: null,
+    sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '',
+    ...over,
+  }
+}
+
+const safeItem = (o: Partial<MemoryViewItem>) =>
+  item({ memoryType: 'ordered_material', materialName: 'x', quantity: '1', unit: 'load', totalCostAmount: '100', costCurrency: 'GBP', ...o })
+
+describe('deriveBudgetSummary', () => {
+  it('groups safe spend under its assigned category and computes remaining', () => {
+    const cats = [cat({ id: 'c1', name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP' })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'a', materialName: 'timber', totalCostAmount: '1850', budgetCategoryId: 'c1' }),
+    ]), cats)
+    const timber = s.categories[0]
+    expect(timber.knownSpendAmount).toBe('1850')
+    expect(timber.knownSpendLabel).toBe('£1850 known spend')
+    expect(timber.budgetLabel).toBe('£4000 budget')
+    expect(timber.remainingAmount).toBe('2150')
+    expect(timber.remainingLabel).toBe('£2150 remaining')
+    expect(timber.overBudget).toBe(false)
+    expect(timber.rows.map(r => r.memoryItemId)).toEqual(['a'])
+  })
+
+  it('puts safe spend with no category into uncategorised', () => {
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'a', totalCostAmount: '320', budgetCategoryId: null }),
+    ]), [])
+    expect(s.uncategorized.knownSpendAmount).toBe('320')
+    expect(s.uncategorized.rows.map(r => r.memoryItemId)).toEqual(['a'])
+  })
+
+  it('shows No budget set (null remaining) for a category with no budget amount', () => {
+    const cats = [cat({ id: 'c1', name: 'electrics', budgetAmount: null })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'a', totalCostAmount: '200', budgetCategoryId: 'c1' }),
+    ]), cats)
+    const electrics = s.categories[0]
+    expect(electrics.budgetLabel).toBeNull()
+    expect(electrics.knownSpendLabel).toBe('£200 known spend')
+    expect(electrics.remainingAmount).toBeNull()
+    expect(electrics.overBudget).toBe(false)
+  })
+
+  it('flags over budget when known spend exceeds the budget amount', () => {
+    const cats = [cat({ id: 'c1', name: 'timber', budgetAmount: '100', budgetCurrency: 'GBP' })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'a', totalCostAmount: '150', budgetCategoryId: 'c1' }),
+    ]), cats)
+    expect(s.categories[0].overBudget).toBe(true)
+    expect(s.categories[0].remainingLabel).toBe('£50 over budget')
+  })
+
+  it('excludes missing-cost, worth-checking, and non-ordered items from category totals', () => {
+    const cats = [cat({ id: 'c1', name: 'timber', budgetAmount: '1000', budgetCurrency: 'GBP' })]
+    const s = deriveBudgetSummary('job-1', [
+      section('ordered_materials', [
+        safeItem({ id: 'safe', totalCostAmount: '100', budgetCategoryId: 'c1' }),
+        // missing cost
+        item({ id: 'missing', materialName: 'timber', quantity: '6', unit: 'lengths', budgetCategoryId: 'c1' }),
+        // worth checking (approx basis → not safe)
+        item({ id: 'unsure', materialName: 'timber', costAmount: '50', costQualifier: 'approx', costCurrency: 'GBP', budgetCategoryId: 'c1' }),
+      ]),
+      // used material never contributes
+      section('used_materials', [safeItem({ id: 'used', memoryType: 'used_material', totalCostAmount: '999', budgetCategoryId: 'c1' })]),
+    ], cats)
+    expect(s.categories[0].knownSpendAmount).toBe('100')
+    expect(s.categories[0].rows.map(r => r.memoryItemId)).toEqual(['safe'])
+  })
+
+  it('ignores archived categories and treats their (cleared) spend as uncategorised', () => {
+    const cats = [cat({ id: 'c1', name: 'old', budgetAmount: '500', budgetCurrency: 'GBP', isArchived: true })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      // item still points at the archived category id (defensive)
+      safeItem({ id: 'a', totalCostAmount: '80', budgetCategoryId: 'c1' }),
+    ]), cats)
+    expect(s.categories).toHaveLength(0)
+    expect(s.uncategorized.knownSpendAmount).toBe('80')
+  })
+
+  it('computes totals across categories and uncategorised', () => {
+    const cats = [
+      cat({ id: 'c1', name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP', sortOrder: 0 }),
+      cat({ id: 'c2', name: 'electrics', budgetAmount: null, sortOrder: 1 }),
+    ]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'a', totalCostAmount: '1850', budgetCategoryId: 'c1' }),
+      safeItem({ id: 'b', totalCostAmount: '200', budgetCategoryId: 'c2' }),
+      safeItem({ id: 'c', totalCostAmount: '320', budgetCategoryId: null }),
+    ]), cats)
+    expect(s.totals.budgetAmount).toBe('4000') // only categories with a budget amount
+    expect(s.totals.knownSpendAmount).toBe('2370') // 1850 + 200 + 320
+    expect(s.totals.remainingAmount).toBe('1630')
+    expect(s.totals.overBudget).toBe(false)
+  })
+
+  it('reports a null total budget (no remaining) when no category has a budget amount', () => {
+    const cats = [cat({ id: 'c1', name: 'electrics', budgetAmount: null })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'a', totalCostAmount: '200', budgetCategoryId: 'c1' }),
+    ]), cats)
+    expect(s.totals.budgetAmount).toBeNull()
+    expect(s.totals.remainingAmount).toBeNull()
+    expect(s.totals.knownSpendAmount).toBe('200')
+  })
+})
+
+describe('suggestBudgetCategory', () => {
+  const cats = [
+    cat({ id: 'c-timber', name: 'timber' }),
+    cat({ id: 'c-clad', name: 'cladding' }),
+    cat({ id: 'c-elec', name: 'electrics' }),
+  ]
+  const ordered = (o: { materialName?: string | null; summary?: string }) =>
+    ({ memoryType: 'ordered_material', materialName: o.materialName ?? null, summary: o.summary ?? '' })
+
+  it('suggests on an exact material-name match', () => {
+    expect(suggestBudgetCategory(ordered({ materialName: 'Timber' }), cats))
+      .toEqual({ budgetCategoryId: 'c-timber', categoryName: 'timber', reason: 'material_name_match' })
+  })
+
+  it('suggests on an exact token match in the summary', () => {
+    expect(suggestBudgetCategory(ordered({ materialName: 'DPM', summary: 'Ordered cladding boards' }), cats))
+      .toEqual({ budgetCategoryId: 'c-clad', categoryName: 'cladding', reason: 'summary_match' })
+  })
+
+  it('does not match a substring (token boundary required)', () => {
+    expect(suggestBudgetCategory(ordered({ materialName: 'x', summary: 'electricssupplies order' }), cats)).toBeNull()
+  })
+
+  it('returns no suggestion for non-ordered memory', () => {
+    expect(suggestBudgetCategory({ memoryType: 'used_material', materialName: 'timber', summary: '' }, cats)).toBeNull()
+  })
+
+  it('returns no suggestion when there are no active categories', () => {
+    expect(suggestBudgetCategory(ordered({ materialName: 'timber' }), [])).toBeNull()
+    expect(suggestBudgetCategory(ordered({ materialName: 'timber' }), [cat({ id: 'a', name: 'timber', isArchived: true })])).toBeNull()
+  })
+
+  it('returns no suggestion when the summary matches more than one category', () => {
+    expect(suggestBudgetCategory(ordered({ materialName: 'x', summary: 'timber and cladding delivered' }), cats)).toBeNull()
+  })
+
+  it('prefers a material-name match over summary matches', () => {
+    expect(suggestBudgetCategory(ordered({ materialName: 'electrics', summary: 'timber and cladding' }), cats))
+      .toEqual({ budgetCategoryId: 'c-elec', categoryName: 'electrics', reason: 'material_name_match' })
+  })
+})
+
+describe('spend invariant — budget totals match cost summary', () => {
+  it('budget-summary total known spend equals deriveCostSummary known spend for a mixed fixture', () => {
+    const cats = [cat({ id: 'c1', name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP' })]
+    const sections = ordered([
+      orderedItem({ id: 'inc1', materialName: 'timber', quantity: '1', unit: 'load', totalCostAmount: '1850', costCurrency: 'GBP', budgetCategoryId: 'c1' }),
+      orderedItem({ id: 'inc2', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '320', costCurrency: 'GBP' }), // uncategorised
+      orderedItem({ id: 'miss', materialName: 'sand', quantity: '2', unit: 'bags' }), // missing cost, excluded
+    ])
+    const cost = deriveCostSummary(sections)
+    const budget = deriveBudgetSummary('job-1', sections, cats)
+    expect(budget.totals.knownSpendAmount).toBe(cost.knownSpendAmount)
+    expect(budget.totals.knownSpendAmount).toBe('2170') // 1850 categorised + 320 uncategorised
   })
 })

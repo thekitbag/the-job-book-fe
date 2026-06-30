@@ -63,15 +63,13 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await expect(remembered.getByText('Ordered scaffolding from TCS')).not.toBeVisible()
   })
 
-  test('Fix 3: scan view renders in job memory with cost', async ({ page }) => {
+  test('Fix 3: bought tab renders Known spend and bought notes with cost', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: 'Job memory' }).click()
+    await page.waitForTimeout(800)
 
-    const scan = page.getByRole('region', { name: /memory scan/i })
-    await expect(scan).toBeVisible({ timeout: 8000 })
-    await expect(scan.getByText('Bought / ordered')).toBeVisible()
-    await expect(scan.getByText('hardcore')).toBeVisible()
-    await expect(scan.getByText('£5 each', { exact: true })).toBeVisible()
-    await expect(scan.getByText('£40 total', { exact: true })).toBeVisible()
+    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£1240/)).toBeVisible()
+    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    await expect(hardcore.getByText('£5 each')).toBeVisible()
   })
 })

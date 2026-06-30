@@ -110,6 +110,15 @@ export interface ReviewDraftSection {
 // Trusted memory must be a concrete type — unclear items must be corrected or dismissed.
 export type MemoryType = Exclude<FactType, 'unclear'>
 
+// A deterministic, response-time category suggestion for a review item. Never
+// stored on the candidate fact — computed from the job's active categories.
+export type BudgetCategorySuggestionReason = 'material_name_match' | 'summary_match'
+export interface BudgetCategorySuggestion {
+  budgetCategoryId: string
+  categoryName: string
+  reason: BudgetCategorySuggestionReason
+}
+
 export interface ProposedMemory {
   memoryType: MemoryType
   summary: string
@@ -123,6 +132,10 @@ export interface ProposedMemory {
   costCurrency: string | null
   costQualifier: CostQualifier | null
   totalCostAmount: string | null
+  // Additive: the suggested/default category for this review item (not stored on
+  // the candidate fact). null when there is no strong suggestion.
+  budgetCategoryId?: string | null
+  budgetCategorySuggestion?: BudgetCategorySuggestion | null
 }
 
 export type QueueItemKind = 'single' | 'duplicate_group' | 'contradiction' | 'unclear_prompt'
@@ -173,11 +186,16 @@ export interface AlreadyRememberedItem {
   totalCostAmount?: string | null
   uncertaintyFlags?: string[]
   sourceUncertaintyFlags?: string[]
+  // The confirmed category on this remembered item, if any.
+  budgetCategoryId?: string | null
 }
 
 export interface ReviewQueue {
   jobId: string
   generatedAt: string
+  // Active budget categories for the job (additive). Drives review-time category
+  // selection; empty/absent → no category UI is shown during review.
+  budgetCategories?: BudgetCategory[]
   sections: QueueSection[]
   alreadyRemembered: AlreadyRememberedItem[]
 }
@@ -195,6 +213,9 @@ export interface QueueDecision {
   corrected?: ProposedMemory
   reason?: string
   uncertaintyResolution?: UncertaintyResolution
+  // Selected category to carry into the created memory item (ordered_material
+  // only). null = remember with no category; omitted = backwards-compatible.
+  budgetCategoryId?: string | null
 }
 
 export interface QueueDecisionResponse {
@@ -365,6 +386,9 @@ export interface MemoryViewItem {
   sourceUncertaintyFlags?: string[]
   sourceCandidateFactId: string | null
   reviewDecisionId: string | null
+  // The budget category this trusted item is assigned to, if any (zero or one).
+  // Present on memory-view items so Job memory can show/edit assignment inline.
+  budgetCategoryId?: string | null
   createdAt: string
   updatedAt: string
   source: MemoryViewSource | null
@@ -455,6 +479,88 @@ export interface CostSummary {
   orderedMaterials: OrderedCostSummary
 }
 
+// ── Budget categories & known spend by category ─────────────────────────────
+// Backend-authoritative. The frontend never recomputes category known spend as
+// confirmed truth — it renders the budget-summary response.
+
+export interface BudgetCategory {
+  id: string
+  jobId: string
+  name: string
+  budgetAmount: string | null
+  budgetCurrency: string | null
+  sortOrder: number
+  isArchived: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// One contributing memory item under a category / uncategorised (not consolidated).
+export interface BudgetSpendRow {
+  memoryItemId: string
+  itemLabel: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  lineTotalAmount: string
+  lineTotalCurrency: string
+  lineTotalLabel: string
+}
+
+export interface BudgetCategorySummary {
+  category: BudgetCategory
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  knownSpendLabel: string | null
+  budgetAmount: string | null
+  budgetCurrency: string | null
+  budgetLabel: string | null
+  remainingAmount: string | null
+  remainingLabel: string | null
+  overBudget: boolean
+  rows: BudgetSpendRow[]
+}
+
+export interface UncategorizedSpendSummary {
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  knownSpendLabel: string | null
+  rows: BudgetSpendRow[]
+}
+
+export interface BudgetSummaryTotals {
+  budgetAmount: string | null
+  budgetCurrency: string | null
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  remainingAmount: string | null
+  remainingLabel: string | null
+  overBudget: boolean
+}
+
+export interface BudgetSummaryResponse {
+  jobId: string
+  generatedAt: string
+  categories: BudgetCategorySummary[]
+  uncategorized: UncategorizedSpendSummary
+  totals: BudgetSummaryTotals
+}
+
+export interface CreateBudgetCategoryRequest {
+  name: string
+  budgetAmount?: string | null
+  budgetCurrency?: string | null
+  sortOrder?: number
+}
+
+export interface PatchBudgetCategoryRequest {
+  name?: string
+  budgetAmount?: string | null
+  budgetCurrency?: string | null
+  sortOrder?: number
+  isArchived?: boolean
+}
+
 export interface MemoryViewResponse {
   job: Job
   generatedAt: string
@@ -482,4 +588,6 @@ export interface MemoryItemEdit {
   // Clears (resolved) or keeps (still_unsure) memory_items.unresolvedFlags.
   // Omitted preserves existing flags (backwards compatible).
   uncertaintyResolution?: UncertaintyResolution
+  // Assign/clear the item's budget category. Omitted leaves it unchanged.
+  budgetCategoryId?: string | null
 }
