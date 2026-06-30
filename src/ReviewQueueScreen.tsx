@@ -49,6 +49,29 @@ const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
   labour: 'Labour',
 }
 
+// Scannable card text: a bold headline, a muted meta line, and a cost line —
+// instead of a dense label/value grid.
+function reviewHeadline(pm: ProposedMemory): string {
+  if (pm.memoryType === 'labour') {
+    const hours = pm.labourHours ? `${pm.labourHours} hours` : null
+    return [hours, pm.labourTask].filter(Boolean).join(' · ') || pm.summary
+  }
+  if (MATERIAL_TYPES.has(pm.memoryType)) {
+    const qty = [pm.quantity, pm.unit].filter(Boolean).join(' ')
+    return [qty, pm.materialName].filter(Boolean).join(' · ') || pm.summary
+  }
+  return pm.summary
+}
+function reviewMeta(pm: ProposedMemory): string {
+  if (pm.memoryType === 'labour') return [pm.labourPerson, pm.locationOrUse].filter(Boolean).join(' · ')
+  return [pm.supplierName, pm.deliveryTiming, pm.locationOrUse].filter(Boolean).join(' · ')
+}
+function reviewCost(pm: ProposedMemory): string {
+  const cost = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
+  const total = formatTotalLabel(pm.totalCostAmount, pm.costCurrency)
+  return [cost, total ? `${total} total` : null].filter(Boolean).join(' · ')
+}
+
 // Plain builder labels for the category focus chips, keyed by section key.
 const SECTION_CHIP_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
@@ -90,7 +113,9 @@ function CategoryChips({
       >
         All <span className="queue-cat-chip-count">{totalPending}</span>
       </button>
-      {sections.map(s => {
+      {/* Only categories that actually have pending items get a chip — no row of
+          "0"s. The currently-focused chip stays even if it just emptied. */}
+      {sections.filter(s => draftCount(s) > 0 || focusedKey === s.key).map(s => {
         const count = draftCount(s)
         return (
           <button
@@ -149,46 +174,6 @@ function ItemKindBadge({ item }: { item: QueueItem }) {
         ? 'queue-kind-badge queue-kind-badge--duplicate'
         : 'queue-kind-badge queue-kind-badge--unclear'
   return <span className={cls}>{item.reviewLabel}</span>
-}
-
-function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncertaintyFlags: string[] }) {
-  const rows: [string, string][] = []
-  const isLabour = pm.memoryType === 'labour'
-  if (isLabour) {
-    if (pm.labourHours) rows.push(['Hours', pm.labourHours])
-    if (pm.labourPerson) rows.push(['Person', pm.labourPerson])
-    if (pm.labourTask) rows.push(['Task', pm.labourTask])
-  } else {
-    if (pm.materialName) rows.push(['Item', pm.materialName])
-    const qty = [pm.quantity, pm.unit].filter(Boolean).join(' ')
-    if (qty) rows.push(['Quantity', qty])
-    if (pm.supplierName) rows.push(['Supplier', pm.supplierName])
-    if (pm.deliveryTiming) rows.push(['Delivery', pm.deliveryTiming])
-    if (pm.locationOrUse) rows.push(['Location', pm.locationOrUse])
-  }
-  const costLabel = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
-  if (costLabel) rows.push([isLabour ? 'Rate' : 'Cost', costLabel])
-  const totalLabel = formatTotalLabel(pm.totalCostAmount, pm.costCurrency)
-  if (totalLabel) rows.push(['Total', totalLabel])
-  const uncertain = uncertaintyFlags.length > 0
-
-  if (rows.length === 0 && !uncertain) return null
-  return (
-    <dl className="card-detail-fields">
-      {rows.map(([label, value]) => (
-        <div key={label} className="card-detail-row">
-          <dt className="card-detail-label">{label}</dt>
-          <dd className="card-detail-value">{value}</dd>
-        </div>
-      ))}
-      {uncertain && (
-        <div className="card-detail-row card-uncertainty">
-          <dt className="card-detail-label">Worth checking</dt>
-          <dd className="card-detail-value">cost or quantity may need confirming</dd>
-        </div>
-      )}
-    </dl>
-  )
 }
 
 function EditForm({
@@ -347,20 +332,12 @@ function QueueItemCard({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(item.proposedMemory.budgetCategoryId ?? null)
   const suggestion = item.proposedMemory.budgetCategorySuggestion ?? null
   const showCategory = CATEGORY_TYPES.has(memType) && categories.length > 0 && !resolved && !isEditing
-  const hasDetailFields = !!(
-    item.proposedMemory.materialName ||
-    item.proposedMemory.quantity ||
-    item.proposedMemory.unit ||
-    item.proposedMemory.supplierName ||
-    item.proposedMemory.deliveryTiming ||
-    item.proposedMemory.locationOrUse ||
-    item.proposedMemory.labourHours ||
-    item.proposedMemory.labourPerson ||
-    item.proposedMemory.labourTask ||
-    item.proposedMemory.costAmount ||
-    item.proposedMemory.totalCostAmount ||
-    item.uncertaintyFlags.length > 0
-  )
+  // Category select stays collapsed behind a quiet link unless the backend
+  // already suggested one (then default it open with the suggestion shown).
+  const [catOpen, setCatOpen] = useState<boolean>(!!suggestion)
+  const headline = reviewHeadline(item.proposedMemory)
+  const meta = reviewMeta(item.proposedMemory)
+  const cost = reviewCost(item.proposedMemory)
 
   return (
     <div
@@ -372,25 +349,20 @@ function QueueItemCard({
         {item.timeLabel && <span className="queue-time-label">{item.timeLabel}</span>}
       </div>
 
-      {isStructured
-        ? <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>
-        : <p className="queue-item-summary">{item.summary}</p>
-      }
+      {isStructured && <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>}
 
       {!isEditing && (
-        <QueueItemDetails pm={item.proposedMemory} uncertaintyFlags={item.uncertaintyFlags} />
-      )}
-
-      {isStructured && !hasDetailFields && !isEditing && (
-        <p className="queue-item-summary">{item.summary}</p>
+        <>
+          <p className="queue-item-headline">{headline}</p>
+          {meta && <p className="queue-item-meta">{meta}</p>}
+          {cost && <p className="queue-item-cost">{cost}</p>}
+          {uncertain && <p className="queue-item-uncertain-line">Worth checking — cost or quantity may need confirming</p>}
+        </>
       )}
 
       {!resolved && <SourceContext contexts={item.sourceContext} />}
 
-      {resolved && item.status === 'confirmed' && (
-        <p className="queue-item-resolved queue-item-resolved--saved">Saved to trusted memory</p>
-      )}
-      {resolved && item.status === 'corrected' && (
+      {resolved && (item.status === 'confirmed' || item.status === 'corrected') && (
         <p className="queue-item-resolved queue-item-resolved--saved">Saved to trusted memory</p>
       )}
       {resolved && item.status === 'dismissed' && (
@@ -399,20 +371,24 @@ function QueueItemCard({
 
       {showCategory && (
         <div className="queue-item-category">
-          {suggestion && <p className="queue-item-suggestion">Suggested: {suggestion.categoryName}</p>}
-          <label className="queue-field">
-            <span className="queue-field-label">Budget category</span>
-            <select
-              className="queue-field-input"
-              aria-label="Budget category"
-              value={selectedCategoryId ?? ''}
-              disabled={submitting}
-              onChange={e => setSelectedCategoryId(e.target.value || null)}
-            >
-              <option value="">Choose category</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </label>
+          {catOpen ? (
+            <label className="queue-field">
+              {suggestion && <span className="queue-item-suggestion">Suggested: {suggestion.categoryName}</span>}
+              <span className="queue-field-label">Budget category</span>
+              <select
+                className="queue-field-input"
+                aria-label="Budget category"
+                value={selectedCategoryId ?? ''}
+                disabled={submitting}
+                onChange={e => setSelectedCategoryId(e.target.value || null)}
+              >
+                <option value="">Choose category</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+          ) : (
+            <button type="button" className="btn-queue-addcat" onClick={() => setCatOpen(true)}>+ Add budget category</button>
+          )}
         </div>
       )}
 
@@ -421,21 +397,17 @@ function QueueItemCard({
           <button className="btn-queue-remember" onClick={() => onConfirm(selectedCategoryId)} disabled={submitting}>
             {submitting ? 'Saving…' : 'Remember this'}
           </button>
-          <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>
-            Fix details
-          </button>
-          <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>
-            Dismiss
-          </button>
+          <div className="queue-item-actions-secondary">
+            <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>Fix details</button>
+            <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>Dismiss</button>
+          </div>
+          {/* On a Worth-checking draft, "Remember, but still unsure" keeps the flag. */}
+          {uncertain && (
+            <button className="btn-queue-unsure" onClick={() => onConfirmStillUnsure(selectedCategoryId)} disabled={submitting}>
+              Remember, but still unsure
+            </button>
+          )}
         </div>
-      )}
-
-      {/* On a Worth-checking draft, "Remember this" confirms it as checked.
-          "Still unsure" remembers it but keeps the warning. */}
-      {!resolved && !isEditing && uncertain && (
-        <button className="btn-queue-unsure" onClick={() => onConfirmStillUnsure(selectedCategoryId)} disabled={submitting}>
-          Remember, but still unsure
-        </button>
       )}
 
       {!resolved && isEditing && (

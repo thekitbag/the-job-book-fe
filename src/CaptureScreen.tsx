@@ -398,14 +398,19 @@ export default function CaptureScreen({
       {/* 2. Record — primary action */}
       <div className="capture-controls">
         {recorder.state === 'idle' && (
-          <button
-            className="record-btn"
-            onClick={handleRecord}
-            aria-label="Start recording"
-          >
-            <span className="record-btn-icon" aria-hidden="true" />
-            Record
-          </button>
+          <>
+            <button
+              className="record-btn"
+              onClick={handleRecord}
+              aria-label="Start recording"
+            >
+              <span className="record-btn-icon" aria-hidden="true" />
+              Record
+            </button>
+            <p className="capture-hint">
+              Tap to record a note about this job — <strong>work done, materials ordered, labour, costs</strong>, or anything else.
+            </p>
+          </>
         )}
 
         {(recorder.state === 'recording' || recorder.state === 'stopping') && (

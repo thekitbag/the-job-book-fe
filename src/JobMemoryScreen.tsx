@@ -300,6 +300,7 @@ export default function JobMemoryScreen({
   const [addingCategory, setAddingCategory] = useState(false)
   const [savingNewCategory, setSavingNewCategory] = useState(false)
   const [budgetError, setBudgetError] = useState('')
+  const [openMenuCatId, setOpenMenuCatId] = useState<string | null>(null)
 
   const currentJobIdRef = useRef(job.id)
   currentJobIdRef.current = job.id
@@ -532,11 +533,24 @@ export default function JobMemoryScreen({
       <section key={c.id} className="budget-cat" aria-label={`Budget category ${c.name}`}>
         <div className="budget-cat-head">
           <h3 className="budget-cat-name">{c.name}</h3>
-          <div className="budget-cat-actions">
-            <button type="button" className="btn-cat-edit" onClick={() => setEditingBudgetId(c.id)}>Edit budget</button>
-            <button type="button" className="btn-cat-archive" disabled={savingCatId === c.id} onClick={() => {
-              if (window.confirm(`Remove "${c.name}"? Its spend moves to Uncategorised.`)) handleArchiveCategory(c.id)
-            }}>Remove</button>
+          <div className="budget-cat-menu-wrap">
+            <button
+              type="button"
+              className="btn-cat-menu"
+              aria-label={`Actions for ${c.name}`}
+              aria-haspopup="menu"
+              aria-expanded={openMenuCatId === c.id}
+              onClick={() => setOpenMenuCatId(openMenuCatId === c.id ? null : c.id)}
+            >⋯</button>
+            {openMenuCatId === c.id && (
+              <div className="budget-cat-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setOpenMenuCatId(null); setEditingBudgetId(c.id) }}>Edit budget</button>
+                <button type="button" role="menuitem" className="budget-cat-menu-danger" disabled={savingCatId === c.id} onClick={() => {
+                  setOpenMenuCatId(null)
+                  if (window.confirm(`Remove "${c.name}"? Its spend moves to Uncategorised.`)) handleArchiveCategory(c.id)
+                }}>Remove category</button>
+              </div>
+            )}
           </div>
         </div>
         <div className="budget-cat-figures">
@@ -548,7 +562,8 @@ export default function JobMemoryScreen({
         {notes.length > 0
           ? <>
               <button type="button" className="notes-toggle" aria-expanded={open} onClick={() => setExpandedCats(p => ({ ...p, [c.id]: !p[c.id] }))}>
-                {open ? 'Hide notes' : `Show notes (${notes.length})`}
+                <span>{open ? 'Hide notes' : `Show notes (${notes.length})`}</span>
+                <span className="notes-toggle-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
               </button>
               {open && <div className="cat-notes">{notes.map(item => (
                 <MemoryCard key={item.id} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
@@ -561,6 +576,9 @@ export default function JobMemoryScreen({
 
   return (
     <div className="mem-page">
+      {openMenuCatId && (
+        <div className="mem-menu-scrim" onClick={() => setOpenMenuCatId(null)} aria-hidden="true" />
+      )}
       <header className="mem-header">
         <button className="mem-back" onClick={onClose} aria-label="Back">← Back</button>
         <div className="mem-header-titles">
