@@ -13,20 +13,26 @@ import { memoryItemToEdit } from './memoryEdit'
 import {
   costDetailRows,
   deriveCostSummary,
+  deriveLabourSummary,
+  deriveTotalKnownCost,
   formatMoney,
+  labourExclusionCopy,
   spendExclusionCopy,
   MEMORY_TYPE_TO_SECTION_KEY,
   SECTION_FULL_LABELS,
   SECTION_ORDER,
 } from './memoryScan'
-import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, OrderedCostSummary } from './types'
+import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, TotalKnownCost } from './types'
 
-const MATERIAL_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material'])
+// Types shown with a structured type label + detail rows (not a prose summary).
+const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material', 'labour'])
+const CATEGORY_TYPES = new Set<string>(['ordered_material', 'labour'])
 
 const MATERIAL_TYPE_LABEL: Record<string, string> = {
   ordered_material: 'Bought / ordered',
   used_material: 'Used',
   leftover_material: 'Left over',
+  labour: 'Labour',
 }
 
 // Sections shown under each tab.
@@ -48,12 +54,18 @@ function formatTime(iso: string) {
 
 function StructuredFields({ item }: { item: MemoryViewItem }) {
   const rows: [string, string][] = []
-  if (item.materialName) rows.push(['Item', item.materialName])
-  const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
-  if (qty) rows.push(['Quantity', qty])
-  if (item.supplierName) rows.push(['Supplier', item.supplierName])
-  if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
-  if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
+  if (item.memoryType === 'labour') {
+    if (item.labourHours) rows.push(['Hours', item.labourHours])
+    if (item.labourPerson) rows.push(['Person', item.labourPerson])
+    if (item.labourTask) rows.push(['Task', item.labourTask])
+  } else {
+    if (item.materialName) rows.push(['Item', item.materialName])
+    const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
+    if (qty) rows.push(['Quantity', qty])
+    if (item.supplierName) rows.push(['Supplier', item.supplierName])
+    if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
+    if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
+  }
   rows.push(...costDetailRows(item))
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
 
@@ -129,14 +141,18 @@ function MemoryCard({
   onVerify: () => void
   onAssignCategory: (categoryId: string | null) => void
 }) {
-  const isMaterial = MATERIAL_TYPES.has(item.memoryType)
+  const isStructured = STRUCTURED_TYPES.has(item.memoryType)
   const hasFields = !!(
     item.materialName || item.quantity || item.unit ||
     item.supplierName || item.deliveryTiming || item.locationOrUse ||
+    item.labourHours || item.labourPerson || item.labourTask ||
     item.costAmount || item.totalCostAmount ||
     (item.uncertaintyFlags ?? []).length > 0
   )
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
+  const excludedCopy = excludedReason
+    ? (item.memoryType === 'labour' ? labourExclusionCopy(excludedReason) : spendExclusionCopy(excludedReason))
+    : null
   const [ackUnsure, setAckUnsure] = useState(false)
 
   if (isEditing) {
@@ -150,16 +166,16 @@ function MemoryCard({
 
   return (
     <div className={`mem-card${uncertain ? ' mem-card--unresolved' : ''}`}>
-      {isMaterial
+      {isStructured
         ? <p className="mem-card-type-label">{MATERIAL_TYPE_LABEL[item.memoryType]}</p>
         : <p className="mem-card-summary">{item.summary}</p>
       }
       <StructuredFields item={item} />
-      {isMaterial && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
+      {isStructured && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
 
-      {/* Bought item that isn't in Known spend — say so explicitly. */}
-      {excludedReason && (
-        <p className="mem-card-notcounted">Not in Known spend yet · {spendExclusionCopy(excludedReason)}</p>
+      {/* Bought/labour item that isn't in Known spend — say so explicitly. */}
+      {excludedCopy && (
+        <p className="mem-card-notcounted">Not in Known spend yet · {excludedCopy}</p>
       )}
 
       {uncertain && !ackUnsure && (
@@ -173,12 +189,12 @@ function MemoryCard({
         </div>
       )}
 
-      {item.memoryType === 'ordered_material' && categories.length > 0 && (
+      {CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && (
         <label className="mem-card-category">
           <span className="mem-card-category-label">Budget category</span>
           <select
             className="mem-card-category-select"
-            aria-label={`Budget category for ${item.materialName ?? item.summary}`}
+            aria-label={`Budget category for ${item.labourTask ?? item.materialName ?? item.summary}`}
             value={item.budgetCategoryId ?? ''}
             disabled={assigningCategory}
             onChange={e => onAssignCategory(e.target.value || null)}
@@ -232,9 +248,10 @@ function CategoryForm({
   )
 }
 
-// Hero: one job-level Known spend, against the total budget when one exists.
-function KnownSpendHero({ summary, totals }: { summary: OrderedCostSummary; totals: BudgetSummaryResponse['totals'] | null }) {
-  const known = summary.knownSpendAmount ? parseFloat(summary.knownSpendAmount) : 0
+// Hero: one job-level Known spend (bought + rated labour), against the total
+// budget when one exists.
+function KnownSpendHero({ total, totals }: { total: TotalKnownCost; totals: BudgetSummaryResponse['totals'] | null }) {
+  const known = total.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
   const budget = totals?.budgetAmount ? parseFloat(totals.budgetAmount) : null
   const hasBudget = budget !== null && budget > 0
   const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
@@ -243,7 +260,7 @@ function KnownSpendHero({ summary, totals }: { summary: OrderedCostSummary; tota
     <section className={`mem-hero${over ? ' mem-hero--over' : ''}`} aria-label="Known spend">
       <p className="mem-hero-cap">Known spend{hasBudget ? ' vs budget' : ''}</p>
       <p className="mem-hero-amount">
-        {summary.knownSpendAmount ? formatMoney(known, summary.knownSpendCurrency) : 'None yet'}
+        {total.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}
         {hasBudget && <span className="mem-hero-of"> of {formatMoney(budget!, 'GBP')}</span>}
       </p>
       {hasBudget
@@ -435,24 +452,37 @@ export default function JobMemoryScreen({
   }, [job.id, loadBudget])
 
   // ── Derivations ───────────────────────────────────────────────────────────
-  const costSummary = useMemo<OrderedCostSummary | null>(
-    () => (data ? (data.costSummary?.orderedMaterials ?? deriveCostSummary(data.sections)) : null),
+  // Backend-authoritative summaries (fall back to local derivation for an older
+  // API without labour/total fields).
+  const ordered = useMemo(() => (data ? (data.costSummary?.orderedMaterials ?? deriveCostSummary(data.sections)) : null), [data])
+  const labourSummary = useMemo(() => (data ? (data.costSummary?.labour ?? deriveLabourSummary(data.sections)) : null), [data])
+  const totalKnownCost = useMemo<TotalKnownCost | null>(
+    () => (data ? (data.costSummary?.totalKnownCost ?? deriveTotalKnownCost(data.sections)) : null),
     [data],
   )
   const sectionItems = (key: string) => data?.sections.find(s => s.key === key)?.items ?? []
   const orderedItems = sectionItems('ordered_materials')
-  const includedIds = useMemo(() => new Set((costSummary?.rows ?? []).flatMap(r => r.memoryItemIds)), [costSummary])
+  const labourItems = sectionItems('labour')
+  const includedIds = useMemo(
+    () => new Set([...(ordered?.rows ?? []).flatMap(r => r.memoryItemIds), ...(labourSummary?.rows ?? []).map(r => r.memoryItemId)]),
+    [ordered, labourSummary],
+  )
   const exclusionReason = useMemo(
-    () => new Map((costSummary?.excludedRows ?? []).map(r => [r.memoryItemId, r.reason])),
-    [costSummary],
+    () => new Map<string, string>([
+      ...(ordered?.excludedRows ?? []).map(r => [r.memoryItemId, r.reason] as [string, string]),
+      ...(labourSummary?.excludedRows ?? []).map(r => [r.memoryItemId, r.reason] as [string, string]),
+    ]),
+    [ordered, labourSummary],
   )
   const activeCatIds = useMemo(() => new Set(budgetCategories.map(c => c.id)), [budgetCategories])
-  const uncategorised = orderedItems.filter(i => !i.budgetCategoryId || !activeCatIds.has(i.budgetCategoryId))
-  const uncatCounted = uncategorised.filter(i => includedIds.has(i.id))
-  const uncatNotCounted = uncategorised.filter(i => !includedIds.has(i.id))
+  const isUncategorised = (i: MemoryViewItem) => !i.budgetCategoryId || !activeCatIds.has(i.budgetCategoryId)
+  const uncatBought = orderedItems.filter(isUncategorised)
+  const uncatCounted = uncatBought.filter(i => includedIds.has(i.id))
+  const uncatNotCounted = uncatBought.filter(i => !includedIds.has(i.id))
+  const uncatLabour = labourItems.filter(isUncategorised)
 
   const hasMemory = data ? data.sections.some(s => s.items.length > 0) : false
-  const hasBoughtContent = orderedItems.length > 0 || budgetCategories.length > 0
+  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0
 
   // Shared MemoryCard props for an item; pass categories only where a picker helps.
   const cardProps = (item: MemoryViewItem, withPicker: boolean) => ({
@@ -483,7 +513,7 @@ export default function JobMemoryScreen({
 
   function renderCategoryCard(cs: BudgetCategorySummary) {
     const c = cs.category
-    const notes = orderedItems.filter(i => i.budgetCategoryId === c.id)
+    const notes = [...orderedItems, ...labourItems].filter(i => i.budgetCategoryId === c.id)
     const open = !!expandedCats[c.id]
     if (editingBudgetId === c.id) {
       return (
@@ -524,7 +554,7 @@ export default function JobMemoryScreen({
                 <MemoryCard key={item.id} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
               ))}</div>}
             </>
-          : <p className="cat-empty">No bought notes in this category yet.</p>}
+          : <p className="cat-empty">No notes in this category yet.</p>}
       </section>
     )
   }
@@ -574,18 +604,18 @@ export default function JobMemoryScreen({
           ) : (
             <>
               <div className="mem-tabs" role="tablist" aria-label="Job memory">
-                <button role="tab" aria-selected={tab === 'bought'} className={`mem-tab${tab === 'bought' ? ' mem-tab--active' : ''}`} onClick={() => setTab('bought')}>What I've bought</button>
+                <button role="tab" aria-selected={tab === 'bought'} className={`mem-tab${tab === 'bought' ? ' mem-tab--active' : ''}`} onClick={() => setTab('bought')}>Spend</button>
                 <button role="tab" aria-selected={tab === 'used'} className={`mem-tab${tab === 'used' ? ' mem-tab--active' : ''}`} onClick={() => setTab('used')}>Used &amp; left over</button>
                 <button role="tab" aria-selected={tab === 'notes'} className={`mem-tab${tab === 'notes' ? ' mem-tab--active' : ''}`} onClick={() => setTab('notes')}>Notes</button>
               </div>
 
               {tab === 'bought' && (
-                <div className="mem-tabpanel" role="tabpanel" aria-label="What I've bought">
-                  {!hasBoughtContent ? (
-                    <p className="mem-tab-empty">Nothing bought remembered yet.</p>
+                <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
+                  {!hasSpendContent ? (
+                    <p className="mem-tab-empty">Nothing bought or labour remembered yet.</p>
                   ) : (
                     <>
-                      {costSummary && <KnownSpendHero summary={costSummary} totals={budgetSummary?.totals ?? null} />}
+                      {totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
                       {refreshError && (
                         <div className="mem-known-spend-refresh" role="alert">
                           <span>Couldn’t refresh spend — this may be out of date.</span>
@@ -603,19 +633,29 @@ export default function JobMemoryScreen({
                       </section>
 
                       {uncatCounted.length > 0 && (
-                        <section aria-label="Uncategorised spend">
-                          <p className="mem-section-label">Uncategorised spend{budgetSummary?.uncategorized.knownSpendLabel ? ` · ${budgetSummary.uncategorized.knownSpendLabel}` : ''}</p>
+                        <section aria-label="Uncategorised bought">
+                          <p className="mem-section-label">Bought · uncategorised</p>
                           <p className="mem-section-note">Counted in Known spend — give each a category to track it.</p>
                           {uncatCounted.map(item => <MemoryCard key={item.id} {...cardProps(item, true)} />)}
                         </section>
                       )}
 
                       {uncatNotCounted.length > 0 && (
-                        <section aria-label="Not in known spend">
+                        <section aria-label="Bought not in known spend">
                           <p className="mem-section-label">Bought · not in Known spend yet</p>
                           <p className="mem-section-note">Add a price (or confirm) to count these.</p>
                           {uncatNotCounted.map(item => (
                             <MemoryCard key={item.id} {...cardProps(item, true)} excludedReason={exclusionReason.get(item.id) ?? 'no_cost_remembered'} />
+                          ))}
+                        </section>
+                      )}
+
+                      {uncatLabour.length > 0 && (
+                        <section aria-label="Labour">
+                          <p className="mem-section-label">Labour</p>
+                          <p className="mem-section-note">Hours are remembered; only rated/total labour counts in Known spend.</p>
+                          {uncatLabour.map(item => (
+                            <MemoryCard key={item.id} {...cardProps(item, true)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'no_rate_or_cost')} />
                           ))}
                         </section>
                       )}

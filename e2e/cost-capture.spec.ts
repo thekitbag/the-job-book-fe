@@ -14,16 +14,18 @@ async function openBought(page: Page) {
 }
 
 const heroRegion = (page: Page) => page.getByRole('region', { name: /^known spend$/i })
-const notCounted = (page: Page) => page.getByRole('region', { name: /not in known spend/i })
-const uncategorised = (page: Page) => page.getByRole('region', { name: /uncategorised spend/i })
+const notCounted = (page: Page) => page.getByRole('region', { name: /bought not in known spend/i })
+const uncategorised = (page: Page) => page.getByRole('region', { name: /uncategorised bought/i })
 
-test.describe('Cost capture & Known spend (bought tab)', () => {
-  test('shows one Known spend hero against the total budget — never "Total spend"', async ({ page }) => {
+// Total known cost = bought £1240 + rated/total labour £880 = £2120, of the
+// £7500 budget (timber 4000 + cladding 2000 + labour 1500).
+test.describe('Cost capture & Known spend (Spend tab)', () => {
+  test('shows one Known spend hero (bought + labour) against the total budget', async ({ page }) => {
     await openBought(page)
     const hero = heroRegion(page)
-    await expect(hero.getByText(/£1240/)).toBeVisible()
-    await expect(hero.getByText(/of £6000/)).toBeVisible()
-    await expect(hero.getByText(/£4760 remaining/)).toBeVisible()
+    await expect(hero.getByText(/£2120/)).toBeVisible()
+    await expect(hero.getByText(/of £7500/)).toBeVisible()
+    await expect(hero.getByText(/£5380 remaining/)).toBeVisible()
     await expect(page.getByText(/total spend/i)).toHaveCount(0)
   })
 
@@ -38,8 +40,8 @@ test.describe('Cost capture & Known spend (bought tab)', () => {
   test('uncategorised safe spend is counted and shown with a Choose category action', async ({ page }) => {
     await openBought(page)
     const u = uncategorised(page)
-    await expect(u.getByText(/£40 known spend/)).toBeVisible()
     await expect(u.getByText('hardcore')).toBeVisible()
+    await expect(u.getByText('£40')).toBeVisible()
     await expect(u.getByLabel(/budget category for hardcore/i)).toBeVisible()
   })
 
@@ -53,7 +55,7 @@ test.describe('Cost capture & Known spend (bought tab)', () => {
 
   test('correcting a currency-null no-price item moves it into Known spend', async ({ page }) => {
     await openBought(page)
-    await expect(heroRegion(page).getByText(/£1240/)).toBeVisible()
+    await expect(heroRegion(page).getByText(/£2120/)).toBeVisible()
 
     const timber = notCounted(page).locator('.mem-card', { hasText: '6 lengths' })
     await timber.getByRole('button', { name: /fix memory/i }).click()
@@ -64,8 +66,8 @@ test.describe('Cost capture & Known spend (bought tab)', () => {
     await page.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(1000)
 
-    // Refetched summary: 1240 + 6×£10 = 1300.
-    await expect(heroRegion(page).getByText(/£1300/)).toBeVisible()
+    // Refetched total known cost: bought (1240 + 6×£10) + labour 880 = £2180.
+    await expect(heroRegion(page).getByText(/£2180/)).toBeVisible()
   })
 
   test('source context remains available on a bought note', async ({ page }) => {

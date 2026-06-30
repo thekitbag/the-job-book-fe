@@ -1,5 +1,5 @@
 import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
-import { deriveBudgetSummary, deriveCostSummary, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
+import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -451,6 +451,52 @@ const MOCK_QUEUE_ITEMS: QueueItem[] = [
       },
     ],
   },
+  // Labour draft — hours only, no cost (can be remembered without a cost).
+  {
+    id: 'queue-item-mock-005',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'What I picked up today',
+    timeLabel: 'Today',
+    summary: 'Spent 6 hours fitting the cladding',
+    proposedMemory: {
+      memoryType: 'labour' as MemoryType,
+      summary: 'Spent 6 hours fitting the cladding',
+      materialName: null, quantity: null, unit: null, supplierName: null,
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      labourHours: '6', labourPerson: null, labourTask: 'fitting cladding',
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-006'],
+    sourceContext: [
+      { candidateFactId: 'mock-fact-006', noteId: 'mock-note-005', transcriptId: 'mock-trans-005', capturedAt: new Date().toISOString(), transcriptText: 'Spent about six hours fitting the cladding today.' },
+    ],
+  },
+  // Labour draft — rated (hours × £/hour). Suggests the active 'labour' category.
+  {
+    id: 'queue-item-mock-006',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'What I picked up today',
+    timeLabel: 'Today',
+    summary: 'Tom did 8 hours on electrics at £35 an hour',
+    proposedMemory: {
+      memoryType: 'labour' as MemoryType,
+      summary: 'Tom did 8 hours on electrics at £35 an hour',
+      materialName: null, quantity: null, unit: null, supplierName: null,
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: '35', costCurrency: 'GBP', costQualifier: 'per_hour', totalCostAmount: '280',
+      labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-007'],
+    sourceContext: [
+      { candidateFactId: 'mock-fact-007', noteId: 'mock-note-006', transcriptId: 'mock-trans-006', capturedAt: new Date().toISOString(), transcriptText: 'Tom did eight hours on the electrics at thirty-five an hour.' },
+    ],
+  },
 ]
 
 const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
@@ -497,9 +543,10 @@ export async function getReviewQueue(jobId: string): Promise<ReviewQueue> {
   if (USE_MOCK) {
     await delay(500)
     const budgetCategories = mockBudgetCategoriesFor(jobId).filter(c => !c.isArchived)
-    // Compute a response-time category suggestion for each bought/ordered draft.
+    // Compute a response-time category suggestion for bought/ordered + labour drafts.
     const enrich = (item: QueueItem): QueueItem => {
-      if (item.proposedMemory.memoryType !== 'ordered_material') return item
+      const t = item.proposedMemory.memoryType
+      if (t !== 'ordered_material' && t !== 'labour') return item
       const suggestion = suggestBudgetCategory(item.proposedMemory, budgetCategories)
       return {
         ...item,
@@ -516,6 +563,7 @@ export async function getReviewQueue(jobId: string): Promise<ReviewQueue> {
       budgetCategories,
       sections: [
         { key: 'ordered_materials', label: 'Ordered materials', items: [enrich(MOCK_QUEUE_ITEMS[0]), enrich(MOCK_QUEUE_ITEMS[3])] },
+        { key: 'labour', label: 'Labour', items: [enrich(MOCK_QUEUE_ITEMS[4]), enrich(MOCK_QUEUE_ITEMS[5])] },
         { key: 'used_materials', label: 'Used materials', items: [MOCK_QUEUE_ITEMS[1]] },
         { key: 'leftovers', label: 'Leftovers', items: [] },
         { key: 'watch_outs', label: 'Watch outs', items: [MOCK_QUEUE_ITEMS[2]] },
@@ -1082,6 +1130,58 @@ function buildMockSections(): MemoryViewSection[] {
         ],
       },
       {
+        key: 'labour',
+        label: 'Labour',
+        items: [
+          // Hours-only labour: remembered, but no monetary cost → not counted.
+          {
+            id: 'mem-labour-1',
+            memoryType: 'labour',
+            summary: 'Spent 6 hours fitting the cladding',
+            materialName: null, quantity: null, unit: null, supplierName: null,
+            deliveryTiming: null, locationOrUse: null,
+            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+            labourHours: '6', labourPerson: null, labourTask: 'fitting cladding',
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-l1', reviewDecisionId: 'decision-l1',
+            createdAt: '2026-06-13T11:10:00.000Z', updatedAt: '2026-06-13T11:10:00.000Z',
+            source: {
+              candidateFactId: 'fact-l1', noteId: 'note-l1', transcriptId: 'trans-l1',
+              capturedAt: '2026-06-13T11:05:00.000Z',
+              transcriptText: 'Spent about six hours fitting the cladding today.',
+            },
+          },
+          // Rated labour: hours × per-hour rate → safe £280 (assigned to a category).
+          {
+            id: 'mem-labour-2',
+            memoryType: 'labour',
+            summary: 'Tom did 8 hours on electrics at £35 an hour',
+            materialName: null, quantity: null, unit: null, supplierName: null,
+            deliveryTiming: null, locationOrUse: null,
+            costAmount: '35', costCurrency: 'GBP', costQualifier: 'per_hour', totalCostAmount: '280',
+            labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-l2', reviewDecisionId: 'decision-l2',
+            createdAt: '2026-06-13T11:15:00.000Z', updatedAt: '2026-06-13T11:15:00.000Z',
+            source: null,
+          },
+          // Explicit labour total → safe £600.
+          {
+            id: 'mem-labour-3',
+            memoryType: 'labour',
+            summary: 'Labour on the roof came to £600',
+            materialName: null, quantity: null, unit: null, supplierName: null,
+            deliveryTiming: null, locationOrUse: null,
+            costAmount: '600', costCurrency: 'GBP', costQualifier: 'total', totalCostAmount: '600',
+            labourHours: null, labourPerson: null, labourTask: 'roof',
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-l3', reviewDecisionId: 'decision-l3',
+            createdAt: '2026-06-13T11:20:00.000Z', updatedAt: '2026-06-13T11:20:00.000Z',
+            source: null,
+          },
+        ],
+      },
+      {
         key: 'leftovers',
         label: 'Leftovers',
         items: [
@@ -1219,7 +1319,11 @@ function mockMemoryView(jobId: string): MemoryViewResponse {
       ],
     },
     // Authoritative known spend, derived from current state so an edit changes it.
-    costSummary: { orderedMaterials: deriveCostSummary(sections) },
+    costSummary: {
+      orderedMaterials: deriveCostSummary(sections),
+      labour: deriveLabourSummary(sections),
+      totalKnownCost: deriveTotalKnownCost(sections),
+    },
   }
 }
 
@@ -1241,6 +1345,10 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
     costCurrency: edit.costCurrency,
     costQualifier: edit.costQualifier,
     totalCostAmount: edit.totalCostAmount,
+    // Labour fields only meaningful for labour; cleared otherwise.
+    labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
+    labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
+    labourTask: edit.memoryType === 'labour' ? (edit.labourTask ?? null) : null,
     // A Fix-memory save also resolves any worth-checking flags.
     uncertaintyFlags: [],
     // Preserve the existing category unless this edit explicitly changes it.
@@ -1283,17 +1391,21 @@ function mockBudgetCategoriesFor(jobId: string): BudgetCategory[] {
   if (!mockBudgetByJob.has(jobId)) {
     const now = '2026-06-28T08:00:00.000Z'
     if (jobId === MOCK_BUDGET_SEED_JOB) {
-      // timber (budget, no spend), cladding (budget + spend), electrics (no budget).
+      // timber (budget, no spend), cladding (budget + spend), electrics (no
+      // budget), labour (budget + labour spend).
       mockBudgetByJob.set(jobId, [
         { id: 'cat-timber', jobId, name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: now, updatedAt: now },
         { id: 'cat-cladding', jobId, name: 'cladding', budgetAmount: '2000', budgetCurrency: 'GBP', sortOrder: 1, isArchived: false, createdAt: now, updatedAt: now },
         { id: 'cat-electrics', jobId, name: 'electrics', budgetAmount: null, budgetCurrency: null, sortOrder: 2, isArchived: false, createdAt: now, updatedAt: now },
+        { id: 'cat-labour', jobId, name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP', sortOrder: 3, isArchived: false, createdAt: now, updatedAt: now },
       ])
-      // Seed one safe assigned item: plasterboard (£1200) → cladding. Leaves
-      // hardcore (£40) safe-but-uncategorised, and the rest excluded.
+      // Seed safe assigned items: plasterboard (£1200) → cladding, and the rated
+      // labour (Tom, £280) → labour. Leaves hardcore (£40) and the £600 roof
+      // labour safe-but-uncategorised, and the rest excluded.
       const sections = mockSectionsFor(jobId)
       for (const s of sections) for (const it of s.items) {
         if (it.id === 'mem-view-004' || it.id === 'mem-view-005') it.budgetCategoryId = 'cat-cladding'
+        if (it.id === 'mem-labour-2') it.budgetCategoryId = 'cat-labour'
       }
     } else {
       mockBudgetByJob.set(jobId, []) // a job with no budget categories
@@ -1379,8 +1491,9 @@ function mockSubmitQueueDecision(jobId: string, decision: QueueDecision): QueueD
   const memoryItemId = `mem-${decision.queueItemId}`
   if (source) {
     const now = new Date().toISOString()
-    const isOrdered = source.memoryType === 'ordered_material'
-    const category = isOrdered ? (decision.budgetCategoryId ?? decision.corrected?.budgetCategoryId ?? null) : null
+    const isLabour = source.memoryType === 'labour'
+    const canCategorise = source.memoryType === 'ordered_material' || isLabour
+    const category = canCategorise ? (decision.budgetCategoryId ?? decision.corrected?.budgetCategoryId ?? null) : null
     const queueItem = MOCK_QUEUE_ITEMS.find(i => i.id === decision.queueItemId)
     const keepFlags = decision.uncertaintyResolution === 'still_unsure' ? (queueItem?.uncertaintyFlags ?? []) : []
     const item: MemoryViewItem = {
@@ -1397,6 +1510,9 @@ function mockSubmitQueueDecision(jobId: string, decision: QueueDecision): QueueD
       costCurrency: source.costCurrency,
       costQualifier: source.costQualifier,
       totalCostAmount: source.totalCostAmount,
+      labourHours: isLabour ? (source.labourHours ?? null) : null,
+      labourPerson: isLabour ? (source.labourPerson ?? null) : null,
+      labourTask: isLabour ? (source.labourTask ?? null) : null,
       uncertaintyFlags: keepFlags,
       budgetCategoryId: category,
       sourceCandidateFactId: null,

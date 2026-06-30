@@ -328,7 +328,8 @@ describe('ReviewQueueScreen', () => {
     const typeSelect = screen.getAllByRole('combobox')[0]
     const options = Array.from(typeSelect.querySelectorAll('option')).map(o => o.value)
     expect(options).not.toContain('unclear')
-    expect(options.length).toBe(6)
+    expect(options).toContain('labour')
+    expect(options.length).toBe(7)
   })
 
   it('shows item-level error on decision failure with retry possible', async () => {
@@ -1223,5 +1224,83 @@ describe('ReviewQueueScreen — budget category in review', () => {
     await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({
       budgetCategoryId: null,
     })))
+  })
+})
+
+// ── Labour in review ────────────────────────────────────────────────────────
+
+const ITEM_LABOUR_HOURS: QueueItem = {
+  ...ITEM_SINGLE,
+  id: 'qi-labour-hours',
+  summary: 'Spent 6 hours fitting the cladding',
+  proposedMemory: {
+    memoryType: 'labour', summary: 'Spent 6 hours fitting the cladding',
+    materialName: null, quantity: null, unit: null, supplierName: null, deliveryTiming: null, locationOrUse: null,
+    costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+    labourHours: '6', labourPerson: null, labourTask: 'fitting cladding',
+  },
+}
+const ITEM_LABOUR_RATED: QueueItem = {
+  ...ITEM_SINGLE,
+  id: 'qi-labour-rated',
+  summary: 'Tom did 8 hours on electrics at £35 an hour',
+  proposedMemory: {
+    memoryType: 'labour', summary: 'Tom did 8 hours on electrics at £35 an hour',
+    materialName: null, quantity: null, unit: null, supplierName: null, deliveryTiming: null, locationOrUse: null,
+    costAmount: '35', costCurrency: 'GBP', costQualifier: 'per_hour', totalCostAmount: '280',
+    labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
+    budgetCategoryId: 'c-lab',
+    budgetCategorySuggestion: { budgetCategoryId: 'c-lab', categoryName: 'labour', reason: 'material_name_match' },
+  },
+}
+
+function labourQueue(): ReviewQueue {
+  return {
+    jobId: MOCK_JOB.id, generatedAt: '2026-06-07T12:00:00Z',
+    budgetCategories: [{ id: 'c-lab', jobId: 'job-001', name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' }],
+    sections: [{ key: 'labour', label: 'Labour', items: [ITEM_LABOUR_HOURS, ITEM_LABOUR_RATED] }],
+    alreadyRemembered: [],
+  }
+}
+
+describe('ReviewQueueScreen — labour', () => {
+  beforeEach(() => {
+    mockGetReviewQueue.mockResolvedValue(labourQueue())
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-labour-hours', action: 'confirm', status: 'confirmed', memoryItemId: 'mem-x', sourceCandidateFactIds: [] })
+  })
+
+  it('renders a Labour section with hours, person, task, and rate', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const hours = await screen.findByTestId('queue-item-qi-labour-hours')
+    expect(within(hours).getByText('Labour')).toBeTruthy()
+    expect(within(hours).getByText('6')).toBeTruthy() // hours
+    expect(within(hours).getByText('fitting cladding')).toBeTruthy()
+    const rated = screen.getByTestId('queue-item-qi-labour-rated')
+    expect(within(rated).getByText('Tom')).toBeTruthy()
+    expect(within(rated).getByText('£35/hour')).toBeTruthy()
+  })
+
+  it('can confirm hours-only labour without a cost', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const hours = await screen.findByTestId('queue-item-qi-labour-hours')
+    fireEvent.click(within(hours).getByRole('button', { name: /remember this/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({ queueItemId: 'qi-labour-hours', action: 'confirm' })))
+  })
+
+  it('shows the suggested category and confirms it for rated labour', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
+    expect(within(rated).getByText('Suggested: labour')).toBeTruthy()
+    fireEvent.click(within(rated).getByRole('button', { name: /remember this/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({ budgetCategoryId: 'c-lab' })))
+  })
+
+  it('offers Per hour in the correction cost qualifier', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
+    fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
+    expect(within(rated).getByLabelText('Hours')).toBeTruthy()
+    const quals = Array.from(within(rated).getAllByRole('combobox')).flatMap(s => Array.from(s.querySelectorAll('option')).map(o => o.value))
+    expect(quals).toContain('per_hour')
   })
 })

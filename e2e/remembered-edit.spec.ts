@@ -23,7 +23,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await page.waitForTimeout(800)
 
     // hardcore is the uncategorised counted bought note.
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    const hardcore = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'hardcore' })
     await hardcore.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="quantity"]').fill('10')
@@ -41,7 +41,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await page.getByRole('button', { name: 'Job memory' }).click()
     await page.waitForTimeout(800)
 
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    const hardcore = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'hardcore' })
     await hardcore.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.getByLabel('Type').selectOption('customer_change')
@@ -73,7 +73,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await signIn(page)
     await page.locator('.btn-things-to-check').click()
     await page.waitForTimeout(700)
-    await expect(page.getByText('4 waiting')).toBeVisible()
+    await expect(page.getByText('6 waiting')).toBeVisible()
 
     // Expand remembered, fix the first remembered card
     await page.getByRole('button', { name: /show remembered items/i }).click()
@@ -87,6 +87,6 @@ test.describe('Remembered-memory edit & focus', () => {
 
     // updated in place, and no new pending queue item was created
     await expect(remembered.getByText('Travis Perkins')).toBeVisible()
-    await expect(page.getByText('4 waiting')).toBeVisible()
+    await expect(page.getByText('6 waiting')).toBeVisible()
   })
 })

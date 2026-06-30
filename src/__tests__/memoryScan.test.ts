@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveScanGroups, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -553,5 +553,97 @@ describe('spend invariant — budget totals match cost summary', () => {
     const budget = deriveBudgetSummary('job-1', sections, cats)
     expect(budget.totals.knownSpendAmount).toBe(cost.knownSpendAmount)
     expect(budget.totals.knownSpendAmount).toBe('2170') // 1850 categorised + 320 uncategorised
+  })
+})
+
+// ── Labour ──────────────────────────────────────────────────────────────────
+
+const labourItem = (o: Partial<MemoryViewItem>) => item({ memoryType: 'labour', ...o })
+const labourSection = (items: MemoryViewItem[]) => [section('labour', items)]
+
+describe('safeLabourCost', () => {
+  it('uses an explicit trusted total', () => {
+    expect(safeLabourCost(labourItem({ totalCostAmount: '600', costCurrency: 'GBP', costQualifier: 'total' })))
+      .toEqual({ amount: 600, currency: 'GBP' })
+  })
+  it('derives hours × per-hour rate', () => {
+    expect(safeLabourCost(labourItem({ labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' })))
+      .toEqual({ amount: 280, currency: 'GBP' })
+  })
+  it('is null for hours-only labour (no rate or cost)', () => {
+    expect(safeLabourCost(labourItem({ labourHours: '6' }))).toBeNull()
+  })
+  it('is null when per_hour but hours are missing/non-positive', () => {
+    expect(safeLabourCost(labourItem({ costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' }))).toBeNull()
+    expect(safeLabourCost(labourItem({ labourHours: '0', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' }))).toBeNull()
+  })
+  it('is null for approx/unknown or unresolved flags or non-GBP', () => {
+    expect(safeLabourCost(labourItem({ costAmount: '35', costQualifier: 'approx', costCurrency: 'GBP', labourHours: '8' }))).toBeNull()
+    expect(safeLabourCost(labourItem({ totalCostAmount: '600', costCurrency: 'GBP', uncertaintyFlags: ['cost_uncertain'] }))).toBeNull()
+    expect(safeLabourCost(labourItem({ totalCostAmount: '600', costCurrency: 'EUR' }))).toBeNull()
+  })
+  it('only applies to labour memory', () => {
+    expect(safeLabourCost(orderedItem({ totalCostAmount: '600', costCurrency: 'GBP' }))).toBeNull()
+  })
+})
+
+describe('deriveLabourSummary', () => {
+  it('separates trusted labour money from hours-only and worth-checking', () => {
+    const s = deriveLabourSummary(labourSection([
+      labourItem({ id: 'rated', labourPerson: 'Tom', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' }),
+      labourItem({ id: 'total', labourTask: 'roof', totalCostAmount: '600', costCurrency: 'GBP', costQualifier: 'total' }),
+      labourItem({ id: 'hours', labourTask: 'fitting cladding', labourHours: '6' }),
+      labourItem({ id: 'approx', labourTask: 'snagging', labourHours: '3', costAmount: '40', costQualifier: 'approx', costCurrency: 'GBP' }),
+    ]))
+    expect(s.knownSpendAmount).toBe('880') // 280 + 600
+    expect(s.includedMemoryItemIds.sort()).toEqual(['rated', 'total'])
+    expect(s.excludedRows.find(r => r.memoryItemId === 'hours')!.reason).toBe('no_rate_or_cost')
+    expect(s.excludedRows.find(r => r.memoryItemId === 'approx')!.reason).toBe('cost_worth_checking')
+  })
+})
+
+describe('deriveTotalKnownCost', () => {
+  it('sums safe bought spend and safe labour spend', () => {
+    const sections = [
+      section('ordered_materials', [orderedItem({ id: 'a', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP' })]),
+      section('labour', [labourItem({ id: 'l', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' })]),
+    ]
+    expect(deriveTotalKnownCost(sections).knownSpendAmount).toBe('320') // 40 + 280
+  })
+  it('excludes hours-only labour from the total', () => {
+    const sections = [section('labour', [labourItem({ id: 'l', labourHours: '6' })])]
+    expect(deriveTotalKnownCost(sections).knownSpendAmount).toBeNull()
+  })
+})
+
+describe('deriveBudgetSummary — labour', () => {
+  it('includes safe labour in a category and the totals', () => {
+    const cats = [cat({ id: 'c-lab', name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP' })]
+    const s = deriveBudgetSummary('job-1', [
+      section('ordered_materials', []),
+      section('labour', [labourItem({ id: 'l', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP', budgetCategoryId: 'c-lab' })]),
+    ], cats)
+    const labCat = s.categories[0]
+    expect(labCat.knownSpendAmount).toBe('280')
+    expect(labCat.rows[0].memoryType).toBe('labour')
+    expect(labCat.rows[0].labourHours).toBe('8')
+    expect(s.totals.knownSpendAmount).toBe('280')
+  })
+  it('puts hours-only labour nowhere in monetary totals', () => {
+    const s = deriveBudgetSummary('job-1', [section('labour', [labourItem({ id: 'l', labourHours: '6' })])], [])
+    expect(s.totals.knownSpendAmount).toBe('0')
+    expect(s.uncategorized.rows).toHaveLength(0)
+  })
+})
+
+describe('suggestBudgetCategory — labour', () => {
+  const cats = [cat({ id: 'c-lab', name: 'labour' }), cat({ id: 'c-elec', name: 'electrics' })]
+  it('suggests an active category literally named "labour"', () => {
+    expect(suggestBudgetCategory({ memoryType: 'labour', materialName: null, summary: 'Tom 8 hours', labourTask: 'wiring' }, cats))
+      .toEqual({ budgetCategoryId: 'c-lab', categoryName: 'labour', reason: 'material_name_match' })
+  })
+  it('matches the task to a category when no labour category exists', () => {
+    expect(suggestBudgetCategory({ memoryType: 'labour', materialName: null, summary: 'x', labourTask: 'electrics' }, [cat({ id: 'c-elec', name: 'electrics' })]))
+      .toEqual({ budgetCategoryId: 'c-elec', categoryName: 'electrics', reason: 'material_name_match' })
   })
 })
