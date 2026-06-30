@@ -344,10 +344,11 @@ function QueueItemCard({
       className={`queue-item-card queue-item-card--${item.status}`}
       data-testid={`queue-item-${item.id}`}
     >
-      <div className="queue-item-top">
-        <ItemKindBadge item={item} />
-        {item.timeLabel && <span className="queue-time-label">{item.timeLabel}</span>}
-      </div>
+      {item.kind !== 'single' && (
+        <div className="queue-item-top">
+          <ItemKindBadge item={item} />
+        </div>
+      )}
 
       {isStructured && <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>}
 
@@ -397,10 +398,8 @@ function QueueItemCard({
           <button className="btn-queue-remember" onClick={() => onConfirm(selectedCategoryId)} disabled={submitting}>
             {submitting ? 'Saving…' : 'Remember this'}
           </button>
-          <div className="queue-item-actions-secondary">
-            <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>Fix details</button>
-            <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>Dismiss</button>
-          </div>
+          <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>Fix details</button>
+          <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>Dismiss</button>
           {/* On a Worth-checking draft, "Remember, but still unsure" keeps the flag. */}
           {uncertain && (
             <button className="btn-queue-unsure" onClick={() => onConfirmStillUnsure(selectedCategoryId)} disabled={submitting}>
@@ -585,6 +584,7 @@ function AlreadyRememberedSection({
 
 function SectionBlock({
   section,
+  showHeading = true,
   categories,
   editingItemId,
   submittingId,
@@ -597,6 +597,7 @@ function SectionBlock({
   onDismiss,
 }: {
   section: QueueSection
+  showHeading?: boolean
   categories: BudgetCategory[]
   editingItemId: string | null
   submittingId: string | null
@@ -611,7 +612,7 @@ function SectionBlock({
   if (section.items.length === 0) return null
   return (
     <section className="queue-section">
-      <h2 className="queue-section-heading">{section.label}</h2>
+      {showHeading && <h2 className="queue-section-heading">{section.label}</h2>}
       {section.items.map(item => (
         <QueueItemCard
           key={item.id}
@@ -639,6 +640,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
   const [focusedKey, setFocusedKey] = useState<string | null>(null)
+  const [rememberingAll, setRememberingAll] = useState(false)
   // Remembered-memory ("Fix memory") edit state — separate from draft review state
   const [editingMemId, setEditingMemId] = useState<string | null>(null)
   const [memSubmittingId, setMemSubmittingId] = useState<string | null>(null)
@@ -782,6 +784,28 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
 
   const pendingLabel = totalPending === 0 ? 'Nothing waiting' : `${totalPending} waiting`
 
+  // With a single category, chips and per-section headings only repeat the type.
+  const sectionsWithDrafts = (queue?.sections ?? []).filter(s => draftCount(s) > 0)
+  const showChips = sectionsWithDrafts.length > 1
+  const showSectionHeadings = visibleSections.filter(s => s.items.length > 0).length > 1
+
+  // "Remember all" clears the confident drafts in one go; worth-checking drafts
+  // are left for individual attention.
+  const confidentDrafts = visibleSections.flatMap(s =>
+    s.items.filter(it => it.status === 'draft' && it.uncertaintyFlags.length === 0))
+  const showRememberAll = confidentDrafts.length > 1 && editingItemId === null
+  const handleRememberAll = async () => {
+    setRememberingAll(true)
+    try {
+      for (const it of confidentDrafts) {
+        const cat = CATEGORY_TYPES.has(it.proposedMemory.memoryType) ? (it.proposedMemory.budgetCategoryId ?? null) : null
+        await handleDecision(it.id, 'confirm', undefined, 'resolved', cat)
+      }
+    } finally {
+      setRememberingAll(false)
+    }
+  }
+
   return (
     <div className="queue-page">
       <header className="queue-header">
@@ -826,12 +850,28 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
             </div>
           ) : (
             <>
-              <CategoryChips
-                sections={queue.sections}
-                totalPending={totalPending}
-                focusedKey={focusedKey}
-                onFocus={setFocusedKey}
-              />
+              {showChips && (
+                <CategoryChips
+                  sections={queue.sections}
+                  totalPending={totalPending}
+                  focusedKey={focusedKey}
+                  onFocus={setFocusedKey}
+                />
+              )}
+
+              {showRememberAll && (
+                <div className="queue-batch-bar">
+                  <span>{confidentDrafts.length} ready to remember</span>
+                  <button
+                    type="button"
+                    className="btn-queue-remember-all"
+                    onClick={handleRememberAll}
+                    disabled={rememberingAll || submittingId !== null}
+                  >
+                    {rememberingAll ? 'Saving…' : `Remember all (${confidentDrafts.length})`}
+                  </button>
+                </div>
+              )}
 
               {/* Pending draft facts come first */}
               {focusedEmpty ? (
@@ -841,6 +881,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                   <SectionBlock
                     key={section.key}
                     section={section}
+                    showHeading={showSectionHeadings}
                     categories={activeCategories}
                     editingItemId={editingItemId}
                     submittingId={submittingId}

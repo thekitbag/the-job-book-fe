@@ -180,11 +180,17 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText('Used materials')).toBeInTheDocument()
   })
 
-  it('shows time labels', async () => {
+  it('shows time labels on already-remembered cards', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+      ],
+    }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => {
-      expect(screen.getAllByText('Today').length).toBeGreaterThan(0)
-    })
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    // draft cards drop the redundant per-card time; remembered context keeps it
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
+    expect(screen.getByText('Yesterday')).toBeInTheDocument()
   })
 
   it('shows duplicate badge for duplicate_group items', async () => {
