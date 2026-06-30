@@ -17,41 +17,40 @@ async function signIn(page: Page) {
 }
 
 test.describe('Remembered-memory edit & focus', () => {
-  test('Job memory: Fix memory updates a remembered item in place', async ({ page }) => {
+  test('Job memory: Fix memory updates a bought note in place', async ({ page }) => {
     await signIn(page)
     await page.getByRole('button', { name: 'Job memory' }).click()
-    await page.waitForTimeout(700)
-    // Detail (with Fix memory) is collapsed by default on the scan page
-    await page.getByRole('button', { name: /show details/i }).click()
+    await page.waitForTimeout(800)
 
-    await page.getByRole('button', { name: /fix memory/i }).first().click()
+    // hardcore is the uncategorised counted bought note.
+    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    await hardcore.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="quantity"]').fill('10')
     await form.locator('input[name="costAmount"]').fill('4.50')
     await page.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(600)
 
-    // updated structured values visible (appears in card + scan summary)
     await expect(page.getByText('10 bags').first()).toBeVisible()
     await expect(page.getByText('£4.50 each').first()).toBeVisible()
-    // it stayed trusted memory — no edit form left open
     await expect(page.getByRole('form', { name: /edit memory/i })).toHaveCount(0)
   })
 
-  test('Job memory: changing type moves the item to the right section', async ({ page }) => {
+  test('Job memory: changing a bought note type moves it to the Notes tab', async ({ page }) => {
     await signIn(page)
     await page.getByRole('button', { name: 'Job memory' }).click()
-    await page.waitForTimeout(700)
-    await page.getByRole('button', { name: /show details/i }).click()
+    await page.waitForTimeout(800)
 
-    await page.getByRole('button', { name: /fix memory/i }).first().click()
+    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
+    await hardcore.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
-    await form.locator('select').first().selectOption('customer_change')
+    await form.getByLabel('Type').selectOption('customer_change')
     await page.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(600)
 
-    // The "Customer" detail section heading now appears (it was empty before)
-    await expect(page.getByRole('heading', { name: 'Customer', exact: true })).toBeVisible()
+    // It left the bought tab; it now appears under the Notes tab's Customer changes.
+    await page.getByRole('tab', { name: /notes/i }).click()
+    await expect(page.getByRole('heading', { name: 'Customer changes' })).toBeVisible()
   })
 
   test('Things to check: remembered context follows category focus', async ({ page }) => {
@@ -60,7 +59,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await page.waitForTimeout(700)
 
     // Focus Ordered, expand remembered → ordered context (scaffolding) shows
-    await page.getByRole('button', { name: 'Ordered 1' }).click()
+    await page.getByRole('button', { name: 'Ordered 2' }).click()
     await page.getByRole('button', { name: /show remembered items/i }).click()
     const remembered = page.getByRole('region', { name: /already remembered/i })
     await expect(remembered.getByText('scaffolding')).toBeVisible()
@@ -74,7 +73,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await signIn(page)
     await page.locator('.btn-things-to-check').click()
     await page.waitForTimeout(700)
-    await expect(page.getByText('3 waiting')).toBeVisible()
+    await expect(page.getByText('4 waiting')).toBeVisible()
 
     // Expand remembered, fix the first remembered card
     await page.getByRole('button', { name: /show remembered items/i }).click()
@@ -88,6 +87,6 @@ test.describe('Remembered-memory edit & focus', () => {
 
     // updated in place, and no new pending queue item was created
     await expect(remembered.getByText('Travis Perkins')).toBeVisible()
-    await expect(page.getByText('3 waiting')).toBeVisible()
+    await expect(page.getByText('4 waiting')).toBeVisible()
   })
 })

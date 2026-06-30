@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
 import { formatCostLabel, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
 import type {
   AlreadyRememberedItem,
+  BudgetCategory,
   CostQualifier,
   Job,
   MemoryItemEdit,
@@ -178,11 +179,13 @@ function QueueItemDetails({ pm, uncertaintyFlags }: { pm: ProposedMemory; uncert
 
 function EditForm({
   initial,
+  categories,
   onSubmit,
   onCancel,
   submitting,
 }: {
   initial: ProposedMemory
+  categories: BudgetCategory[]
   onSubmit: (corrected: ProposedMemory) => void
   onCancel: () => void
   submitting: boolean
@@ -190,10 +193,12 @@ function EditForm({
   const [form, setForm] = useState<ProposedMemory>(initial)
   const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType' | 'costQualifier'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
+  // Changing type away from bought/ordered clears any category.
   const setType = (v: string) =>
-    setForm(f => ({ ...f, memoryType: v as MemoryType }))
+    setForm(f => ({ ...f, memoryType: v as MemoryType, budgetCategoryId: v === 'ordered_material' ? (f.budgetCategoryId ?? null) : null }))
   const setCostQualifier = (v: string) =>
     setForm(f => ({ ...f, costQualifier: (v as CostQualifier) || null }))
+  const showCategory = form.memoryType === 'ordered_material' && categories.length > 0
 
   return (
     <form
@@ -209,6 +214,15 @@ function EditForm({
           ))}
         </select>
       </label>
+      {showCategory && (
+        <label className="queue-field">
+          <span className="queue-field-label">Budget category</span>
+          <select className="queue-field-input" aria-label="Budget category" value={form.budgetCategoryId ?? ''} onChange={e => setForm(f => ({ ...f, budgetCategoryId: e.target.value || null }))}>
+            <option value="">Choose category</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+      )}
       <label className="queue-field">
         <span className="queue-field-label">Material</span>
         <input className="queue-field-input" name="materialName" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
@@ -270,6 +284,7 @@ function QueueItemCard({
   isEditing,
   submitting,
   errorMsg,
+  categories,
   onConfirm,
   onConfirmStillUnsure,
   onStartEdit,
@@ -281,8 +296,9 @@ function QueueItemCard({
   isEditing: boolean
   submitting: boolean
   errorMsg: string | null
-  onConfirm: () => void
-  onConfirmStillUnsure: () => void
+  categories: BudgetCategory[]
+  onConfirm: (categoryId: string | null) => void
+  onConfirmStillUnsure: (categoryId: string | null) => void
   onStartEdit: () => void
   onSubmitCorrection: (corrected: ProposedMemory) => void
   onCancelEdit: () => void
@@ -292,6 +308,11 @@ function QueueItemCard({
   const uncertain = item.uncertaintyFlags.length > 0
   const memType = item.proposedMemory.memoryType
   const isMaterial = MATERIAL_TYPES.has(memType)
+  // Category selection for bought/ordered drafts. Default to the backend
+  // suggestion (set once, so a later suggestion can't override Mike's choice).
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(item.proposedMemory.budgetCategoryId ?? null)
+  const suggestion = item.proposedMemory.budgetCategorySuggestion ?? null
+  const showCategory = memType === 'ordered_material' && categories.length > 0 && !resolved && !isEditing
   const hasDetailFields = !!(
     item.proposedMemory.materialName ||
     item.proposedMemory.quantity ||
@@ -339,9 +360,28 @@ function QueueItemCard({
         <p className="queue-item-resolved queue-item-resolved--dismissed">Dismissed</p>
       )}
 
+      {showCategory && (
+        <div className="queue-item-category">
+          {suggestion && <p className="queue-item-suggestion">Suggested: {suggestion.categoryName}</p>}
+          <label className="queue-field">
+            <span className="queue-field-label">Budget category</span>
+            <select
+              className="queue-field-input"
+              aria-label="Budget category"
+              value={selectedCategoryId ?? ''}
+              disabled={submitting}
+              onChange={e => setSelectedCategoryId(e.target.value || null)}
+            >
+              <option value="">Choose category</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+
       {!resolved && !isEditing && (
         <div className="queue-item-actions">
-          <button className="btn-queue-remember" onClick={onConfirm} disabled={submitting}>
+          <button className="btn-queue-remember" onClick={() => onConfirm(selectedCategoryId)} disabled={submitting}>
             {submitting ? 'Saving…' : 'Remember this'}
           </button>
           <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>
@@ -356,7 +396,7 @@ function QueueItemCard({
       {/* On a Worth-checking draft, "Remember this" confirms it as checked.
           "Still unsure" remembers it but keeps the warning. */}
       {!resolved && !isEditing && uncertain && (
-        <button className="btn-queue-unsure" onClick={onConfirmStillUnsure} disabled={submitting}>
+        <button className="btn-queue-unsure" onClick={() => onConfirmStillUnsure(selectedCategoryId)} disabled={submitting}>
           Remember, but still unsure
         </button>
       )}
@@ -364,6 +404,7 @@ function QueueItemCard({
       {!resolved && isEditing && (
         <EditForm
           initial={item.proposedMemory}
+          categories={categories}
           onSubmit={onSubmitCorrection}
           onCancel={onCancelEdit}
           submitting={submitting}
@@ -381,6 +422,7 @@ function RememberedCard({
   submitting,
   verifying,
   errorMsg,
+  categories,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -391,6 +433,7 @@ function RememberedCard({
   submitting: boolean
   verifying: boolean
   errorMsg: string | null
+  categories: BudgetCategory[]
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
@@ -402,7 +445,7 @@ function RememberedCard({
   if (isEditing) {
     return (
       <li className="queue-remembered-card queue-remembered-card--editing">
-        <MemoryEditForm initial={rememberedItemToEdit(item)} submitting={submitting} onSubmit={onSave} onCancel={onCancelEdit} />
+        <MemoryEditForm initial={rememberedItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
         {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
       </li>
     )
@@ -468,6 +511,7 @@ function RememberedCard({
 
 function AlreadyRememberedSection({
   items,
+  categories,
   focusedKey,
   editingId,
   submittingId,
@@ -479,6 +523,7 @@ function AlreadyRememberedSection({
   onVerify,
 }: {
   items: AlreadyRememberedItem[]
+  categories: BudgetCategory[]
   focusedKey: string | null
   editingId: string | null
   submittingId: string | null
@@ -512,6 +557,7 @@ function AlreadyRememberedSection({
             <RememberedCard
               key={m.memoryItemId}
               item={m}
+              categories={categories}
               isEditing={editingId === m.memoryItemId}
               submitting={submittingId === m.memoryItemId}
               verifying={verifyingId === m.memoryItemId}
@@ -530,6 +576,7 @@ function AlreadyRememberedSection({
 
 function SectionBlock({
   section,
+  categories,
   editingItemId,
   submittingId,
   itemErrors,
@@ -541,11 +588,12 @@ function SectionBlock({
   onDismiss,
 }: {
   section: QueueSection
+  categories: BudgetCategory[]
   editingItemId: string | null
   submittingId: string | null
   itemErrors: Record<string, string>
-  onConfirm: (id: string) => void
-  onConfirmStillUnsure: (id: string) => void
+  onConfirm: (id: string, categoryId: string | null) => void
+  onConfirmStillUnsure: (id: string, categoryId: string | null) => void
   onStartEdit: (id: string) => void
   onSubmitCorrection: (id: string, corrected: ProposedMemory) => void
   onCancelEdit: () => void
@@ -559,11 +607,12 @@ function SectionBlock({
         <QueueItemCard
           key={item.id}
           item={item}
+          categories={categories}
           isEditing={editingItemId === item.id}
           submitting={submittingId === item.id}
           errorMsg={itemErrors[item.id] ?? null}
-          onConfirm={() => onConfirm(item.id)}
-          onConfirmStillUnsure={() => onConfirmStillUnsure(item.id)}
+          onConfirm={categoryId => onConfirm(item.id, categoryId)}
+          onConfirmStillUnsure={categoryId => onConfirmStillUnsure(item.id, categoryId)}
           onStartEdit={() => onStartEdit(item.id)}
           onSubmitCorrection={corrected => onSubmitCorrection(item.id, corrected)}
           onCancelEdit={onCancelEdit}
@@ -587,32 +636,55 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const [memVerifyingId, setMemVerifyingId] = useState<string | null>(null)
   const [memErrors, setMemErrors] = useState<Record<string, string>>({})
 
+  // Latest selected job id; ignore a queue load that resolves after a job switch.
+  const currentJobIdRef = useRef(job.id)
+  currentJobIdRef.current = job.id
+
   const loadQueue = useCallback(() => {
     setLoadState('loading')
-    getReviewQueue(job.id)
-      .then(q => { setQueue(q); setLoadState('ready') })
-      .catch(() => setLoadState('error'))
+    const requestedJobId = job.id
+    getReviewQueue(requestedJobId)
+      .then(q => {
+        if (currentJobIdRef.current !== requestedJobId) return
+        setQueue(q); setLoadState('ready')
+      })
+      .catch(() => {
+        if (currentJobIdRef.current !== requestedJobId) return
+        setLoadState('error')
+      })
   }, [job.id])
 
   useEffect(() => { loadQueue() }, [loadQueue])
+
+  const activeCategories: BudgetCategory[] = queue?.budgetCategories ?? []
 
   const handleDecision = useCallback(async (
     itemId: string,
     action: QueueDecisionAction,
     corrected?: ProposedMemory,
     uncertaintyResolution?: UncertaintyResolution,
+    budgetCategoryId?: string | null,
   ) => {
     if (!queue) return
     setSubmittingId(itemId)
     setItemErrors(e => { const n = { ...e }; delete n[itemId]; return n })
     try {
+      // Category applies only to bought/ordered memory, and only when the job has
+      // categories at all — otherwise omit it entirely (backwards-compatible).
+      const finalType = corrected?.memoryType ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory.memoryType
+      const category = action === 'dismiss' || finalType !== 'ordered_material' || activeCategories.length === 0
+        ? undefined
+        : (budgetCategoryId ?? null)
       const result = await submitQueueDecision(job.id, {
         queueItemId: itemId,
         action,
-        corrected,
+        corrected: corrected
+          ? (category !== undefined ? { ...corrected, budgetCategoryId: category } : corrected)
+          : undefined,
         reason: action === 'dismiss' ? 'Not about this job' : undefined,
         // Confirming/correcting a Worth-checking draft settles its uncertainty.
         uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
+        budgetCategoryId: category,
       })
       setQueue(q => {
         if (!q) return q
@@ -760,13 +832,14 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                   <SectionBlock
                     key={section.key}
                     section={section}
+                    categories={activeCategories}
                     editingItemId={editingItemId}
                     submittingId={submittingId}
                     itemErrors={itemErrors}
-                    onConfirm={id => handleDecision(id, 'confirm', undefined, 'resolved')}
-                    onConfirmStillUnsure={id => handleDecision(id, 'confirm', undefined, 'still_unsure')}
+                    onConfirm={(id, categoryId) => handleDecision(id, 'confirm', undefined, 'resolved', categoryId)}
+                    onConfirmStillUnsure={(id, categoryId) => handleDecision(id, 'confirm', undefined, 'still_unsure', categoryId)}
                     onStartEdit={id => setEditingItemId(id)}
-                    onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected, 'resolved')}
+                    onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected, 'resolved', corrected.budgetCategoryId ?? null)}
                     onCancelEdit={() => setEditingItemId(null)}
                     onDismiss={id => handleDecision(id, 'dismiss')}
                   />
@@ -777,6 +850,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                   follows the active category focus, and is correctable in place */}
               <AlreadyRememberedSection
                 items={queue.alreadyRemembered}
+                categories={activeCategories}
                 focusedKey={focusedKey}
                 editingId={editingMemId}
                 submittingId={memSubmittingId}

@@ -1,27 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getMemoryView, updateMemoryItem, verifyMemoryItem } from './api'
+import {
+  assignMemoryItemCategory,
+  createBudgetCategory,
+  getBudgetSummary,
+  getMemoryView,
+  patchBudgetCategory,
+  updateMemoryItem,
+  verifyMemoryItem,
+} from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import {
   costDetailRows,
   deriveCostSummary,
-  deriveScanGroups,
   formatMoney,
   spendExclusionCopy,
   MEMORY_TYPE_TO_SECTION_KEY,
   SECTION_FULL_LABELS,
   SECTION_ORDER,
 } from './memoryScan'
-import type { Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection } from './types'
-
-const SECTION_SHORT_LABELS: Record<string, string> = {
-  ordered_materials: 'Ordered',
-  used_materials: 'Used',
-  leftovers: 'Leftover',
-  supplier_delivery_notes: 'Supplier',
-  customer_changes: 'Customer',
-  watch_outs: 'Watch out',
-}
+import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, Job, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, OrderedCostSummary } from './types'
 
 const MATERIAL_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material'])
 
@@ -30,6 +28,19 @@ const MATERIAL_TYPE_LABEL: Record<string, string> = {
   used_material: 'Used',
   leftover_material: 'Left over',
 }
+
+// Sections shown under each tab.
+const USED_SECTION_KEYS = ['used_materials', 'leftovers']
+const NOTES_SECTION_KEYS = ['supplier_delivery_notes', 'customer_changes', 'watch_outs']
+const SECTION_HEADINGS: Record<string, string> = {
+  used_materials: 'Used',
+  leftovers: 'Left over',
+  supplier_delivery_notes: 'Supplier notes',
+  customer_changes: 'Customer changes',
+  watch_outs: 'Watch-outs',
+}
+
+type Tab = 'bought' | 'used' | 'notes'
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -67,16 +78,10 @@ function StructuredFields({ item }: { item: MemoryViewItem }) {
 
 function SourceContext({ item }: { item: MemoryViewItem }) {
   const [open, setOpen] = useState(false)
-
   if (!item.source) return null
-
   return (
     <div className="mem-source">
-      <button
-        className="mem-source-toggle"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-      >
+      <button className="mem-source-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
         {open ? 'Hide source' : 'Show source'}
       </button>
       {open && (
@@ -101,20 +106,28 @@ function MemoryCard({
   submitting,
   verifying,
   errorMsg,
+  categories,
+  assigningCategory,
+  excludedReason,
   onStartEdit,
   onCancelEdit,
   onSave,
   onVerify,
+  onAssignCategory,
 }: {
   item: MemoryViewItem
   isEditing: boolean
   submitting: boolean
   verifying: boolean
   errorMsg: string | null
+  categories: BudgetCategory[]
+  assigningCategory: boolean
+  excludedReason?: string | null
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
   onVerify: () => void
+  onAssignCategory: (categoryId: string | null) => void
 }) {
   const isMaterial = MATERIAL_TYPES.has(item.memoryType)
   const hasFields = !!(
@@ -124,14 +137,12 @@ function MemoryCard({
     (item.uncertaintyFlags ?? []).length > 0
   )
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
-  // Local acknowledgement of "Still unsure": hides the prompt but keeps the
-  // Worth-checking warning (the item genuinely stays unresolved).
   const [ackUnsure, setAckUnsure] = useState(false)
 
   if (isEditing) {
     return (
       <div className="mem-card mem-card--editing">
-        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} onSubmit={onSave} onCancel={onCancelEdit} />
+        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
         {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
       </div>
     )
@@ -146,6 +157,11 @@ function MemoryCard({
       <StructuredFields item={item} />
       {isMaterial && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
 
+      {/* Bought item that isn't in Known spend — say so explicitly. */}
+      {excludedReason && (
+        <p className="mem-card-notcounted">Not in Known spend yet · {spendExclusionCopy(excludedReason)}</p>
+      )}
+
       {uncertain && !ackUnsure && (
         <div className="mem-resolve">
           <button type="button" className="btn-mem-verify" onClick={onVerify} disabled={verifying}>
@@ -157,6 +173,22 @@ function MemoryCard({
         </div>
       )}
 
+      {item.memoryType === 'ordered_material' && categories.length > 0 && (
+        <label className="mem-card-category">
+          <span className="mem-card-category-label">Budget category</span>
+          <select
+            className="mem-card-category-select"
+            aria-label={`Budget category for ${item.materialName ?? item.summary}`}
+            value={item.budgetCategoryId ?? ''}
+            disabled={assigningCategory}
+            onChange={e => onAssignCategory(e.target.value || null)}
+          >
+            <option value="">Choose category</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+      )}
+
       <div className="mem-card-footer">
         <SourceContext item={item} />
         <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
@@ -166,176 +198,60 @@ function MemoryCard({
   )
 }
 
-function MemSection({
-  section,
-  editingId,
-  submittingId,
-  verifyingId,
-  itemErrors,
-  onStartEdit,
-  onCancelEdit,
+// Inline name + budget form, reused for adding and editing a category.
+function CategoryForm({
+  initialName,
+  initialAmount,
+  submitting,
   onSave,
-  onVerify,
+  onCancel,
 }: {
-  section: MemoryViewSection
-  editingId: string | null
-  submittingId: string | null
-  verifyingId: string | null
-  itemErrors: Record<string, string>
-  onStartEdit: (id: string) => void
-  onCancelEdit: () => void
-  onSave: (id: string, edit: MemoryItemEdit) => void
-  onVerify: (id: string) => void
+  initialName: string
+  initialAmount: string
+  submitting: boolean
+  onSave: (name: string, amount: string) => void
+  onCancel: () => void
 }) {
-  if (section.items.length === 0) return null
-  const shortLabel = SECTION_SHORT_LABELS[section.key] ?? section.label
+  const [name, setName] = useState(initialName)
+  const [amount, setAmount] = useState(initialAmount)
   return (
-    <section className="mem-section">
-      <h2 className="mem-section-heading">{shortLabel}</h2>
-      {section.items.map(item => (
-        <MemoryCard
-          key={item.id}
-          item={item}
-          isEditing={editingId === item.id}
-          submitting={submittingId === item.id}
-          verifying={verifyingId === item.id}
-          errorMsg={itemErrors[item.id] ?? null}
-          onStartEdit={() => onStartEdit(item.id)}
-          onCancelEdit={onCancelEdit}
-          onSave={edit => onSave(item.id, edit)}
-          onVerify={() => onVerify(item.id)}
-        />
-      ))}
-    </section>
+    <form className="budget-cat-form" aria-label="Budget category" onSubmit={e => { e.preventDefault(); onSave(name, amount) }}>
+      <label className="queue-field">
+        <span className="queue-field-label">Category name</span>
+        <input className="queue-field-input" name="categoryName" value={name} maxLength={60} onChange={e => setName(e.target.value)} placeholder="e.g. timber" />
+      </label>
+      <label className="queue-field">
+        <span className="queue-field-label">Budget amount (£) — optional</span>
+        <input className="queue-field-input" name="budgetAmount" value={amount} inputMode="decimal" onChange={e => setAmount(e.target.value)} placeholder="No budget set" />
+      </label>
+      <div className="queue-edit-actions">
+        <button type="submit" className="btn-queue-save" disabled={submitting || name.trim() === ''}>{submitting ? 'Saving…' : 'Save category'}</button>
+        <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>Cancel</button>
+      </div>
+    </form>
   )
 }
 
-function ScanItem({ item }: { item: ScanViewItem }) {
-  // A consolidated row sums a quantity, not a cost — say so in the quantity
-  // phrase ("24 sheets total") rather than a bare "total" badge that could be
-  // misread as a money total next to Known spend.
-  const qtyPhrase = [item.quantity, item.unit].filter(Boolean).join(' ')
-  const qtyText = item.consolidated && qtyPhrase ? `${qtyPhrase} total` : qtyPhrase
-  // Material rows lead with quantity/material; prose groups lead with summary.
-  const desc = item.primaryText
-    ?? [qtyText, item.materialName].filter(Boolean).join(' · ')
-  // Secondary context chips (only what's present)
-  const meta = [
-    item.supplierName,
-    item.deliveryTiming,
-    item.locationOrUse,
-  ].filter(Boolean) as string[]
-  const uncertain = item.uncertaintyFlags.length > 0
+// Hero: one job-level Known spend, against the total budget when one exists.
+function KnownSpendHero({ summary, totals }: { summary: OrderedCostSummary; totals: BudgetSummaryResponse['totals'] | null }) {
+  const known = summary.knownSpendAmount ? parseFloat(summary.knownSpendAmount) : 0
+  const budget = totals?.budgetAmount ? parseFloat(totals.budgetAmount) : null
+  const hasBudget = budget !== null && budget > 0
+  const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
+  const over = !!totals?.overBudget
   return (
-    <div className="mem-scan-item">
-      <span className="mem-scan-item-main">
-        {desc && <span className="mem-scan-item-desc">{desc}</span>}
-      </span>
-      {meta.length > 0 && <span className="mem-scan-item-meta">{meta.join(' · ')}</span>}
-      {item.costLabel && <span className="mem-scan-item-cost">{item.costLabel}</span>}
-      {item.totalCostLabel && <span className="mem-scan-item-total">{item.totalCostLabel} total</span>}
-      {uncertain && <span className="mem-scan-item-uncertain">Worth checking</span>}
-    </div>
-  )
-}
-
-function itemIdentity(materialName: string | null, label: string | null, quantity: string | null, unit: string | null) {
-  const name = materialName?.trim() || label?.trim() || ''
-  const qty = [quantity, unit].filter(Boolean).join(' ')
-  return [name, qty].filter(Boolean).join(' · ')
-}
-
-// Known spend for bought/ordered materials. Deliberately not "Total spend" — it
-// is only the trusted line totals. Every trusted bought/ordered item is shown as
-// either Included (with its money total) or Not included yet (with the reason it
-// is missing), so the figure is auditable without opening remembered detail.
-function KnownSpend({
-  summary,
-  orderedCount,
-  refreshError,
-  onRetryRefresh,
-}: {
-  summary: OrderedCostSummary
-  orderedCount: number
-  refreshError: boolean
-  onRetryRefresh: () => void
-}) {
-  if (orderedCount === 0) return null
-  // Named exclusions supersede the anonymous counts. Only fall back to the
-  // count-based copy for an older backend that has not sent excludedRows.
-  const excludedRows = summary.excludedRows
-  const hasNamedExclusions = Array.isArray(excludedRows)
-  const notes: string[] = []
-  if (!hasNamedExclusions) {
-    if (summary.missingCostCount === 1) notes.push('1 bought item has no cost remembered')
-    else if (summary.missingCostCount > 1) notes.push(`${summary.missingCostCount} bought items have no cost remembered`)
-    if (summary.uncertainCostCount === 1) notes.push('1 bought item has cost worth checking')
-    else if (summary.uncertainCostCount > 1) notes.push(`${summary.uncertainCostCount} bought items have cost worth checking`)
-  }
-
-  return (
-    <section className="mem-known-spend" aria-label="Known spend">
-      <p className="mem-known-spend-label">Known spend</p>
-      <p className="mem-known-spend-amount">
-        {summary.knownSpendAmount
-          ? formatMoney(parseFloat(summary.knownSpendAmount), summary.knownSpendCurrency)
-          : 'None known yet'}
+    <section className={`mem-hero${over ? ' mem-hero--over' : ''}`} aria-label="Known spend">
+      <p className="mem-hero-cap">Known spend{hasBudget ? ' vs budget' : ''}</p>
+      <p className="mem-hero-amount">
+        {summary.knownSpendAmount ? formatMoney(known, summary.knownSpendCurrency) : 'None yet'}
+        {hasBudget && <span className="mem-hero-of"> of {formatMoney(budget!, 'GBP')}</span>}
       </p>
-
-      {summary.rows.length > 0 && (
-        <div className="mem-known-spend-group">
-          <p className="mem-known-spend-group-label">Included</p>
-          <ul className="mem-known-spend-rows">
-            {summary.rows.map(row => (
-              <li key={row.key} className="mem-known-spend-row">
-                <span className="mem-known-spend-row-item">
-                  {itemIdentity(row.materialName, null, row.quantity, row.unit)}
-                </span>
-                <span className="mem-known-spend-row-total">{row.lineTotalLabel}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {hasNamedExclusions && excludedRows!.length > 0 && (
-        <div className="mem-known-spend-group mem-known-spend-group--excluded">
-          <p className="mem-known-spend-group-label">Not included yet</p>
-          <ul className="mem-known-spend-rows">
-            {excludedRows!.map(row => (
-              <li key={row.memoryItemId} className="mem-known-spend-row">
-                <span className="mem-known-spend-row-item">
-                  {itemIdentity(row.materialName, row.itemLabel, row.quantity, row.unit)}
-                </span>
-                <span className="mem-known-spend-row-reason">{spendExclusionCopy(row.reason)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {notes.length > 0 && <p className="mem-known-spend-note">{notes.join(' · ')}</p>}
-
-      {refreshError && (
-        <div className="mem-known-spend-refresh" role="alert">
-          <span>Couldn’t refresh spend — this may be out of date.</span>
-          <button type="button" className="mem-known-spend-retry" onClick={onRetryRefresh}>Try again</button>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function ScanView({ sections }: { sections: ScanViewSection[] }) {
-  if (sections.length === 0) return null
-  return (
-    <section className="mem-scan" aria-label="Memory scan">
-      {sections.map(section => (
-        <div key={section.key} className={`mem-scan-section mem-scan-section--${section.key}`}>
-          <h3 className="mem-scan-heading">{section.label}</h3>
-          {section.items.map((item, i) => <ScanItem key={i} item={item} />)}
-        </div>
-      ))}
+      {hasBudget
+        ? <>
+            <p className="mem-hero-sub">{over ? `${formatMoney(known - budget!, 'GBP')} over budget` : (totals?.remainingLabel ?? '')}</p>
+            <div className="mem-hero-bar"><span style={{ width: `${pct}%` }} /></div>
+          </>
+        : <p className="mem-hero-sub">No budget set — add a category below</p>}
     </section>
   )
 }
@@ -352,16 +268,22 @@ export default function JobMemoryScreen({
   const [data, setData] = useState<MemoryViewResponse | null>(null)
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
+  const [tab, setTab] = useState<Tab>('bought')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
+  const [assigningCategoryId, setAssigningCategoryId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
-  const [showDetail, setShowDetail] = useState(false)
-  // Set when a post-edit memory-view refetch fails: the on-screen Known spend
-  // is the last server-confirmed figure and may be stale until a retry succeeds.
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummaryResponse | null>(null)
   const [refreshError, setRefreshError] = useState(false)
-  // Always holds the currently-selected job id, so a refetch that resolves after
-  // a job switch can detect it is stale and not write into the new job's view.
+  // Budget management (bought tab) UI state.
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({})
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null)
+  const [savingCatId, setSavingCatId] = useState<string | null>(null)
+  const [addingCategory, setAddingCategory] = useState(false)
+  const [savingNewCategory, setSavingNewCategory] = useState(false)
+  const [budgetError, setBudgetError] = useState('')
+
   const currentJobIdRef = useRef(job.id)
   currentJobIdRef.current = job.id
 
@@ -379,18 +301,30 @@ export default function JobMemoryScreen({
 
   useEffect(() => { load() }, [job.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // After an edit/verify that can change spend inclusion, pull the authoritative
-  // memory-view and adopt its costSummary so Known spend reflects the backend
-  // rather than a local recompute. The optimistic item/section update stays as-is
-  // (the edit is already persisted). On failure we keep the last server-confirmed
-  // summary and offer a retry — never presenting a local total as backend truth.
+  const loadBudget = useCallback(async () => {
+    const requestedJobId = job.id
+    try {
+      const s = await getBudgetSummary(requestedJobId)
+      if (currentJobIdRef.current === requestedJobId) setBudgetSummary(s)
+    } catch {
+      if (currentJobIdRef.current === requestedJobId) setBudgetSummary(null)
+    }
+  }, [job.id])
+
+  useEffect(() => { void loadBudget() }, [loadBudget])
+
+  const budgetCategories: BudgetCategory[] = useMemo(
+    () => budgetSummary?.categories.map(c => c.category) ?? [],
+    [budgetSummary],
+  )
+
+  // Pull the authoritative memory-view costSummary after an edit/verify. Stale-
+  // guarded against job switches; keep last confirmed figure + retry on failure.
   const refreshSummary = useCallback(async () => {
     const requestedJobId = job.id
     setRefreshError(false)
     try {
       const fresh = await getMemoryView(requestedJobId)
-      // The user may have switched jobs while this was in flight — never merge a
-      // stale job's summary into the now-current view.
       if (currentJobIdRef.current !== requestedJobId) return
       setData(prev => (prev ? { ...prev, costSummary: fresh.costSummary } : fresh))
     } catch {
@@ -399,111 +333,213 @@ export default function JobMemoryScreen({
     }
   }, [job.id])
 
-  // Edit trusted memory in place. Updates the visible item from the API
-  // response and re-homes it if its type changed — never re-queues it.
+  const handleAssignCategory = useCallback(async (memoryItemId: string, categoryId: string | null) => {
+    setAssigningCategoryId(memoryItemId)
+    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      const updated = await assignMemoryItemCategory(job.id, memoryItemId, categoryId)
+      if (currentJobIdRef.current !== job.id) return
+      setData(prev => prev ? {
+        ...prev,
+        sections: prev.sections.map(s => ({
+          ...s,
+          items: s.items.map(it => it.id === memoryItemId ? { ...it, budgetCategoryId: updated.budgetCategoryId ?? null } : it),
+        })),
+      } : prev)
+      void loadBudget()
+    } catch {
+      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not change category — tap to retry' }))
+    } finally {
+      setAssigningCategoryId(null)
+    }
+  }, [job.id, loadBudget])
+
   const handleSaveEdit = useCallback(async (memoryItemId: string, edit: MemoryItemEdit) => {
     setSubmittingId(memoryItemId)
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
-      // A normal Fix memory save also clears the Worth-checking warning.
       const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
       setData(prev => {
         if (!prev) return prev
-        // Preserve source linkage if the response omits it (mock returns null)
         let prevItem: MemoryViewItem | undefined
         prev.sections.forEach(s => { const f = s.items.find(it => it.id === memoryItemId); if (f) prevItem = f })
         const merged: MemoryViewItem = { ...updated, source: updated.source ?? prevItem?.source ?? null }
-
         const targetKey = MEMORY_TYPE_TO_SECTION_KEY[merged.memoryType] ?? merged.memoryType
         let sections = prev.sections.map(s => ({ ...s, items: s.items.filter(it => it.id !== memoryItemId) }))
         if (!sections.some(s => s.key === targetKey)) {
           sections = [...sections, { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }]
         }
         sections = sections.map(s => s.key === targetKey ? { ...s, items: [merged, ...s.items] } : s)
-        sections.sort((a, b) =>
-          ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
-        // Keep the last server-confirmed costSummary in place; the refetch below
-        // replaces it with the authoritative figure once it returns.
+        sections.sort((a, b) => ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
         return { ...prev, sections }
       })
       setEditingId(null)
-      // Spend inclusion may have changed — pull the authoritative summary.
       void refreshSummary()
+      void loadBudget()
     } catch {
       setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
     } finally {
       setSubmittingId(null)
     }
-  }, [job.id, refreshSummary])
+  }, [job.id, refreshSummary, loadBudget])
 
-  // Verify a Worth-checking item as right: clears the unresolved flags only,
-  // leaving structured fields (incl. approximate wording) untouched.
   const handleVerify = useCallback(async (memoryItemId: string) => {
     setVerifyingId(memoryItemId)
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
       await verifyMemoryItem(job.id, memoryItemId)
-      setData(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          sections: prev.sections.map(s => ({
-            ...s,
-            items: s.items.map(it => it.id === memoryItemId ? { ...it, uncertaintyFlags: [] } : it),
-          })),
-          // Keep the last server-confirmed costSummary; the refetch below makes
-          // the authoritative figure once it returns.
-        }
-      })
-      // Resolving an item may bring it into Known spend — refetch to confirm.
+      setData(prev => prev ? {
+        ...prev,
+        sections: prev.sections.map(s => ({
+          ...s,
+          items: s.items.map(it => it.id === memoryItemId ? { ...it, uncertaintyFlags: [] } : it),
+        })),
+      } : prev)
       void refreshSummary()
+      void loadBudget()
     } catch {
       setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
     } finally {
       setVerifyingId(null)
     }
-  }, [job.id, refreshSummary])
+  }, [job.id, refreshSummary, loadBudget])
 
-  const hasMemory = data
-    ? data.sections.some(s => s.items.length > 0)
-    : false
+  // ── Budget category management (bought tab) ───────────────────────────────
+  const handleAddCategory = useCallback(async (name: string, amount: string) => {
+    setSavingNewCategory(true); setBudgetError('')
+    try {
+      await createBudgetCategory(job.id, { name: name.trim(), budgetAmount: amount.trim() || null })
+      setAddingCategory(false)
+      await loadBudget()
+    } catch { setBudgetError('Could not add category — try again') }
+    finally { setSavingNewCategory(false) }
+  }, [job.id, loadBudget])
 
-  // Scan summary is always derived from the trusted sections (never from
-  // stillToCheck, and never from backend summarySections which can drift after
-  // an edit). Both summary and detail therefore read the same source of truth.
-  const scanSections = useMemo(
-    () => (data ? deriveScanGroups(data.sections) : []),
-    [data],
-  )
-  // Prefer the backend-authoritative cost summary (adopted on load and after each
-  // edit/verify refetch). Only when a backend has not supplied one — e.g. an older
-  // API — recompute locally with the same safe rules so Known spend stays live.
+  const handleEditBudget = useCallback(async (categoryId: string, name: string, amount: string) => {
+    setSavingCatId(categoryId); setBudgetError('')
+    try {
+      await patchBudgetCategory(job.id, categoryId, { name: name.trim(), budgetAmount: amount.trim() || null })
+      setEditingBudgetId(null)
+      await loadBudget()
+    } catch { setBudgetError('Could not save category — try again') }
+    finally { setSavingCatId(null) }
+  }, [job.id, loadBudget])
+
+  const handleArchiveCategory = useCallback(async (categoryId: string) => {
+    setSavingCatId(categoryId); setBudgetError('')
+    try {
+      await patchBudgetCategory(job.id, categoryId, { isArchived: true })
+      await loadBudget()
+    } catch { setBudgetError('Could not remove category — try again') }
+    finally { setSavingCatId(null) }
+  }, [job.id, loadBudget])
+
+  // ── Derivations ───────────────────────────────────────────────────────────
   const costSummary = useMemo<OrderedCostSummary | null>(
     () => (data ? (data.costSummary?.orderedMaterials ?? deriveCostSummary(data.sections)) : null),
     [data],
   )
-  const orderedCount = data
-    ? (data.sections.find(s => s.key === 'ordered_materials')?.items.length ?? 0)
-    : 0
-  const detailCount = data
-    ? data.sections.reduce((n, s) => n + s.items.length, 0)
-    : 0
+  const sectionItems = (key: string) => data?.sections.find(s => s.key === key)?.items ?? []
+  const orderedItems = sectionItems('ordered_materials')
+  const includedIds = useMemo(() => new Set((costSummary?.rows ?? []).flatMap(r => r.memoryItemIds)), [costSummary])
+  const exclusionReason = useMemo(
+    () => new Map((costSummary?.excludedRows ?? []).map(r => [r.memoryItemId, r.reason])),
+    [costSummary],
+  )
+  const activeCatIds = useMemo(() => new Set(budgetCategories.map(c => c.id)), [budgetCategories])
+  const uncategorised = orderedItems.filter(i => !i.budgetCategoryId || !activeCatIds.has(i.budgetCategoryId))
+  const uncatCounted = uncategorised.filter(i => includedIds.has(i.id))
+  const uncatNotCounted = uncategorised.filter(i => !includedIds.has(i.id))
+
+  const hasMemory = data ? data.sections.some(s => s.items.length > 0) : false
+  const hasBoughtContent = orderedItems.length > 0 || budgetCategories.length > 0
+
+  // Shared MemoryCard props for an item; pass categories only where a picker helps.
+  const cardProps = (item: MemoryViewItem, withPicker: boolean) => ({
+    item,
+    isEditing: editingId === item.id,
+    submitting: submittingId === item.id,
+    verifying: verifyingId === item.id,
+    errorMsg: itemErrors[item.id] ?? null,
+    categories: withPicker ? budgetCategories : [],
+    assigningCategory: assigningCategoryId === item.id,
+    onStartEdit: () => setEditingId(item.id),
+    onCancelEdit: () => setEditingId(null),
+    onSave: (edit: MemoryItemEdit) => handleSaveEdit(item.id, edit),
+    onVerify: () => handleVerify(item.id),
+    onAssignCategory: (c: string | null) => handleAssignCategory(item.id, c),
+  })
+
+  function renderSectionTab(keys: string[]) {
+    const sections = keys.map(k => ({ key: k, items: sectionItems(k) })).filter(s => s.items.length > 0)
+    if (sections.length === 0) return <p className="mem-tab-empty">Nothing remembered here yet.</p>
+    return sections.map(s => (
+      <section key={s.key} className="mem-section">
+        <h2 className="mem-section-heading">{SECTION_HEADINGS[s.key] ?? s.key}</h2>
+        {s.items.map(item => <MemoryCard key={item.id} {...cardProps(item, false)} />)}
+      </section>
+    ))
+  }
+
+  function renderCategoryCard(cs: BudgetCategorySummary) {
+    const c = cs.category
+    const notes = orderedItems.filter(i => i.budgetCategoryId === c.id)
+    const open = !!expandedCats[c.id]
+    if (editingBudgetId === c.id) {
+      return (
+        <div key={c.id} className="budget-cat budget-cat--editing">
+          <CategoryForm
+            initialName={c.name}
+            initialAmount={c.budgetAmount ?? ''}
+            submitting={savingCatId === c.id}
+            onSave={(name, amount) => handleEditBudget(c.id, name, amount)}
+            onCancel={() => setEditingBudgetId(null)}
+          />
+        </div>
+      )
+    }
+    return (
+      <section key={c.id} className="budget-cat" aria-label={`Budget category ${c.name}`}>
+        <div className="budget-cat-head">
+          <h3 className="budget-cat-name">{c.name}</h3>
+          <div className="budget-cat-actions">
+            <button type="button" className="btn-cat-edit" onClick={() => setEditingBudgetId(c.id)}>Edit budget</button>
+            <button type="button" className="btn-cat-archive" disabled={savingCatId === c.id} onClick={() => {
+              if (window.confirm(`Remove "${c.name}"? Its spend moves to Uncategorised.`)) handleArchiveCategory(c.id)
+            }}>Remove</button>
+          </div>
+        </div>
+        <div className="budget-cat-figures">
+          <div className="budget-figure"><dt>Spent</dt><dd>{cs.knownSpendLabel ?? 'None yet'}</dd></div>
+          {cs.budgetLabel
+            ? <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{cs.remainingLabel}</dd></div>
+            : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
+        </div>
+        {notes.length > 0
+          ? <>
+              <button type="button" className="notes-toggle" aria-expanded={open} onClick={() => setExpandedCats(p => ({ ...p, [c.id]: !p[c.id] }))}>
+                {open ? 'Hide notes' : `Show notes (${notes.length})`}
+              </button>
+              {open && <div className="cat-notes">{notes.map(item => (
+                <MemoryCard key={item.id} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+              ))}</div>}
+            </>
+          : <p className="cat-empty">No bought notes in this category yet.</p>}
+      </section>
+    )
+  }
 
   return (
     <div className="mem-page">
       <header className="mem-header">
-        <button className="mem-back" onClick={onClose} aria-label="Back">
-          ← Back
-        </button>
+        <button className="mem-back" onClick={onClose} aria-label="Back">← Back</button>
         <div className="mem-header-titles">
           <h1 className="mem-title">Job memory</h1>
           <p className="mem-job-label">{job.title}</p>
         </div>
       </header>
 
-      {loadState === 'loading' && (
-        <p className="mem-loading">Loading…</p>
-      )}
+      {loadState === 'loading' && <p className="mem-loading">Loading…</p>}
 
       {loadState === 'error' && (
         <div className="mem-error" role="alert">
@@ -514,17 +550,11 @@ export default function JobMemoryScreen({
 
       {loadState === 'ready' && data && (
         <>
-          {/* Layer 1 — Pending review alert. Clearly NOT trusted memory. */}
           {data.stillToCheck.count > 0 && (
             <div className="mem-still-to-check" role="region" aria-label="Still to check">
               <div className="mem-stc-row">
                 <span className="mem-stc-count">{data.stillToCheck.count} still to check</span>
-                <button
-                  className="mem-stc-link"
-                  onClick={onOpenReviewQueue}
-                >
-                  Review Things to check
-                </button>
+                <button className="mem-stc-link" onClick={onOpenReviewQueue}>Review Things to check</button>
               </div>
               <p className="mem-stc-tag">Not remembered yet</p>
               {data.stillToCheck.items.map(item => (
@@ -536,54 +566,76 @@ export default function JobMemoryScreen({
             </div>
           )}
 
-          {hasMemory ? (
-            <>
-              {/* Known bought/ordered spend — trusted line totals only */}
-              {costSummary && (
-                <KnownSpend
-                  summary={costSummary}
-                  orderedCount={orderedCount}
-                  refreshError={refreshError}
-                  onRetryRefresh={refreshSummary}
-                />
-              )}
-
-              {/* Layer 2 — Memory at a glance (primary scan surface) */}
-              <ScanView sections={scanSections} />
-
-              {/* Layer 3 — Remembered detail, de-emphasised behind a disclosure */}
-              <section className="mem-detail" aria-label="Remembered detail">
-                <button
-                  type="button"
-                  className="mem-detail-toggle"
-                  aria-expanded={showDetail}
-                  onClick={() => setShowDetail(o => !o)}
-                >
-                  {showDetail ? 'Hide details' : `Show details (${detailCount})`}
-                </button>
-                {showDetail && data.sections.map(s => (
-                  <MemSection
-                    key={s.key}
-                    section={s}
-                    editingId={editingId}
-                    submittingId={submittingId}
-                    verifyingId={verifyingId}
-                    itemErrors={itemErrors}
-                    onStartEdit={setEditingId}
-                    onCancelEdit={() => setEditingId(null)}
-                    onSave={handleSaveEdit}
-                    onVerify={handleVerify}
-                  />
-                ))}
-              </section>
-            </>
-          ) : (
+          {!hasMemory ? (
             <div className="mem-empty">
               <p>No trusted memory yet. Review Things to check to save useful job details here.</p>
-              <button className="mem-stc-link" onClick={onOpenReviewQueue}>
-                Go to Things to check
-              </button>
+              <button className="mem-stc-link" onClick={onOpenReviewQueue}>Go to Things to check</button>
             </div>
+          ) : (
+            <>
+              <div className="mem-tabs" role="tablist" aria-label="Job memory">
+                <button role="tab" aria-selected={tab === 'bought'} className={`mem-tab${tab === 'bought' ? ' mem-tab--active' : ''}`} onClick={() => setTab('bought')}>What I've bought</button>
+                <button role="tab" aria-selected={tab === 'used'} className={`mem-tab${tab === 'used' ? ' mem-tab--active' : ''}`} onClick={() => setTab('used')}>Used &amp; left over</button>
+                <button role="tab" aria-selected={tab === 'notes'} className={`mem-tab${tab === 'notes' ? ' mem-tab--active' : ''}`} onClick={() => setTab('notes')}>Notes</button>
+              </div>
+
+              {tab === 'bought' && (
+                <div className="mem-tabpanel" role="tabpanel" aria-label="What I've bought">
+                  {!hasBoughtContent ? (
+                    <p className="mem-tab-empty">Nothing bought remembered yet.</p>
+                  ) : (
+                    <>
+                      {costSummary && <KnownSpendHero summary={costSummary} totals={budgetSummary?.totals ?? null} />}
+                      {refreshError && (
+                        <div className="mem-known-spend-refresh" role="alert">
+                          <span>Couldn’t refresh spend — this may be out of date.</span>
+                          <button type="button" className="mem-known-spend-retry" onClick={refreshSummary}>Try again</button>
+                        </div>
+                      )}
+
+                      <section aria-label="Budget categories">
+                        <p className="mem-section-label">By category</p>
+                        {budgetSummary?.categories.map(renderCategoryCard)}
+                        {budgetError && <p className="queue-item-error" role="alert">{budgetError}</p>}
+                        {addingCategory
+                          ? <CategoryForm initialName="" initialAmount="" submitting={savingNewCategory} onSave={handleAddCategory} onCancel={() => setAddingCategory(false)} />
+                          : <button type="button" className="btn-add-category" onClick={() => setAddingCategory(true)}>+ Add budget category</button>}
+                      </section>
+
+                      {uncatCounted.length > 0 && (
+                        <section aria-label="Uncategorised spend">
+                          <p className="mem-section-label">Uncategorised spend{budgetSummary?.uncategorized.knownSpendLabel ? ` · ${budgetSummary.uncategorized.knownSpendLabel}` : ''}</p>
+                          <p className="mem-section-note">Counted in Known spend — give each a category to track it.</p>
+                          {uncatCounted.map(item => <MemoryCard key={item.id} {...cardProps(item, true)} />)}
+                        </section>
+                      )}
+
+                      {uncatNotCounted.length > 0 && (
+                        <section aria-label="Not in known spend">
+                          <p className="mem-section-label">Bought · not in Known spend yet</p>
+                          <p className="mem-section-note">Add a price (or confirm) to count these.</p>
+                          {uncatNotCounted.map(item => (
+                            <MemoryCard key={item.id} {...cardProps(item, true)} excludedReason={exclusionReason.get(item.id) ?? 'no_cost_remembered'} />
+                          ))}
+                        </section>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {tab === 'used' && (
+                <div className="mem-tabpanel" role="tabpanel" aria-label="Used and left over">
+                  {renderSectionTab(USED_SECTION_KEYS)}
+                </div>
+              )}
+
+              {tab === 'notes' && (
+                <div className="mem-tabpanel" role="tabpanel" aria-label="Notes">
+                  {renderSectionTab(NOTES_SECTION_KEYS)}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
