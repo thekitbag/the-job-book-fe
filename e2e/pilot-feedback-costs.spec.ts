@@ -7,10 +7,8 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await page.waitForTimeout(700)
 
     const card = page.locator('.queue-item-card').first()
-    // exact:true prevents matching the summary substring "…at £5 each"
-    await expect(card.getByText('£5 each', { exact: true })).toBeVisible()
-    await expect(card.getByText('£40', { exact: true })).toBeVisible()
-    await expect(card.getByText('hardcore', { exact: true })).toBeVisible()
+    await expect(card.getByText('8 bags · hardcore')).toBeVisible()
+    await expect(card.getByText(/£5 each · £40 total/)).toBeVisible()
     // source text still collapsed
     await expect(page.getByText(/five pounds each/i)).not.toBeVisible()
   })
@@ -39,9 +37,9 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await page.getByRole('button', { name: /save correction/i }).click()
     await page.waitForTimeout(1000)
 
-    // Corrected structured rows must be visible
-    await expect(card.getByText('10 bags', { exact: true })).toBeVisible()
-    await expect(card.getByText('£4.50 each', { exact: true })).toBeVisible()
+    // Corrected structured values must be visible in the scannable card
+    await expect(card.getByText('10 bags · hardcore')).toBeVisible()
+    await expect(card.getByText(/£4.50 each/)).toBeVisible()
     await expect(card.getByText('Saved to trusted memory')).toBeVisible()
     // Stale prose summary must not appear as a headline
     await expect(card.getByText('Ordered 8 bags of hardcore from Jewson at £5 each')).not.toBeVisible()

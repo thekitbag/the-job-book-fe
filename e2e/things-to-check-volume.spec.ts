@@ -25,12 +25,13 @@ test.describe('Things to check — real-use volume', () => {
     await expect(page.getByText('6 waiting')).toBeVisible()
   })
 
-  test('category chips show per-category counts', async ({ page }) => {
+  test('category chips show per-category counts (no zero chips)', async ({ page }) => {
     await openQueue(page)
     await expect(page.getByRole('button', { name: 'All 6' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Ordered 2' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Left over 0' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Watch-outs 1' })).toBeVisible()
+    // empty categories (Left over) get no chip
+    await expect(page.getByRole('button', { name: 'Left over 0' })).toHaveCount(0)
   })
 
   test('focusing a category reduces visible pending items', async ({ page }) => {
@@ -40,12 +41,6 @@ test.describe('Things to check — real-use volume', () => {
     await expect(page.getByText('Bought / ordered')).not.toBeVisible()
     // total still visible while focused
     await expect(page.getByText('6 waiting')).toBeVisible()
-  })
-
-  test('focusing an empty category shows "Nothing waiting here"', async ({ page }) => {
-    await openQueue(page)
-    await page.getByRole('button', { name: 'Left over 0' }).click()
-    await expect(page.getByText('Nothing waiting here')).toBeVisible()
   })
 
   test('confirming an item updates the counts', async ({ page }) => {

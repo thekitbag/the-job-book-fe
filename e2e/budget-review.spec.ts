@@ -46,7 +46,9 @@ test.describe('Budget category in review + Job memory bought tab', () => {
 
     const hardcore = page.getByTestId('queue-item-queue-item-mock-001')
     await expect(hardcore.getByText(/suggested:/i)).toHaveCount(0)
-    await expect(hardcore.getByLabel('Budget category')).toBeVisible()
+    // no suggestion → category is collapsed behind a quiet add link (no friction)
+    await expect(hardcore.getByRole('button', { name: /add budget category/i })).toBeVisible()
+    await expect(hardcore.getByLabel('Budget category')).toHaveCount(0)
     await hardcore.getByRole('button', { name: /remember this/i }).click()
     await page.waitForTimeout(500)
     await expect(hardcore.getByText(/saved to trusted memory/i)).toBeVisible()

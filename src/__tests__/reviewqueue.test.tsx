@@ -180,11 +180,17 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText('Used materials')).toBeInTheDocument()
   })
 
-  it('shows time labels', async () => {
+  it('shows time labels on already-remembered cards', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      alreadyRemembered: [
+        { memoryItemId: 'mem-001', summary: 'Ordered scaffolding from TCS', memoryType: 'ordered_material', timeLabel: 'Yesterday' },
+      ],
+    }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => {
-      expect(screen.getAllByText('Today').length).toBeGreaterThan(0)
-    })
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    // draft cards drop the redundant per-card time; remembered context keeps it
+    fireEvent.click(screen.getByRole('button', { name: /show remembered items/i }))
+    expect(screen.getByText('Yesterday')).toBeInTheDocument()
   })
 
   it('shows duplicate badge for duplicate_group items', async () => {
@@ -485,7 +491,7 @@ describe('ReviewQueueScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
 
     await waitFor(() => screen.getAllByText('Saved to trusted memory'))
-    expect(screen.getByText('£4.50 each')).toBeInTheDocument()
+    expect(screen.getByText(/£4.50 each/)).toBeInTheDocument()
     // Stale prose must not appear as a conflicting headline after correction
     expect(screen.queryByText('Ordered 8 bags of hardcore from Jewson at £5 each')).not.toBeInTheDocument()
   })
@@ -645,15 +651,13 @@ describe('ReviewQueueScreen', () => {
     })
   })
 
-  it('card shows material, quantity, supplier, cost and total without expanding source', async () => {
+  it('card shows a scannable headline, supplier meta and cost without expanding source', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Bought / ordered'))
 
-    expect(screen.getByText('hardcore')).toBeInTheDocument()
-    expect(screen.getByText('8 bags')).toBeInTheDocument()
+    expect(screen.getByText('8 bags · hardcore')).toBeInTheDocument()
     expect(screen.getByText('Jewson')).toBeInTheDocument()
-    expect(screen.getByText('£5 each')).toBeInTheDocument()
-    expect(screen.getByText('£40')).toBeInTheDocument()
+    expect(screen.getByText(/£5 each · £40 total/)).toBeInTheDocument()
 
     // Source context must still be collapsed
     expect(screen.queryByText(/five pounds each/i)).not.toBeInTheDocument()
@@ -670,7 +674,7 @@ describe('ReviewQueueScreen', () => {
     }))
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Bought / ordered'))
-    expect(screen.getByText('Worth checking')).toBeInTheDocument()
+    expect(screen.getByText(/Worth checking/)).toBeInTheDocument()
   })
 
   it('edit form includes cost amount, cost qualifier, and total cost fields', async () => {
@@ -790,13 +794,14 @@ describe('ReviewQueueScreen — real-use volume', () => {
     await waitFor(() => expect(screen.getByText('3 waiting')).toBeInTheDocument())
   })
 
-  it('shows per-category chips with pending counts including an empty one', async () => {
+  it('shows per-category chips only for categories with pending items (no zero chips)', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByRole('button', { name: 'All 3' }))
     expect(screen.getByRole('button', { name: 'Ordered 1' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Used 1' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Left over 0' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Watch-outs 1' })).toBeInTheDocument()
+    // the empty "Left over" category gets no chip
+    expect(screen.queryByRole('button', { name: 'Left over 0' })).not.toBeInTheDocument()
   })
 
   it('renders pending items before the already-remembered section', async () => {
@@ -821,16 +826,6 @@ describe('ReviewQueueScreen — real-use volume', () => {
     expect(screen.getByText('3 waiting')).toBeInTheDocument()
   })
 
-  it('focusing an empty category shows "Nothing waiting here"', async () => {
-    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    await waitFor(() => screen.getByText('Bought / ordered'))
-
-    fireEvent.click(screen.getByRole('button', { name: 'Left over 0' }))
-
-    expect(screen.getByText('Nothing waiting here')).toBeInTheDocument()
-    expect(screen.queryByText('Bought / ordered')).not.toBeInTheDocument()
-  })
-
   it('All shows every pending group again', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Bought / ordered'))
@@ -850,7 +845,7 @@ describe('ReviewQueueScreen — real-use volume', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /remember this/i })[0])
 
     await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Ordered 0' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ordered 0' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'All 2' })).toBeInTheDocument()
   })
 
@@ -864,7 +859,7 @@ describe('ReviewQueueScreen — real-use volume', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /dismiss/i })[0])
 
     await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Ordered 0' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ordered 0' })).not.toBeInTheDocument()
   })
 
   it('correct updates total and category counts', async () => {
@@ -879,7 +874,7 @@ describe('ReviewQueueScreen — real-use volume', () => {
     fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
 
     await waitFor(() => expect(screen.getByText('2 waiting')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Ordered 0' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ordered 0' })).not.toBeInTheDocument()
   })
 
   it('keeps the focused category after acting on an item', async () => {
@@ -1273,11 +1268,11 @@ describe('ReviewQueueScreen — labour', () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const hours = await screen.findByTestId('queue-item-qi-labour-hours')
     expect(within(hours).getByText('Labour')).toBeTruthy()
-    expect(within(hours).getByText('6')).toBeTruthy() // hours
-    expect(within(hours).getByText('fitting cladding')).toBeTruthy()
+    expect(within(hours).getByText('6 hours · fitting cladding')).toBeTruthy()
     const rated = screen.getByTestId('queue-item-qi-labour-rated')
+    expect(within(rated).getByText('8 hours · electrics')).toBeTruthy()
     expect(within(rated).getByText('Tom')).toBeTruthy()
-    expect(within(rated).getByText('£35/hour')).toBeTruthy()
+    expect(within(rated).getByText(/£35\/hour · £280 total/)).toBeTruthy()
   })
 
   it('can confirm hours-only labour without a cost', async () => {

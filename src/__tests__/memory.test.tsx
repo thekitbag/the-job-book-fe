@@ -231,22 +231,24 @@ describe('JobMemoryScreen — manage budgets (bought tab)', () => {
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
   })
 
-  it('edits a category budget', async () => {
+  it('edits a category budget (via the ⋯ menu)', async () => {
     mockPatchBudgetCategory.mockResolvedValue({ ...CAT_CLAD, budgetAmount: '2500' })
     renderScreen()
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
-    fireEvent.click(within(clad).getByRole('button', { name: /edit budget/i }))
+    fireEvent.click(within(clad).getByRole('button', { name: /actions for cladding/i }))
+    fireEvent.click(within(clad).getByRole('menuitem', { name: /edit budget/i }))
     const form = screen.getByRole('form', { name: /budget category/i })
     fireEvent.change(form.querySelector('input[name="budgetAmount"]')!, { target: { value: '2500' } })
     fireEvent.click(screen.getByRole('button', { name: /save category/i }))
     await waitFor(() => expect(mockPatchBudgetCategory).toHaveBeenCalledWith('job-mem-001', 'c1', { name: 'cladding', budgetAmount: '2500' }))
   })
 
-  it('removes a category after confirming', async () => {
+  it('removes a category from the ⋯ menu after confirming', async () => {
     mockPatchBudgetCategory.mockResolvedValue({ ...CAT_CLAD, isArchived: true })
     renderScreen()
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
-    fireEvent.click(within(clad).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(clad).getByRole('button', { name: /actions for cladding/i }))
+    fireEvent.click(within(clad).getByRole('menuitem', { name: /remove category/i }))
     expect(window.confirm).toHaveBeenCalled()
     await waitFor(() => expect(mockPatchBudgetCategory).toHaveBeenCalledWith('job-mem-001', 'c1', { isArchived: true }))
   })
@@ -255,7 +257,8 @@ describe('JobMemoryScreen — manage budgets (bought tab)', () => {
     window.confirm = vi.fn(() => false)
     renderScreen()
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
-    fireEvent.click(within(clad).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(clad).getByRole('button', { name: /actions for cladding/i }))
+    fireEvent.click(within(clad).getByRole('menuitem', { name: /remove category/i }))
     expect(mockPatchBudgetCategory).not.toHaveBeenCalled()
   })
 })
