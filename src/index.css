@@ -3972,3 +3972,40 @@ code {
   color: var(--ink-700);
   font-size: var(--text-sm);
 }
+
+/* ── Direct add (section-level manual memory) ─────────────────────────────── */
+.btn-direct-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  border: 1px solid var(--green-200);
+  background: var(--green-50);
+  color: var(--green-700);
+  border-radius: var(--r-pill);
+  padding: 0.5rem 1rem;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  min-height: 44px;
+  margin-bottom: 0.25rem;
+}
+.btn-direct-add:active { background: var(--green-100); }
+.direct-add {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+}
+.direct-add-form { gap: 0.6rem; }
+.direct-add-row {
+  display: flex;
+  gap: 0.6rem;
+}
+.direct-add-row .queue-field { flex: 1; min-width: 0; }
+.direct-add-note {
+  resize: vertical;
+  min-height: 72px;
+  font-family: inherit;
+}

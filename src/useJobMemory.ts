@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   assignMemoryItemCategory,
   createBudgetCategory,
+  createMemoryItem,
   getBudgetSummary,
   getMemoryView,
   patchBudgetCategory,
@@ -20,6 +21,7 @@ import {
 import type {
   BudgetCategory,
   BudgetSummaryResponse,
+  CreateMemoryItemRequest,
   Job,
   LabourCostSummary,
   MemoryItemEdit,
@@ -116,6 +118,28 @@ export function useJobMemory(job: Job) {
       setRefreshError(true)
     }
   }, [job.id])
+
+  // Full silent memory-view refetch (no loading flash) — adopts authoritative
+  // backend state after a direct add. Stale-guarded; recoverable on failure.
+  const refetch = useCallback(async () => {
+    const requestedJobId = job.id
+    setRefreshError(false)
+    try {
+      const fresh = await getMemoryView(requestedJobId)
+      if (currentJobIdRef.current === requestedJobId) setData(fresh)
+    } catch {
+      if (currentJobIdRef.current === requestedJobId) setRefreshError(true)
+    }
+  }, [job.id])
+
+  // Create a trusted manual memory item, then adopt authoritative memory-view +
+  // budget totals. Throws on create failure so the form can keep the values.
+  const addMemoryItem = useCallback(async (req: CreateMemoryItemRequest): Promise<MemoryViewItem> => {
+    const created = await createMemoryItem(job.id, req)
+    await refetch()
+    void loadBudget()
+    return created
+  }, [job.id, refetch, loadBudget])
 
   const handleAssignCategory = useCallback(async (memoryItemId: string, categoryId: string | null) => {
     setAssigningCategoryId(memoryItemId)
@@ -278,7 +302,8 @@ export function useJobMemory(job: Job) {
   }), [editingId, submittingId, verifyingId, itemErrors, budgetCategories, assigningCategoryId, handleSaveEdit, handleVerify, handleAssignCategory])
 
   return {
-    data, loadState, errorMsg, reload, refreshError, refreshSummary,
+    data, loadState, errorMsg, reload, refreshError, refreshSummary, refetch,
+    addMemoryItem,
     budgetSummary, budgetCategories,
     ordered, labourSummary, totalKnownCost,
     sectionItems, includedIds, exclusionReason, isUncategorised, hasMemory,

@@ -349,7 +349,7 @@ describe('Workspace — assign / fix / verify', () => {
     const card = within(notCounted).getByText('timber').closest('.mem-card') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
-    await waitFor(() => screen.getByText(/couldn’t refresh spend/i))
+    await waitFor(() => screen.getByText(/couldn’t refresh/i))
     expect(within(screen.getByRole('region', { name: /^known spend$/i })).getByText(/£1440/)).toBeTruthy()
   })
 

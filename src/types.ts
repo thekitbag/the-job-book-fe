@@ -47,6 +47,7 @@ export type FactType =
   | 'customer_change'
   | 'watch_out'
   | 'labour'
+  | 'general_note'
   | 'unclear'
 
 export type ConfidenceLabel = 'high' | 'medium' | 'low'
@@ -401,6 +402,11 @@ export interface MemoryViewItem {
   // The budget category this trusted item is assigned to, if any (zero or one).
   // Present on memory-view items so Job memory can show/edit assignment inline.
   budgetCategoryId?: string | null
+  // Effective event date (direct-add). Display date preference:
+  // happenedAt ?? source.capturedAt ?? createdAt.
+  happenedAt?: string | null
+  // true for items added directly (not voice-extracted). Optional until backend ships it.
+  isManual?: boolean
   createdAt: string
   updatedAt: string
   source: MemoryViewSource | null
@@ -649,6 +655,29 @@ export interface LatestActivityItem {
   costLabel: string | null
   // ISO effective timestamp (source.capturedAt ?? createdAt) for age display.
   effectiveAt: string
+}
+
+// Request body for POST /api/jobs/:jobId/memory-items — create a trusted manual
+// memory item directly (no audio/transcription/extraction/review). The section
+// the user is in chooses memoryType; there is no generic "add record".
+export interface CreateMemoryItemRequest {
+  memoryType: MemoryType
+  summary?: string | null
+  happenedAt?: string | null // ISO date/time; date-only from FE is fine
+  materialName?: string | null
+  quantity?: string | null
+  unit?: string | null
+  supplierName?: string | null
+  deliveryTiming?: string | null
+  locationOrUse?: string | null
+  costAmount?: string | null
+  costCurrency?: string | null
+  costQualifier?: CostQualifier | null
+  totalCostAmount?: string | null
+  labourHours?: string | null
+  labourPerson?: string | null
+  labourTask?: string | null
+  budgetCategoryId?: string | null
 }
 
 // Request body for PATCH /api/jobs/:jobId/memory-items/:memoryItemId
