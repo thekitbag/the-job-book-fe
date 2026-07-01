@@ -3612,39 +3612,38 @@ code {
 }
 .btn-switch-job:active { background: var(--surface-sunk); }
 
-/* — Tab pill row — */
+/* — Tab row: full-width underline tabs, brand-green active — */
 .ws-tabs {
   display: flex;
-  gap: 0.4rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding: 0.35rem 0 0.6rem;
+  width: 100%;
+  /* stretch edge-to-edge so the underline rule spans the whole width */
   margin: 0 -1rem;
-  padding-left: 1rem;
-  padding-right: 1rem;
+  padding: 0 1rem;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   background: var(--paper);
   z-index: 5;
 }
-.ws-tabs::-webkit-scrollbar { display: none; }
 .ws-tab {
-  flex: 0 0 auto;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--ink-700);
-  border-radius: var(--r-pill);
-  padding: 0.5rem 1rem;
+  flex: 1 1 0;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--ink-500);
+  padding: 0.75rem 0.2rem;
   font-size: var(--text-sm);
   font-weight: 700;
-  min-height: 40px;
+  text-align: center;
   white-space: nowrap;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
+.ws-tab:active { color: var(--ink-700); }
 .ws-tab--active {
-  background: var(--ink-900);
-  border-color: var(--ink-900);
-  color: #fff;
+  color: var(--green-700);
+  border-bottom-color: var(--green-600);
 }
 
 .ws-body { padding-top: 0.85rem; }
@@ -3811,10 +3810,13 @@ code {
   min-height: 68px;
   border: none;
   border-radius: var(--r-xl);
-  background: var(--ink-900);
+  background:
+    radial-gradient(120% 140% at 18% 20%, var(--green-500) 0%, var(--green-600) 46%, var(--green-700) 100%);
   color: #fff;
   padding: 0.85rem 1.25rem;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-green),
+    inset 0 2px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.16);
 }
 .ws-record-btn:active { transform: scale(0.99); }
 .ws-record-icon {
