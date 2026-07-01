@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act, waitFor } from '@testing-library/react'
+import { render, screen, act, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import { saveNote, getNotesForJob } from '../db'
@@ -230,8 +230,10 @@ describe('CurrentJobWorkspace — capture', () => {
     await user.click(screen.getByRole('button', { name: /start recording/i }))
     await simulateRecordingComplete(FAKE_RESULT)
 
-    await waitFor(() => expect(screen.getByText(/saved on phone/i)).toBeInTheDocument())
-    await waitFor(() => expect(screen.getByText(/voice note saved/i)).toBeInTheDocument(), { timeout: 3000 })
+    // Scope to source history — the capture confirmation overlay also reflects state.
+    const history = () => within(screen.getByRole('region', { name: /source history/i }))
+    await waitFor(() => expect(history().getByText(/saved on phone/i)).toBeInTheDocument())
+    await waitFor(() => expect(history().getByText(/voice note saved/i)).toBeInTheDocument(), { timeout: 3000 })
   })
 
   it('retrying a failed note does not create a duplicate', async () => {
@@ -263,14 +265,32 @@ describe('CurrentJobWorkspace — capture', () => {
     await user.click(screen.getByRole('button', { name: /start recording/i }))
     await simulateRecordingComplete(FAKE_RESULT)
 
-    await waitFor(() => expect(screen.getByText(/saved on this phone/i)).toBeInTheDocument())
+    const history = () => within(screen.getByRole('region', { name: /source history/i }))
+    await waitFor(() => expect(history().getByText(/saved on this phone/i)).toBeInTheDocument())
     expect(mockUpload).not.toHaveBeenCalled()
 
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     await act(async () => { window.dispatchEvent(new Event('online')) })
 
-    await waitFor(() => expect(screen.getByText(/voice note saved/i)).toBeInTheDocument(), { timeout: 3000 })
+    await waitFor(() => expect(history().getByText(/voice note saved/i)).toBeInTheDocument(), { timeout: 3000 })
     expect(mockUpload).toHaveBeenCalledOnce()
+  })
+
+  it('shows a capture confirmation after recording that can be dismissed', async () => {
+    const mockUpload = await getUploadMock()
+    mockUpload.mockImplementation(mockUploadSuccess())
+
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /start recording/i }))
+    await simulateRecordingComplete(FAKE_RESULT)
+
+    const dialog = await screen.findByRole('dialog', { name: /recording saved/i })
+    expect(within(dialog).getByText(/voice note saved|saving your note/i)).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /done/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('recording saves local note with the selected job id', async () => {
