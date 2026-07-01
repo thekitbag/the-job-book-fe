@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getJobs, ApiError } from './api'
-import CaptureScreen from './CaptureScreen'
+import CurrentJobWorkspace from './CurrentJobWorkspace'
 import PasscodeScreen from './PasscodeScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import JobPickerScreen from './JobPickerScreen'
-import JobMemoryScreen from './JobMemoryScreen'
 import type { Job } from './types'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
@@ -32,14 +31,14 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 }
 
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
-type AppView = 'capture' | 'reviewQueue' | 'jobPicker' | 'jobMemory'
+type AppView = 'workspace' | 'reviewQueue' | 'jobPicker'
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('loading')
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
-  const [view, setView] = useState<AppView>('capture')
+  const [view, setView] = useState<AppView>('workspace')
   const [online, setOnline] = useState(navigator.onLine)
 
   useEffect(() => {
@@ -94,7 +93,7 @@ export default function App() {
   function handleSelectJob(job: Job) {
     setSelectedJob(job)
     localStorage.setItem(SELECTED_JOB_ID_KEY, job.id)
-    setView('capture')
+    setView('workspace')
   }
 
   function handleJobAdded(job: Job) {
@@ -157,30 +156,19 @@ export default function App() {
         online={online}
         onSelect={handleSelectJob}
         onJobAdded={handleJobAdded}
-        onClose={() => setView('capture')}
+        onClose={() => setView('workspace')}
       />
     )
   }
 
   if (view === 'reviewQueue') {
-    return <ReviewQueueScreen job={selectedJob} onClose={() => setView('capture')} />
-  }
-
-  if (view === 'jobMemory') {
-    return (
-      <JobMemoryScreen
-        job={selectedJob}
-        onClose={() => setView('capture')}
-        onOpenReviewQueue={() => setView('reviewQueue')}
-      />
-    )
+    return <ReviewQueueScreen job={selectedJob} onClose={() => setView('workspace')} />
   }
 
   return (
-    <CaptureScreen
+    <CurrentJobWorkspace
       job={selectedJob}
       onOpenReviewQueue={() => setView('reviewQueue')}
-      onOpenJobMemory={() => setView('jobMemory')}
       onSwitchJob={() => setView('jobPicker')}
     />
   )

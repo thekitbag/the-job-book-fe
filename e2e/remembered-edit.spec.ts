@@ -19,7 +19,7 @@ async function signIn(page: Page) {
 test.describe('Remembered-memory edit & focus', () => {
   test('Job memory: Fix memory updates a bought note in place', async ({ page }) => {
     await signIn(page)
-    await page.getByRole('button', { name: 'Job memory' }).click()
+    await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(800)
 
     // hardcore is the uncategorised counted bought note.
@@ -38,7 +38,7 @@ test.describe('Remembered-memory edit & focus', () => {
 
   test('Job memory: changing a bought note type moves it to the Notes tab', async ({ page }) => {
     await signIn(page)
-    await page.getByRole('button', { name: 'Job memory' }).click()
+    await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(800)
 
     const hardcore = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'hardcore' })
@@ -55,7 +55,7 @@ test.describe('Remembered-memory edit & focus', () => {
 
   test('Things to check: remembered context follows category focus', async ({ page }) => {
     await signIn(page)
-    await page.locator('.btn-things-to-check').click()
+    await page.getByRole('button', { name: /things to check/i }).click()
     await page.waitForTimeout(700)
 
     // Focus Ordered, expand remembered → ordered context (scaffolding) shows
@@ -71,7 +71,7 @@ test.describe('Remembered-memory edit & focus', () => {
 
   test('Things to check: Fix memory corrects a remembered card in place', async ({ page }) => {
     await signIn(page)
-    await page.locator('.btn-things-to-check').click()
+    await page.getByRole('button', { name: /things to check/i }).click()
     await page.waitForTimeout(700)
     await expect(page.getByText('6 waiting')).toBeVisible()
 

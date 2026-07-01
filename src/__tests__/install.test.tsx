@@ -11,11 +11,13 @@ vi.mock('../db', () => ({
 }))
 
 vi.mock('../api', () => ({
-  getDraftFacts: vi.fn().mockResolvedValue([]),
+  getDraftFacts: vi.fn(() => Promise.resolve([])),
   uploadNote: vi.fn(),
-  getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+  getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
   getNoteTranscript: vi.fn(),
   getReviewQueue: vi.fn(),
+  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
+  getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
 }))
 
 vi.mock('../useRecorder', () => ({
@@ -54,14 +56,14 @@ const MOCK_JOB = {
 
 // Helper to fire the beforeinstallprompt event
 function fireInstallPrompt() {
-  const promptFn = vi.fn().mockResolvedValue(undefined)
+  const promptFn = vi.fn(() => Promise.resolve(undefined))
   const event = Object.assign(new Event('beforeinstallprompt'), { prompt: promptFn })
   act(() => { window.dispatchEvent(event) })
   return promptFn
 }
 
 // Import CaptureScreen after all mocks are set up
-const { default: CaptureScreen } = await import('../CaptureScreen')
+const { default: CurrentJobWorkspace } = await import('../CurrentJobWorkspace')
 
 describe('PWA install banner', () => {
   beforeEach(() => {
@@ -88,14 +90,14 @@ describe('PWA install banner', () => {
       value: vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
     })
 
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
   })
 
   it('is hidden after the user dismisses it', async () => {
     const user = userEvent.setup()
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     // No prompt yet — banner not visible
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
@@ -114,7 +116,7 @@ describe('PWA install banner', () => {
   it('stays hidden on re-render after dismissal stored in localStorage', () => {
     localStorage.setItem(DISMISSED_KEY, 'true')
 
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
     fireInstallPrompt()
 
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
@@ -127,7 +129,7 @@ describe('PWA install banner', () => {
     })
     Object.defineProperty(navigator, 'maxTouchPoints', { writable: true, value: 5 })
 
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     const banner = await screen.findByRole('region', { name: /install app/i })
     expect(banner).toBeInTheDocument()
@@ -137,7 +139,7 @@ describe('PWA install banner', () => {
 
   it('triggers the native install prompt when Install is clicked', async () => {
     const user = userEvent.setup()
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     const promptFn = fireInstallPrompt()
 
@@ -151,7 +153,7 @@ describe('PWA install banner', () => {
   it('hides the install banner when the device is offline', () => {
     Object.defineProperty(navigator, 'onLine', { writable: true, value: false })
 
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
     fireInstallPrompt()
 
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
@@ -161,7 +163,7 @@ describe('PWA install banner', () => {
   })
 
   it('smoke test: CaptureScreen renders without install banner when no prompt and not iOS', () => {
-    render(<CaptureScreen job={MOCK_JOB} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()

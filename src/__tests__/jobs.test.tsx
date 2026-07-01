@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import JobPickerScreen from '../JobPickerScreen'
-import CaptureScreen from '../CaptureScreen'
+import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
-import type { Job } from '../types'
+import type { Job, MemoryViewResponse } from '../types'
 
 const mockCreateJob = vi.mocked(api.createJob)
 const mockGetNotesForJob = vi.mocked(
@@ -18,8 +18,10 @@ vi.mock('../api', async (importOriginal) => {
     createJob: vi.fn(),
     getJobs: vi.fn(),
     getDraftFacts: vi.fn(),
-    getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+    getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getReviewQueue: vi.fn(),
+    getMemoryView: vi.fn(),
+    getBudgetSummary: vi.fn(),
   }
 })
 
@@ -62,51 +64,52 @@ const JOB_B: Job = {
   updatedAt: '2026-06-08T14:00:00Z',
 }
 
+const EMPTY_MEMORY: MemoryViewResponse = {
+  job: JOB_A, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] }, costSummary: undefined,
+}
+
 beforeEach(() => {
   mockGetNotesForJob.mockResolvedValue([])
   mockGetDraftFacts.mockResolvedValue([])
   vi.mocked(api.getReviewQueue).mockResolvedValue({ jobId: 'job-001', generatedAt: '', sections: [], alreadyRemembered: [] })
+  vi.mocked(api.getMemoryView).mockResolvedValue(EMPTY_MEMORY)
+  vi.mocked(api.getBudgetSummary).mockRejectedValue(new Error('no budget'))
 })
 
-// ── CaptureScreen job display ──────────────────────────────────────────────
+// ── Workspace selected-job display ─────────────────────────────────────────
 
-describe('CaptureScreen — selected job display', () => {
+function renderWorkspace(job: Job) {
+  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
+}
+
+describe('CurrentJobWorkspace — selected job display', () => {
   it('shows the selected job title', () => {
-    render(<CaptureScreen job={JOB_A} />)
-    expect(screen.getByText('Garden Room')).toBeInTheDocument()
+    renderWorkspace(JOB_A)
+    expect(screen.getByRole('heading', { name: 'Garden Room' })).toBeInTheDocument()
   })
 
-  it('shows job type label for garden_room', () => {
-    render(<CaptureScreen job={JOB_A} />)
-    expect(screen.getByText('Garden room')).toBeInTheDocument()
+  it('shows the rough location when present', () => {
+    renderWorkspace(JOB_A)
+    expect(screen.getByText('Mrs Patel')).toBeInTheDocument()
   })
 
-  it('shows job type label for extension', () => {
-    render(<CaptureScreen job={JOB_B} />)
+  it('shows the job type as a fallback when there is no location', () => {
+    renderWorkspace(JOB_B)
     expect(screen.getByText('Extension')).toBeInTheDocument()
   })
 
   it('does not show a type label for "other"', () => {
-    const otherJob: Job = { ...JOB_A, jobType: 'other' }
-    render(<CaptureScreen job={otherJob} />)
+    const otherJob: Job = { ...JOB_B, jobType: 'other' }
+    renderWorkspace(otherJob)
     expect(screen.queryByText('Other')).not.toBeInTheDocument()
   })
 
-  it('shows Switch job button when onSwitchJob is provided', () => {
-    render(<CaptureScreen job={JOB_A} onSwitchJob={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /switch job/i })).toBeInTheDocument()
-  })
-
-  it('calls onSwitchJob when Switch job is clicked', () => {
+  it('always shows the Switch action and calls onSwitchJob', () => {
     const onSwitchJob = vi.fn()
-    render(<CaptureScreen job={JOB_A} onSwitchJob={onSwitchJob} />)
-    fireEvent.click(screen.getByRole('button', { name: /switch job/i }))
+    render(<CurrentJobWorkspace job={JOB_A} onOpenReviewQueue={vi.fn()} onSwitchJob={onSwitchJob} />)
+    const btn = screen.getByRole('button', { name: /switch/i })
+    fireEvent.click(btn)
     expect(onSwitchJob).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not show Switch job button when onSwitchJob is not provided', () => {
-    render(<CaptureScreen job={JOB_A} />)
-    expect(screen.queryByRole('button', { name: /switch job/i })).not.toBeInTheDocument()
   })
 })
 

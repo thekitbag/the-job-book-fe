@@ -1278,9 +1278,34 @@ function buildMockSections(): MemoryViewSection[] {
 // (each Playwright test starts with page.goto) — no cross-test leakage.
 let mockMemoryByJob: Map<string, MemoryViewSection[]> | null = null
 
+// Rebase the fixture's fixed dates onto the current day so the workspace
+// Overview renders meaningfully: labour is dated today (so "Labour today" has
+// hours), everything else is spread over the last week (so "Latest on this job"
+// shows varied ages). Cost amounts/qualifiers/flags are untouched, so the
+// known-spend cases the fixture encodes still hold.
+function rebaseMockDates(sections: MemoryViewSection[]): void {
+  const dayMs = 86_400_000
+  const now = Date.now()
+  let nonLabourIdx = 0
+  for (const s of sections) {
+    for (const item of s.items) {
+      const daysAgo = item.memoryType === 'labour' ? 0 : (nonLabourIdx++ % 7)
+      // Small per-item offset keeps same-day items in a stable newest-first order.
+      const iso = new Date(now - daysAgo * dayMs - item.id.length * 60_000).toISOString()
+      item.createdAt = iso
+      item.updatedAt = iso
+      if (item.source) item.source = { ...item.source, capturedAt: iso }
+    }
+  }
+}
+
 function mockSectionsFor(jobId: string): MemoryViewSection[] {
   if (!mockMemoryByJob) mockMemoryByJob = new Map()
-  if (!mockMemoryByJob.has(jobId)) mockMemoryByJob.set(jobId, buildMockSections())
+  if (!mockMemoryByJob.has(jobId)) {
+    const sections = buildMockSections()
+    rebaseMockDates(sections)
+    mockMemoryByJob.set(jobId, sections)
+  }
   return mockMemoryByJob.get(jobId)!
 }
 

@@ -20,7 +20,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
   test('review shows a suggested category and confirms it into Job memory spend', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
-    await page.locator('.btn-things-to-check').click()
+    await page.getByRole('button', { name: /things to check/i }).click()
     await page.waitForTimeout(700)
 
     const timber = page.getByTestId('queue-item-queue-item-mock-004')
@@ -32,7 +32,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     // Back to capture, open Job memory — the confirmed timber spend (£120) now
     // sits under the timber budget category.
     await page.getByRole('button', { name: /back/i }).click()
-    await page.getByRole('button', { name: /job memory/i }).click()
+    await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(900)
     const timberCat = page.getByRole('region', { name: /budget category timber/i })
     await expect(timberCat.getByText('£120 known spend')).toBeVisible()
@@ -41,7 +41,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
   test('a bought/ordered draft with no suggestion can be left uncategorised', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
-    await page.locator('.btn-things-to-check').click()
+    await page.getByRole('button', { name: /things to check/i }).click()
     await page.waitForTimeout(700)
 
     const hardcore = page.getByTestId('queue-item-queue-item-mock-001')
@@ -57,7 +57,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
   test('Job memory Spend tab shows one Known spend with category cards', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
-    await page.getByRole('button', { name: /job memory/i }).click()
+    await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(900)
 
     // single job-level Known spend (bought £1240 + labour £880 = £2120)

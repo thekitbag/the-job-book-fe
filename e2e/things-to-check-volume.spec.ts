@@ -15,7 +15,7 @@ async function openQueue(page: import('@playwright/test').Page) {
     await page.getByRole('button', { name: /sign in/i }).click()
     await page.waitForTimeout(400)
   }
-  await page.locator('.btn-things-to-check').click()
+  await page.getByRole('button', { name: /things to check/i }).click()
   await page.waitForTimeout(700)
 }
 

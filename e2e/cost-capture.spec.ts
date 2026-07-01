@@ -9,7 +9,7 @@ async function openBought(page: Page) {
   await page.goto('/')
   const explainer = page.getByRole('button', { name: /got it/i })
   if (await explainer.isVisible().catch(() => false)) await explainer.click()
-  await page.getByRole('button', { name: 'Job memory' }).click()
+  await page.getByRole('tab', { name: 'Spend' }).click()
   await page.waitForTimeout(800)
 }
 

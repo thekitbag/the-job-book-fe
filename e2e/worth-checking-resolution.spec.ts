@@ -14,9 +14,8 @@ async function openUsedTab(page: Page) {
     await page.getByRole('button', { name: /sign in/i }).click()
     await page.waitForTimeout(400)
   }
-  await page.getByRole('button', { name: 'Job memory' }).click()
+  await page.getByRole('tab', { name: 'Used' }).click()
   await page.waitForTimeout(800)
-  await page.getByRole('tab', { name: /used & left over/i }).click()
 }
 
 const sandCard = (page: Page) => page.locator('.mem-card', { hasText: 'in the van' })
