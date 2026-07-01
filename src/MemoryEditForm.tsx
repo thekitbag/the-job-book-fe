@@ -6,6 +6,7 @@ const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'ordered_material', label: 'Ordered material' },
   { value: 'leftover_material', label: 'Leftover material' },
   { value: 'labour', label: 'Labour' },
+  { value: 'general_note', label: 'Note' },
   { value: 'supplier_delivery_note', label: 'Supplier / delivery note' },
   { value: 'customer_change', label: 'Customer change' },
   { value: 'watch_out', label: 'Watch out' },
@@ -50,6 +51,8 @@ export default function MemoryEditForm({
     setForm(f => ({ ...f, memoryType: v, budgetCategoryId: CATEGORY_TYPES.has(v) ? (f.budgetCategoryId ?? null) : null }))
 
   const isLabour = form.memoryType === 'labour'
+  // A plain note is edited as free text (its summary) — no material/cost fields.
+  const isNote = form.memoryType === 'general_note'
   // Pilot is GBP, but preserve any non-GBP currency already on the item.
   const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
@@ -108,7 +111,18 @@ export default function MemoryEditForm({
           </select>
         </label>
       )}
-      {isLabour ? (
+      {isNote ? (
+        <label className="queue-field">
+          <span className="queue-field-label">Note</span>
+          <textarea
+            className="queue-field-input direct-add-note"
+            name="summary"
+            value={form.summary ?? ''}
+            rows={3}
+            onChange={e => setForm(f => ({ ...f, summary: e.target.value }))}
+          />
+        </label>
+      ) : isLabour ? (
         <>
           <label className="queue-field">
             <span className="queue-field-label">Hours</span>
@@ -151,25 +165,29 @@ export default function MemoryEditForm({
           </label>
         </>
       )}
-      <label className="queue-field">
-        <span className="queue-field-label">Cost amount {currencyCue}</span>
-        <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Cost qualifier</span>
-        <select
-          className="queue-field-input"
-          aria-label="Cost qualifier"
-          value={form.costQualifier ?? ''}
-          onChange={e => setForm(f => ({ ...f, costQualifier: (e.target.value as CostQualifier) || null }))}
-        >
-          {COST_QUALIFIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Total cost {currencyCue}</span>
-        <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
-      </label>
+      {!isNote && (
+        <>
+          <label className="queue-field">
+            <span className="queue-field-label">Cost amount {currencyCue}</span>
+            <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Cost qualifier</span>
+            <select
+              className="queue-field-input"
+              aria-label="Cost qualifier"
+              value={form.costQualifier ?? ''}
+              onChange={e => setForm(f => ({ ...f, costQualifier: (e.target.value as CostQualifier) || null }))}
+            >
+              {COST_QUALIFIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Total cost {currencyCue}</span>
+            <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
+          </label>
+        </>
+      )}
       <div className="queue-edit-actions">
         <button type="submit" className="btn-queue-save" disabled={submitting}>
           {submitting ? 'Saving…' : 'Save memory'}

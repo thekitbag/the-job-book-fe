@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import MemoryCard from './MemoryCard'
+import DirectAddForm from './DirectAddForm'
 import { formatMoney } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
 import type { BudgetCategorySummary, BudgetSummaryResponse, TotalKnownCost } from './types'
@@ -65,7 +66,7 @@ function KnownSpendHero({ total, totals }: { total: TotalKnownCost; totals: Budg
 
 export default function SpendTab({ mem }: { mem: JobMemory }) {
   const {
-    totalKnownCost, budgetSummary, refreshError, refreshSummary,
+    totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, isUncategorised, cardProps,
     budgetCategories, expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
@@ -144,20 +145,23 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
     )
   }
 
-  if (!hasSpendContent) {
-    return <p className="mem-tab-empty">Nothing bought or labour remembered yet.</p>
-  }
-
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
-      {totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
+      {hasSpendContent && totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
+
+      <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} />
+
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
-          <span>Couldn’t refresh spend — this may be out of date.</span>
-          <button type="button" className="mem-known-spend-retry" onClick={refreshSummary}>Try again</button>
+          <span>Couldn’t refresh — this may be out of date.</span>
+          <button type="button" className="mem-known-spend-retry" onClick={refetch}>Try again</button>
         </div>
       )}
 
+      {!hasSpendContent ? (
+        <p className="mem-tab-empty">Nothing bought or labour remembered yet.</p>
+      ) : (
+        <>
       <section aria-label="Budget categories">
         <p className="mem-section-label">By category</p>
         {budgetSummary?.categories.map(renderCategoryCard)}
@@ -183,6 +187,8 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             <MemoryCard key={item.id} item={item} {...cardProps(item, true)} excludedReason={exclusionReason.get(item.id) ?? 'no_cost_remembered'} />
           ))}
         </section>
+      )}
+        </>
       )}
     </div>
   )

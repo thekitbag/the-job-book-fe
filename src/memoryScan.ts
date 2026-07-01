@@ -467,11 +467,12 @@ export const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
   customer_change: 'customer_changes',
   watch_out: 'watch_outs',
   labour: 'labour',
+  general_note: 'general_notes',
 }
 
 export const SECTION_ORDER = [
   'ordered_materials', 'labour', 'used_materials', 'leftovers',
-  'supplier_delivery_notes', 'customer_changes', 'watch_outs',
+  'general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs',
 ]
 
 export const SECTION_FULL_LABELS: Record<string, string> = {
@@ -479,6 +480,7 @@ export const SECTION_FULL_LABELS: Record<string, string> = {
   labour: 'Labour',
   used_materials: 'Used materials',
   leftovers: 'Leftovers',
+  general_notes: 'Notes',
   supplier_delivery_notes: 'Supplier delivery notes',
   customer_changes: 'Customer changes',
   watch_outs: 'Watch outs',
@@ -630,10 +632,11 @@ export function deriveScanGroups(sections: MemoryViewSection[]): ScanViewSection
 // Pure, unit-testable summaries for the current-job Overview. Both take trusted
 // memory-view sections only — pending drafts are never passed in.
 
-// Effective timestamp for ordering / "today" checks: the source note capture
-// time if we have it, else when the memory item was created.
+// Effective timestamp for ordering / "today" checks. Direct-add items carry an
+// explicit event date (happenedAt); voice items fall back to source capture
+// time, then creation time.
 function effectiveAt(item: MemoryViewItem): string {
-  return item.source?.capturedAt ?? item.createdAt
+  return item.happenedAt ?? item.source?.capturedAt ?? item.createdAt
 }
 
 function isSameLocalDay(iso: string, now: Date): boolean {
@@ -675,6 +678,7 @@ const LATEST_ACTIVITY_TYPE: Record<string, { type: LatestActivityType; label: st
   used_material: { type: 'used', label: 'Used' },
   leftover_material: { type: 'used', label: 'Used' },
   labour: { type: 'labour', label: 'Labour' },
+  general_note: { type: 'note', label: 'Note' },
   supplier_delivery_note: { type: 'note', label: 'Note' },
   customer_change: { type: 'note', label: 'Note' },
   watch_out: { type: 'note', label: 'Note' },

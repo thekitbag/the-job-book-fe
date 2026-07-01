@@ -1,4 +1,4 @@
-import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, CreateMemoryItemRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
@@ -901,6 +901,27 @@ export async function getBudgetSummary(jobId: string): Promise<BudgetSummaryResp
   return res.json() as Promise<BudgetSummaryResponse>
 }
 
+// POST /api/jobs/:jobId/memory-items — create a trusted manual memory item
+// directly (no audio/transcription/extraction/review). Returns the normalized
+// memory-view item (isManual: true, source: null, happenedAt).
+export async function createMemoryItem(jobId: string, req: CreateMemoryItemRequest): Promise<MemoryViewItem> {
+  if (USE_MOCK) {
+    await delay(300)
+    return mockCreateMemoryItem(jobId, req)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (res.status === 400) throw new ApiError('Invalid memory item', 400)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Job not found', 404)
+  if (!res.ok) throw new ApiError(`POST memory-item → ${res.status}`, res.status)
+  return res.json() as Promise<MemoryViewItem>
+}
+
 // PATCH /api/jobs/:jobId/memory-items/:memoryItemId — assign/clear category only.
 export async function assignMemoryItemCategory(
   jobId: string,
@@ -1401,6 +1422,80 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
 function mockVerifyMemoryItem(jobId: string, memoryItemId: string): void {
   const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
   if (item) item.uncertaintyFlags = []
+}
+
+let mockManualSeq = 0
+
+// Backend guarantees a non-empty summary; mirror its derivation so the mock
+// never stores a blank note.
+function deriveManualSummary(req: CreateMemoryItemRequest): string {
+  if (req.summary && req.summary.trim()) return req.summary.trim()
+  const qtyUnit = [req.quantity, req.unit].filter(Boolean).join(' ')
+  const nameBit = [qtyUnit, req.materialName].filter(Boolean).join(' ').trim()
+  switch (req.memoryType) {
+    case 'ordered_material':
+      return nameBit ? `Bought ${nameBit}` : (req.materialName?.trim() || 'Bought item')
+    case 'used_material':
+    case 'leftover_material':
+      return nameBit ? `Used ${nameBit}` : (req.materialName?.trim() || 'Used item')
+    case 'labour': {
+      const base = [req.labourPerson?.trim(), req.labourHours ? `${req.labourHours} hours` : null].filter(Boolean).join(' — ') || 'Labour'
+      return req.labourTask?.trim() ? `${base} (${req.labourTask.trim()})` : base
+    }
+    default:
+      return req.materialName?.trim() || 'Note'
+  }
+}
+
+function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest): MemoryViewItem {
+  if (!req.memoryType) throw new ApiError('memoryType required', 400)
+  const canCategorise = req.memoryType === 'ordered_material' || req.memoryType === 'labour'
+  if (req.budgetCategoryId) {
+    if (!canCategorise) throw new ApiError('Category not allowed for this type', 400)
+    const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === req.budgetCategoryId)
+    if (!cat || cat.isArchived) throw new ApiError('Invalid category assignment', 400)
+  }
+  const sections = mockSectionsFor(jobId)
+  const now = new Date().toISOString()
+  const isLabour = req.memoryType === 'labour'
+  const hasCost = !!(req.costAmount || req.totalCostAmount)
+  const item: MemoryViewItem = {
+    id: `mem-manual-${++mockManualSeq}`,
+    memoryType: req.memoryType,
+    summary: deriveManualSummary(req),
+    materialName: req.materialName ?? null,
+    quantity: req.quantity ?? null,
+    unit: req.unit ?? null,
+    supplierName: req.supplierName ?? null,
+    deliveryTiming: req.deliveryTiming ?? null,
+    locationOrUse: req.locationOrUse ?? null,
+    costAmount: req.costAmount ?? null,
+    costCurrency: req.costCurrency ?? (hasCost ? 'GBP' : null),
+    costQualifier: req.costQualifier ?? null,
+    totalCostAmount: req.totalCostAmount ?? null,
+    labourHours: isLabour ? (req.labourHours ?? null) : null,
+    labourPerson: isLabour ? (req.labourPerson ?? null) : null,
+    labourTask: isLabour ? (req.labourTask ?? null) : null,
+    uncertaintyFlags: [],
+    budgetCategoryId: canCategorise ? (req.budgetCategoryId ?? null) : null,
+    happenedAt: req.happenedAt ?? null,
+    isManual: true,
+    sourceCandidateFactId: null,
+    reviewDecisionId: null,
+    createdAt: now,
+    updatedAt: now,
+    source: null,
+  }
+  const targetKey = MEMORY_TYPE_TO_SECTION_KEY[item.memoryType] ?? item.memoryType
+  let target = sections.find(s => s.key === targetKey)
+  if (!target) {
+    target = { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }
+    sections.push(target)
+    sections.sort((a, b) =>
+      ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
+  }
+  target.items.unshift(item)
+  return { ...item }
 }
 
 // ── Stateful mock: budget categories ────────────────────────────────────────

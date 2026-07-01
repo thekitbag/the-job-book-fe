@@ -3972,3 +3972,61 @@ code {
   color: var(--ink-700);
   font-size: var(--text-sm);
 }
+
+/* ── Direct add (section-level manual memory) ─────────────────────────────── */
+/* Quiet section header: small-caps label + a round "+" trigger. Keeps direct
+   add secondary to voice and the lens summary. */
+.lens-add { margin-bottom: 0.25rem; }
+.lens-add-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 40px;
+}
+.lens-add-label {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+.btn-lens-add {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--green-200);
+  background: var(--green-50);
+  color: var(--green-700);
+  font-size: 1.35rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-lens-add:active { background: var(--green-100); }
+.btn-lens-add--open {
+  border-color: var(--line-strong);
+  background: var(--surface-sunk);
+  color: var(--ink-500);
+}
+.direct-add {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+}
+.direct-add-form { gap: 0.6rem; }
+.direct-add-row {
+  display: flex;
+  gap: 0.6rem;
+}
+.direct-add-row .queue-field { flex: 1; min-width: 0; }
+.direct-add-note {
+  resize: vertical;
+  min-height: 72px;
+  font-family: inherit;
+}

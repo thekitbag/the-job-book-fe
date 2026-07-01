@@ -23,7 +23,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
 }
 
 const USED_SECTION_KEYS = ['used_materials', 'leftovers']
-const NOTES_SECTION_KEYS = ['supplier_delivery_notes', 'customer_changes', 'watch_outs']
+const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs']
 
 type Tab = 'overview' | 'spend' | 'labour' | 'used' | 'notes'
 const TABS: { key: Tab; label: string }[] = [
@@ -451,10 +451,10 @@ export default function CurrentJobWorkspace({
         {tab === 'spend' && renderMemoryTab(<SpendTab mem={mem} />)}
         {tab === 'labour' && renderMemoryTab(<LabourTab mem={mem} />)}
         {tab === 'used' && renderMemoryTab(
-          <MemorySectionTab mem={mem} sectionKeys={USED_SECTION_KEYS} ariaLabel="Used and left over" />,
+          <MemorySectionTab mem={mem} sectionKeys={USED_SECTION_KEYS} ariaLabel="Used and left over" directAdd={{ kind: 'used', label: 'Add used item', sectionLabel: 'Used & left over' }} />,
         )}
         {tab === 'notes' && renderMemoryTab(
-          <MemorySectionTab mem={mem} sectionKeys={NOTES_SECTION_KEYS} ariaLabel="Notes" />,
+          <MemorySectionTab mem={mem} sectionKeys={NOTES_SECTION_KEYS} ariaLabel="Notes" directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }} />,
         )}
       </div>
 
