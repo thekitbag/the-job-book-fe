@@ -21,6 +21,11 @@ vi.mock('../api', async (importOriginal) => {
   }
 })
 
+// Memory-tab tests don't exercise capture; stub the background sync/poll hooks
+// so no upload/transcript microtask lingers past teardown.
+vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
+vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow: vi.fn() }) }))
+
 const mockGetMemoryView = vi.mocked(api.getMemoryView)
 const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
 const mockVerifyMemoryItem = vi.mocked(api.verifyMemoryItem)

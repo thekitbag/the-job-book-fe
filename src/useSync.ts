@@ -40,7 +40,10 @@ export function useSync(onNotesChanged: () => void) {
   }, [])
 
   const syncAll = useCallback(() => {
-    if (!navigator.onLine) return
+    // `init` defers syncAll to a microtask; guard against the global being gone
+    // if that fires after the page/test environment has torn down (offline is
+    // also a no-op — nothing to send).
+    if (typeof navigator === 'undefined' || !navigator.onLine) return
     getPendingNotes().then(pending => {
       pending.forEach(n => uploadOne(n))
     })

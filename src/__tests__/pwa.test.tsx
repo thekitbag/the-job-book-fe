@@ -37,6 +37,9 @@ vi.mock('../useRecorder', () => {
   }
 })
 
+vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
+vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow: vi.fn() }) }))
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const PROJECT_ROOT = resolve(__dirname, '../..')

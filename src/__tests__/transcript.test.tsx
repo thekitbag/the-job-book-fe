@@ -33,6 +33,8 @@ vi.mock('../useRecorder', () => {
   }
 })
 
+vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
+
 const JOB = {
   id: 'job-test-001',
   title: 'Garden Room',
