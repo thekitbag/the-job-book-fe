@@ -23,7 +23,7 @@ export default function MemorySectionTab({
   mem: JobMemory
   sectionKeys: string[]
   ariaLabel: string
-  directAdd?: { kind: DirectAddKind; label: string }
+  directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
 }) {
   const { sectionItems, cardProps, addMemoryItem, refreshError, refetch } = mem
   const sections = sectionKeys
@@ -32,7 +32,7 @@ export default function MemorySectionTab({
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label={ariaLabel}>
-      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} onAdd={addMemoryItem} />}
+      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} onAdd={addMemoryItem} />}
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">

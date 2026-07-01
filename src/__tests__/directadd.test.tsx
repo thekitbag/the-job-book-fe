@@ -95,19 +95,19 @@ describe('Direct add — entry points', () => {
   it('each lens shows its own direct add action', async () => {
     renderWorkspace()
     await openTab('Spend')
-    expect(await screen.findByRole('button', { name: '+ Add spend' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add spend' })).toBeInTheDocument()
     await openTab('Labour')
-    expect(await screen.findByRole('button', { name: '+ Add labour' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
     await openTab('Used')
-    expect(await screen.findByRole('button', { name: '+ Add used item' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
     await openTab('Notes')
-    expect(await screen.findByRole('button', { name: '+ Add note' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add note' })).toBeInTheDocument()
   })
 
   it('keeps the pinned Record action available with a form open', async () => {
     renderWorkspace()
     await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add spend' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
     expect(screen.getByRole('form', { name: 'Add spend' })).toBeInTheDocument()
     // The pinned Record bar stays mounted while a direct-add form is open.
     expect(document.querySelector('.ws-record-bar')).toBeTruthy()
@@ -118,7 +118,7 @@ describe('Direct add — submit contracts', () => {
   it('spend saves as ordered_material with a GBP cost and refetches budget', async () => {
     renderWorkspace()
     await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add spend' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
     const form = screen.getByRole('form', { name: 'Add spend' })
     fireEvent.change(form.querySelector('input[name="materialName"]')!, { target: { value: 'decking' } })
     fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '120' } })
@@ -135,7 +135,7 @@ describe('Direct add — submit contracts', () => {
   it('labour saves as labour with happenedAt', async () => {
     renderWorkspace()
     await openTab('Labour')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add labour' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
     const form = screen.getByRole('form', { name: 'Add labour' })
     fireEvent.change(form.querySelector('input[name="labourHours"]')!, { target: { value: '8' } })
     fireEvent.change(form.querySelector('input[name="labourPerson"]')!, { target: { value: 'Tom' } })
@@ -148,7 +148,7 @@ describe('Direct add — submit contracts', () => {
   it('used saves as used_material and appears in Used', async () => {
     renderWorkspace()
     await openTab('Used')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add used item' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add used item' }))
     const form = screen.getByRole('form', { name: 'Add used item' })
     fireEvent.change(form.querySelector('input[name="materialName"]')!, { target: { value: 'OSB' } })
     fireEvent.change(form.querySelector('input[name="quantity"]')!, { target: { value: '6' } })
@@ -162,7 +162,7 @@ describe('Direct add — submit contracts', () => {
   it('note defaults to general_note and appears in Notes', async () => {
     renderWorkspace()
     await openTab('Notes')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add note' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add note' }))
     const form = screen.getByRole('form', { name: 'Add note' })
     fireEvent.change(form.querySelector('textarea[name="summary"]')!, { target: { value: 'Cladding going black' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
@@ -178,7 +178,7 @@ describe('Direct add — failure and edit', () => {
     mockCreateMemoryItem.mockRejectedValue(new Error('network'))
     renderWorkspace()
     await openTab('Notes')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add note' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add note' }))
     const form = screen.getByRole('form', { name: 'Add note' })
     fireEvent.change(form.querySelector('textarea[name="summary"]')!, { target: { value: 'keep me' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
@@ -190,7 +190,7 @@ describe('Direct add — failure and edit', () => {
   it('a direct entry is editable with the existing Fix memory flow', async () => {
     renderWorkspace()
     await openTab('Notes')
-    fireEvent.click(await screen.findByRole('button', { name: '+ Add note' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add note' }))
     const form = screen.getByRole('form', { name: 'Add note' })
     fireEvent.change(form.querySelector('textarea[name="summary"]')!, { target: { value: 'fix me later' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))

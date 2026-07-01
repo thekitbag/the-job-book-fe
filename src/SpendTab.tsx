@@ -147,7 +147,9 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
-      <DirectAddForm kind="spend" label="Add spend" categories={budgetCategories} onAdd={addMemoryItem} />
+      {hasSpendContent && totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
+
+      <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} />
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -160,8 +162,6 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         <p className="mem-tab-empty">Nothing bought or labour remembered yet.</p>
       ) : (
         <>
-      {totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
-
       <section aria-label="Budget categories">
         <p className="mem-section-label">By category</p>
         {budgetSummary?.categories.map(renderCategoryCard)}

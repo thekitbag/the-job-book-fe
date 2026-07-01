@@ -235,16 +235,19 @@ function DirectAddFields({
   )
 }
 
-// Self-contained direct-add widget: an "Add …" button that expands into the
-// section-specific form and owns the save/submitting/error lifecycle.
+// Self-contained direct-add widget: a quiet section header (small label + a
+// round "+" that expands the section-specific form). Direct add stays secondary
+// to voice + the lens summary. Owns the save/submitting/error lifecycle.
 export default function DirectAddForm({
   kind,
   label,
+  sectionLabel,
   categories = [],
   onAdd,
 }: {
   kind: DirectAddKind
-  label: string
+  label: string       // accessible action name, e.g. "Add spend"
+  sectionLabel: string // small-caps header text, e.g. "Spend"
   categories?: BudgetCategory[]
   onAdd: (req: CreateMemoryItemRequest) => Promise<unknown>
 }) {
@@ -265,24 +268,32 @@ export default function DirectAddForm({
     }
   }
 
-  if (!open) {
-    return (
-      <button type="button" className="btn-direct-add" onClick={() => { setError(null); setOpen(true) }}>
-        + {label}
-      </button>
-    )
-  }
-
   return (
-    <div className="direct-add">
-      <DirectAddFields
-        kind={kind}
-        categories={categories}
-        submitting={submitting}
-        error={error}
-        onSubmit={submit}
-        onCancel={() => { setOpen(false); setError(null) }}
-      />
+    <div className="lens-add">
+      <div className="lens-add-head">
+        <span className="lens-add-label">{sectionLabel}</span>
+        <button
+          type="button"
+          className={`btn-lens-add${open ? ' btn-lens-add--open' : ''}`}
+          aria-label={open ? `Close ${label.toLowerCase()}` : label}
+          aria-expanded={open}
+          onClick={() => { setError(null); setOpen(o => !o) }}
+        >
+          {open ? '×' : '+'}
+        </button>
+      </div>
+      {open && (
+        <div className="direct-add">
+          <DirectAddFields
+            kind={kind}
+            categories={categories}
+            submitting={submitting}
+            error={error}
+            onSubmit={submit}
+            onCancel={() => { setOpen(false); setError(null) }}
+          />
+        </div>
+      )}
     </div>
   )
 }

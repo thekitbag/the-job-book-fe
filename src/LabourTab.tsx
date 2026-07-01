@@ -12,7 +12,7 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Labour">
-      <DirectAddForm kind="labour" label="Add labour" onAdd={addMemoryItem} />
+      <DirectAddForm kind="labour" label="Add labour" sectionLabel="Labour" onAdd={addMemoryItem} />
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
