@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
-import CaptureScreen from '../CaptureScreen'
+import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import { saveNote } from '../db'
 import { makeNote } from './helpers'
 import { getReviewQueue } from '../api'
@@ -13,10 +13,12 @@ import type { UseRecorderReturn } from '../useRecorder'
 vi.mock('../api', () => ({
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
-  getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+  getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
   getNoteTranscript: vi.fn(),
-  getDraftFacts: vi.fn().mockResolvedValue([]),
-  getReviewQueue: vi.fn().mockResolvedValue({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] }),
+  getDraftFacts: vi.fn(() => Promise.resolve([])),
+  getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
+  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-pilot-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
+  getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -97,26 +99,26 @@ describe('PWA assets and manifest config', () => {
 
 // ── CaptureScreen pilot requirements ─────────────────────────────────────────
 
-describe('CaptureScreen — pilot field requirements', () => {
+describe('Workspace — pilot field requirements', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] })
   })
 
   it('shows approved audio-storage explainer copy on first launch', () => {
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
     expect(screen.getByText(
       'We save the recording during the pilot so we can check what was captured and improve the job memory.'
     )).toBeInTheDocument()
   })
 
   it('renders the record button as the default capture entry point', () => {
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
   })
 
   it('shows the current pilot job title', () => {
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
@@ -124,7 +126,7 @@ describe('CaptureScreen — pilot field requirements', () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Saved on phone')).toBeInTheDocument()
@@ -135,7 +137,7 @@ describe('CaptureScreen — pilot field requirements', () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Voice note saved')).toBeInTheDocument()
@@ -147,7 +149,7 @@ describe('CaptureScreen — pilot field requirements', () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Saved on this phone')).toBeInTheDocument()
@@ -157,7 +159,7 @@ describe('CaptureScreen — pilot field requirements', () => {
   it('shows offline badge in the header when network is unavailable', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
 
-    render(<CaptureScreen job={PILOT_JOB} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     expect(screen.getByText('No signal')).toBeInTheDocument()
   })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -645,5 +645,91 @@ describe('suggestBudgetCategory — labour', () => {
   it('matches the task to a category when no labour category exists', () => {
     expect(suggestBudgetCategory({ memoryType: 'labour', materialName: null, summary: 'x', labourTask: 'electrics' }, [cat({ id: 'c-elec', name: 'electrics' })]))
       .toEqual({ budgetCategoryId: 'c-elec', categoryName: 'electrics', reason: 'material_name_match' })
+  })
+})
+
+// ── deriveLabourToday ────────────────────────────────────────────────────────
+
+describe('deriveLabourToday', () => {
+  const NOW = new Date('2026-07-01T15:00:00Z')
+  const todayIso = '2026-07-01T09:00:00.000Z'
+  const yesterdayIso = '2026-06-30T09:00:00.000Z'
+  const labour = (items: MemoryViewItem[]) => [section('labour', items)]
+
+  it('sums strict-numeric hours for labour dated today, split per person', () => {
+    const result = deriveLabourToday(labour([
+      item({ memoryType: 'labour', labourHours: '4', labourPerson: 'Mike', createdAt: todayIso }),
+      item({ memoryType: 'labour', labourHours: '6', labourPerson: 'Kurt', createdAt: todayIso }),
+      item({ memoryType: 'labour', labourHours: '2', labourPerson: 'Mike', createdAt: todayIso }),
+    ]), NOW)
+    expect(result.totalHours).toBe(12)
+    expect(result.hasHours).toBe(true)
+    expect(result.perPerson).toEqual(expect.arrayContaining([
+      { person: 'Mike', hours: 6 },
+      { person: 'Kurt', hours: 6 },
+    ]))
+  })
+
+  it('ignores labour not dated today', () => {
+    const result = deriveLabourToday(labour([
+      item({ memoryType: 'labour', labourHours: '8', labourPerson: 'Mike', createdAt: yesterdayIso }),
+    ]), NOW)
+    expect(result.totalHours).toBe(0)
+    expect(result.hasHours).toBe(false)
+  })
+
+  it('prefers source.capturedAt over createdAt for the effective day', () => {
+    const result = deriveLabourToday(labour([
+      item({ memoryType: 'labour', labourHours: '5', createdAt: yesterdayIso,
+        source: { candidateFactId: 'f', noteId: 'n', transcriptId: 't', capturedAt: todayIso, transcriptText: null } }),
+    ]), NOW)
+    expect(result.totalHours).toBe(5)
+  })
+
+  it('excludes non-numeric / unknown hours', () => {
+    const result = deriveLabourToday(labour([
+      item({ memoryType: 'labour', labourHours: 'about 3', labourPerson: 'Mike', createdAt: todayIso }),
+      item({ memoryType: 'labour', labourHours: null, labourPerson: 'Kurt', createdAt: todayIso }),
+    ]), NOW)
+    expect(result.totalHours).toBe(0)
+    expect(result.hasHours).toBe(false)
+  })
+})
+
+// ── deriveLatestActivity ─────────────────────────────────────────────────────
+
+describe('deriveLatestActivity', () => {
+  it('returns trusted items newest-first with plain type labels', () => {
+    const sections = [
+      section('ordered_materials', [
+        item({ id: 'bought', memoryType: 'ordered_material', materialName: 'OSB', quantity: '12', supplierName: 'Sydenhams', totalCostAmount: '336', costCurrency: 'GBP', createdAt: '2026-07-01T09:00:00.000Z' }),
+      ]),
+      section('watch_outs', [
+        item({ id: 'note', memoryType: 'watch_out', summary: 'Cladding → black', createdAt: '2026-06-30T09:00:00.000Z' }),
+      ]),
+      section('used_materials', [
+        item({ id: 'used', memoryType: 'used_material', materialName: 'post', quantity: '6', locationOrUse: 'back fence', createdAt: '2026-06-29T09:00:00.000Z' }),
+      ]),
+    ]
+    const latest = deriveLatestActivity(sections)
+    expect(latest.map(i => i.memoryItemId)).toEqual(['bought', 'note', 'used'])
+    expect(latest.map(i => i.typeLabel)).toEqual(['Bought', 'Note', 'Used'])
+    // Bought row carries a money label; the note headline is its prose summary.
+    expect(latest[0].costLabel).toBe('£336')
+    expect(latest[0].headline).toContain('OSB')
+    expect(latest[1].headline).toBe('Cladding → black')
+  })
+
+  it('honours the limit and never maps unknown types', () => {
+    const sections = [
+      section('ordered_materials', [
+        item({ id: 'a', createdAt: '2026-07-01T03:00:00.000Z' }),
+        item({ id: 'b', createdAt: '2026-07-01T02:00:00.000Z' }),
+      ]),
+      section('mystery', [ item({ id: 'x', memoryType: 'unknown_future_type', createdAt: '2026-07-01T09:00:00.000Z' }) ]),
+    ]
+    const latest = deriveLatestActivity(sections, 1)
+    expect(latest).toHaveLength(1)
+    expect(latest[0].memoryItemId).toBe('a')
   })
 })

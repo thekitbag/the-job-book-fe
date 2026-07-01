@@ -5,7 +5,7 @@ import { getJobs, ApiError } from '../api'
 
 vi.mock('../db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../db')>()
-  return { ...actual, saveNote: vi.fn(), getNotesForJob: vi.fn().mockResolvedValue([]) }
+  return { ...actual, saveNote: vi.fn(), getNotesForJob: vi.fn(() => Promise.resolve([])) }
 })
 
 vi.mock('../api', async (importOriginal) => {
@@ -16,9 +16,9 @@ vi.mock('../api', async (importOriginal) => {
     createJob: vi.fn(),
     pilotLogin: vi.fn(),
     uploadNote: vi.fn(),
-    getJobNoteStatuses: vi.fn().mockResolvedValue([]),
+    getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getNoteTranscript: vi.fn(),
-    getDraftFacts: vi.fn().mockResolvedValue([]),
+    getDraftFacts: vi.fn(() => Promise.resolve([])),
     getReviewDraft: vi.fn(),
     submitReviewDecision: vi.fn(),
     getReviewQueue: vi.fn(),
@@ -27,13 +27,12 @@ vi.mock('../api', async (importOriginal) => {
   }
 })
 
-vi.mock('../CaptureScreen', () => ({
-  default: ({ job, onOpenReviewQueue, onOpenJobMemory, onSwitchJob }: { job: { id: string; title: string }; onOpenReviewQueue?: () => void; onOpenJobMemory?: () => void; onSwitchJob?: () => void }) => (
-    <div data-testid="capture-screen" data-job-id={job.id}>
+vi.mock('../CurrentJobWorkspace', () => ({
+  default: ({ job, onOpenReviewQueue, onSwitchJob }: { job: { id: string; title: string }; onOpenReviewQueue: () => void; onSwitchJob: () => void }) => (
+    <div data-testid="workspace-screen" data-job-id={job.id}>
       {job.title}
-      {onOpenReviewQueue && <button onClick={onOpenReviewQueue}>mock-open-queue</button>}
-      {onOpenJobMemory && <button onClick={onOpenJobMemory}>mock-open-memory</button>}
-      {onSwitchJob && <button onClick={onSwitchJob}>mock-switch-job</button>}
+      <button onClick={onOpenReviewQueue}>mock-open-queue</button>
+      <button onClick={onSwitchJob}>mock-switch-job</button>
     </div>
   ),
 }))
@@ -53,26 +52,12 @@ vi.mock('../JobPickerScreen', () => ({
   ),
 }))
 
-vi.mock('../JobMemoryScreen', () => ({
-  default: ({ job, onOpenReviewQueue }: { job: { id: string; title: string }; onOpenReviewQueue: () => void }) => (
-    <div data-testid="job-memory-screen" data-job-id={job.id}>
-      {job.title}
-      <button onClick={onOpenReviewQueue}>mock-memory-open-queue</button>
-    </div>
-  ),
-}))
-
 vi.mock('../PasscodeScreen', () => ({
   default: ({ onLoginSuccess }: { onLoginSuccess: () => void }) => (
     <div data-testid="passcode-screen">
       <button onClick={onLoginSuccess}>mock-login</button>
     </div>
   ),
-}))
-
-vi.mock('../useRecorder', () => ({
-  isRecordingSupported: true,
-  useRecorder: () => ({ state: 'idle', elapsedMs: 0, mimeType: '', permissionError: null, start: vi.fn(), stop: vi.fn() }),
 }))
 
 const mockGetJobs = vi.mocked(getJobs)
@@ -105,29 +90,29 @@ describe('App', () => {
     mockGetJobs.mockResolvedValue([JOB_A, JOB_B])
   })
 
-  it('renders CaptureScreen with the first active job after successful load', async () => {
+  it('renders the workspace with the first active job after successful load', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
   it('restores previously selected job id from localStorage', async () => {
     localStorage.setItem(SELECTED_ID_KEY, JOB_B.id)
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.getByText('Kitchen Extension')).toBeInTheDocument()
   })
 
   it('falls back to first active job when stored id is no longer in job list', async () => {
     localStorage.setItem(SELECTED_ID_KEY, 'job-stale-999')
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
   it('caches job list to localStorage after successful load', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     const stored = localStorage.getItem(CACHED_JOBS_KEY)
     expect(stored).not.toBeNull()
     const parsed = JSON.parse(stored!) as typeof JOB_A[]
@@ -138,7 +123,7 @@ describe('App', () => {
     mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('passcode-screen')).toBeInTheDocument())
-    expect(screen.queryByTestId('capture-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
   it('does not use cached jobs for a 401 — user must re-authenticate', async () => {
@@ -146,7 +131,7 @@ describe('App', () => {
     mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('passcode-screen')).toBeInTheDocument())
-    expect(screen.queryByTestId('capture-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
   it('reloads jobs after successful login via passcode screen', async () => {
@@ -156,7 +141,7 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('passcode-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'mock-login' }))
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(mockGetJobs).toHaveBeenCalledTimes(2)
   })
 
@@ -165,7 +150,7 @@ describe('App', () => {
     localStorage.setItem(SELECTED_ID_KEY, JOB_A.id)
     mockGetJobs.mockRejectedValue(new Error('network error'))
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
@@ -180,31 +165,27 @@ describe('App', () => {
     mockGetJobs.mockResolvedValue([])
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
-    expect(screen.queryByTestId('capture-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
-  it('no-jobs state shows "Add first job" and no Back button', async () => {
+  it('no-jobs state shows no Back button', async () => {
     mockGetJobs.mockResolvedValue([])
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
-    // The JobPickerScreen mock doesn't render header text — test via real component
-    // This is covered by the JobPickerScreen unit test; here we just confirm the picker renders
     expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
   })
 
-  it('switching job updates the capture context to the new job', async () => {
+  it('switching job updates the workspace to the new job', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-    // Initially shows JOB_A
-    expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_A.id)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id)
 
-    // Open picker then select JOB_B
     fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
     await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
 
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-    expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_B.id)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id)
   })
 
   it('switching job does not call saveNote or update pending notes', async () => {
@@ -212,20 +193,19 @@ describe('App', () => {
     const mockSaveNote = vi.mocked(saveNote)
 
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
     await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
 
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-    // Switching jobs must never write to the note store
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(mockSaveNote).not.toHaveBeenCalled()
   })
 
   it('"Things to check" opens ReviewQueueScreen with the selected job id', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
     await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
@@ -234,54 +214,22 @@ describe('App', () => {
 
   it('"Things to check" uses the switched-to job id after switching', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
 
-    // Switch to JOB_B
     fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
     await waitFor(() => screen.getByTestId('job-picker-screen'))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_B.id))
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
-    // Open Things to check — must use JOB_B
     fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
     await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
     expect(screen.getByTestId('review-queue-screen')).toHaveAttribute('data-job-id', JOB_B.id)
   })
 
-  it('"Job memory" action appears on the capture screen', async () => {
+  it('returns to the workspace from the review queue back action', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /mock-open-memory/i })).toBeInTheDocument()
-  })
-
-  it('"Job memory" opens JobMemoryScreen with the selected job id', async () => {
-    render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /mock-open-memory/i }))
-    await waitFor(() => expect(screen.getByTestId('job-memory-screen')).toBeInTheDocument())
-    expect(screen.getByTestId('job-memory-screen')).toHaveAttribute('data-job-id', JOB_A.id)
-  })
-
-  it('"Job memory" uses the switched-to job id after switching', async () => {
-    render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
-    await waitFor(() => screen.getByTestId('job-picker-screen'))
-    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toHaveAttribute('data-job-id', JOB_B.id))
-
-    fireEvent.click(screen.getByRole('button', { name: /mock-open-memory/i }))
-    await waitFor(() => expect(screen.getByTestId('job-memory-screen')).toBeInTheDocument())
-    expect(screen.getByTestId('job-memory-screen')).toHaveAttribute('data-job-id', JOB_B.id)
-  })
-
-  it('"Review Things to check" from Job memory opens ReviewQueueScreen', async () => {
-    render(<App />)
-    await waitFor(() => expect(screen.getByTestId('capture-screen')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /mock-open-memory/i }))
-    await waitFor(() => expect(screen.getByTestId('job-memory-screen')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /mock-memory-open-queue/i }))
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
     await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
   })
 })

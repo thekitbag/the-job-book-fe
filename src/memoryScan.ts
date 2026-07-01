@@ -1,4 +1,4 @@
-import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, LabourCostSummary, LabourExcludedRow, LabourExclusionReason, LabourSpendRow, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, LabourCostSummary, LabourExcludedRow, LabourExclusionReason, LabourSpendRow, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -624,4 +624,104 @@ export function deriveScanGroups(sections: MemoryViewSection[]): ScanViewSection
   if (uncertain.length > 0) out.push({ key: 'worth_checking', label: 'Worth checking', items: uncertain })
 
   return out
+}
+
+// ── Workspace Overview derivations ──────────────────────────────────────────
+// Pure, unit-testable summaries for the current-job Overview. Both take trusted
+// memory-view sections only — pending drafts are never passed in.
+
+// Effective timestamp for ordering / "today" checks: the source note capture
+// time if we have it, else when the memory item was created.
+function effectiveAt(item: MemoryViewItem): string {
+  return item.source?.capturedAt ?? item.createdAt
+}
+
+function isSameLocalDay(iso: string, now: Date): boolean {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return false
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+}
+
+/**
+ * Labour done today: sum of strict-numeric labourHours on labour memory items
+ * whose effective day is the local device day, split per person. `now` is
+ * injectable so the rule is deterministically testable. Non-numeric / unknown
+ * hours are ignored (never guessed).
+ */
+export function deriveLabourToday(sections: MemoryViewSection[], now: Date = new Date()): LabourTodaySummary {
+  const labour = sections.find(s => s.key === 'labour')?.items ?? []
+  const perPersonMap = new Map<string, number>()
+  let totalHours = 0
+  for (const item of labour) {
+    if (!isSameLocalDay(effectiveAt(item), now)) continue
+    const h = item.labourHours
+    if (!h || !DECIMAL.test(h)) continue
+    const hours = parseFloat(h)
+    totalHours += hours
+    const person = item.labourPerson?.trim() || 'Labour'
+    perPersonMap.set(person, (perPersonMap.get(person) ?? 0) + hours)
+  }
+  return {
+    totalHours: Math.round(totalHours * 100) / 100,
+    hasHours: totalHours > 0,
+    perPerson: [...perPersonMap.entries()].map(([person, hours]) => ({ person, hours })),
+  }
+}
+
+const LATEST_ACTIVITY_TYPE: Record<string, { type: LatestActivityType; label: string }> = {
+  ordered_material: { type: 'bought', label: 'Bought' },
+  used_material: { type: 'used', label: 'Used' },
+  leftover_material: { type: 'used', label: 'Used' },
+  labour: { type: 'labour', label: 'Labour' },
+  supplier_delivery_note: { type: 'note', label: 'Note' },
+  customer_change: { type: 'note', label: 'Note' },
+  watch_out: { type: 'note', label: 'Note' },
+}
+
+function latestHeadline(item: MemoryViewItem): string {
+  if (item.memoryType === 'labour') {
+    return [item.labourHours ? `${item.labourHours}h` : null, item.labourTask].filter(Boolean).join(' · ') || item.summary
+  }
+  if (item.memoryType === 'ordered_material' || item.memoryType === 'used_material' || item.memoryType === 'leftover_material') {
+    const qtyName = [item.quantity ? `${item.quantity}×` : null, item.materialName].filter(Boolean).join(' ')
+    const base = qtyName || item.summary
+    const tail = item.supplierName ?? item.locationOrUse
+    return tail ? `${base} — ${tail}` : base
+  }
+  return item.summary
+}
+
+// Money label shown on the right of a Latest row — prefer an explicit total,
+// else the unit/basis cost. Uncertain-basis costs still show (they are evidence
+// on a card, not a trusted spend total here).
+function latestCost(item: MemoryViewItem): string | null {
+  return formatTotalLabel(item.totalCostAmount, item.costCurrency) ??
+    formatCostLabel(item.costAmount, item.costCurrency, item.costQualifier)
+}
+
+/**
+ * Latest trusted job activity across spend/labour/used/leftover/notes sections,
+ * newest first. Only maps known memory types, so an unknown future type can
+ * never appear as fake activity.
+ */
+export function deriveLatestActivity(sections: MemoryViewSection[], limit = 5): LatestActivityItem[] {
+  const all: LatestActivityItem[] = []
+  for (const section of sections) {
+    for (const item of section.items) {
+      const map = LATEST_ACTIVITY_TYPE[item.memoryType]
+      if (!map) continue
+      all.push({
+        memoryItemId: item.id,
+        type: map.type,
+        typeLabel: map.label,
+        headline: latestHeadline(item),
+        costLabel: latestCost(item),
+        effectiveAt: effectiveAt(item),
+      })
+    }
+  }
+  all.sort((a, b) => (b.effectiveAt ?? '').localeCompare(a.effectiveAt ?? ''))
+  return all.slice(0, limit)
 }

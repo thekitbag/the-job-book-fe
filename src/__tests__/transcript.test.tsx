@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import CaptureScreen from '../CaptureScreen'
+import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import { saveNote } from '../db'
 import { getJobNoteStatuses, getNoteTranscript, getDraftFacts, getReviewQueue } from '../api'
 import { makeNote } from './helpers'
@@ -11,8 +11,10 @@ vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
-  getDraftFacts: vi.fn().mockResolvedValue([]),
+  getDraftFacts: vi.fn(() => Promise.resolve([])),
   getReviewQueue: vi.fn(),
+  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
+  getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -68,7 +70,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
@@ -92,7 +94,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
@@ -116,7 +118,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
@@ -134,7 +136,7 @@ describe('transcript visibility', () => {
       transcript: { status: 'waiting', extractionStatus: null },
     }])
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/waiting for transcript/i)).toBeInTheDocument()
@@ -154,7 +156,7 @@ describe('transcript visibility', () => {
       transcript: { status: 'transcribing', extractionStatus: null },
     }])
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/transcribing/i)).toBeInTheDocument()
@@ -179,7 +181,7 @@ describe('transcript visibility', () => {
       errorCode: 'PROVIDER_ERROR',
     })
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
@@ -198,7 +200,7 @@ describe('transcript visibility', () => {
     })
     await saveNote(note)
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
@@ -218,7 +220,7 @@ describe('transcript visibility', () => {
     })
     await saveNote(note)
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
@@ -232,7 +234,7 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/saved on phone/i)).toBeInTheDocument()
@@ -253,7 +255,7 @@ describe('transcript visibility', () => {
     await saveNote(ready)
     await saveNote(failed)
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     // Both notes have final status; failed note always shows its message without a toggle
     await waitFor(() => {
@@ -270,7 +272,7 @@ describe('transcript visibility', () => {
 
     mockGetStatuses.mockResolvedValue([])
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => {
       expect(mockGetStatuses).toHaveBeenCalledWith(JOB.id)
@@ -295,7 +297,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CaptureScreen job={JOB} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
 
     await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))

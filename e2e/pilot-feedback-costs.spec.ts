@@ -63,7 +63,7 @@ test.describe('Pilot feedback: memory detail and costs', () => {
 
   test('Fix 3: bought tab renders Known spend and bought notes with cost', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('button', { name: 'Job memory' }).click()
+    await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(800)
 
     await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2120/)).toBeVisible()

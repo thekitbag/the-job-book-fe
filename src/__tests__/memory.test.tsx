@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import JobMemoryScreen from '../JobMemoryScreen'
+import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import type { BudgetCategory, BudgetSummaryResponse, Job, MemoryViewItem, MemoryViewResponse } from '../types'
 
@@ -15,6 +15,9 @@ vi.mock('../api', async (importOriginal) => {
     assignMemoryItemCategory: vi.fn(),
     createBudgetCategory: vi.fn(),
     patchBudgetCategory: vi.fn(),
+    getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-mem-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
+    getDraftFacts: vi.fn(() => Promise.resolve([])),
+    getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
   }
 })
 
@@ -81,7 +84,10 @@ function memoryView(): MemoryViewResponse {
         { memoryItemId: 'mem-timber', itemLabel: 'timber', materialName: 'timber', quantity: '6', unit: 'lengths', reason: 'no_cost_remembered' },
         { memoryItemId: 'mem-battens', itemLabel: 'battens', materialName: 'battens', quantity: '20', unit: 'lengths', reason: 'cost_worth_checking' },
       ],
-    } },
+    },
+    // Job-level total drives the Overview known-spend + Spend hero.
+    totalKnownCost: { knownSpendAmount: '1440', knownSpendCurrency: 'GBP', knownSpendLabel: '£1440 known spend', includedMemoryItemIds: ['mem-clad', 'mem-cable', 'mem-hardcore'] },
+    },
   }
 }
 
@@ -112,74 +118,77 @@ const EMPTY_BUDGET: BudgetSummaryResponse = {
   totals: { budgetAmount: null, budgetCurrency: null, knownSpendAmount: null, knownSpendCurrency: null, remainingAmount: null, remainingLabel: null, overBudget: false },
 }
 
-const onClose = vi.fn()
 const onOpenReviewQueue = vi.fn()
+const onSwitchJob = vi.fn()
 
 beforeEach(() => {
-  onClose.mockReset(); onOpenReviewQueue.mockReset()
+  onOpenReviewQueue.mockReset(); onSwitchJob.mockReset()
   mockGetMemoryView.mockResolvedValue(memoryView())
   mockGetBudgetSummary.mockResolvedValue(budgetSummary())
   window.confirm = vi.fn(() => true)
 })
 
-function renderScreen() {
-  return render(<JobMemoryScreen job={JOB} onClose={onClose} onOpenReviewQueue={onOpenReviewQueue} />)
+function renderWorkspace(job: Job = JOB) {
+  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={onOpenReviewQueue} onSwitchJob={onSwitchJob} />)
 }
-const boughtTab = () => screen.findByRole('region', { name: /^known spend$/i })
+// Navigate to a lens tab.
+function openTab(name: RegExp | string) {
+  fireEvent.click(screen.getByRole('tab', { name }))
+}
+// The Spend tab's Known-spend hero region.
+const spendHero = () => screen.findByRole('region', { name: /^known spend$/i })
 
-describe('JobMemoryScreen — shell', () => {
-  it('shows heading, job, and the three tabs', async () => {
-    renderScreen()
-    await boughtTab()
-    expect(screen.getByText('Job memory')).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Spend' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: /used & left over/i })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: /notes/i })).toBeTruthy()
+describe('Workspace — shell / tabs', () => {
+  it('shows the job title and the five lens tabs', async () => {
+    renderWorkspace()
+    expect(screen.getByRole('heading', { name: 'Garden Room' })).toBeTruthy()
+    for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
+      expect(screen.getByRole('tab', { name: t })).toBeTruthy()
+    }
   })
 
-  it('shows a retryable error on load failure', async () => {
+  it('opens on Overview by default', async () => {
+    renderWorkspace()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('Switch calls onSwitchJob', async () => {
+    renderWorkspace()
+    fireEvent.click(screen.getByRole('button', { name: /switch/i }))
+    expect(onSwitchJob).toHaveBeenCalled()
+  })
+
+  it('shows a retryable error on the Spend tab when memory fails to load', async () => {
     mockGetMemoryView.mockRejectedValue(new Error('Network error'))
-    renderScreen()
-    await screen.findByRole('alert')
+    renderWorkspace()
+    openTab('Spend')
+    await screen.findAllByRole('alert')
     expect(screen.getByText(/Network error/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Try again' })[0])
   })
 
-  it('renders the empty state and links to Things to check', async () => {
+  it('Spend tab shows an empty state when nothing is remembered', async () => {
     mockGetMemoryView.mockResolvedValue(EMPTY_MEMORY_VIEW)
     mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
-    renderScreen()
-    await screen.findByText(/No trusted memory yet/)
-    fireEvent.click(screen.getByText('Go to Things to check'))
-    expect(onOpenReviewQueue).toHaveBeenCalled()
-  })
-
-  it('shows the Still to check alert and opens the queue', async () => {
-    renderScreen()
-    await screen.findByText('2 still to check')
-    fireEvent.click(screen.getByText('Review Things to check'))
-    expect(onOpenReviewQueue).toHaveBeenCalled()
-  })
-
-  it('calls onClose from Back', async () => {
-    renderScreen()
-    await boughtTab()
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    expect(onClose).toHaveBeenCalled()
+    renderWorkspace()
+    openTab('Spend')
+    await screen.findByText(/Nothing bought or labour remembered yet/i)
   })
 })
 
-describe('JobMemoryScreen — Bought tab', () => {
+describe('Workspace — Spend tab', () => {
   it('shows one job-level Known spend, against the total budget', async () => {
-    renderScreen()
-    const hero = await boughtTab()
+    renderWorkspace()
+    openTab('Spend')
+    const hero = await spendHero()
     expect(within(hero).getByText(/£1440/)).toBeTruthy()
     expect(within(hero).getByText(/of £2000/)).toBeTruthy()
     expect(within(hero).getByText(/£560 remaining/)).toBeTruthy()
   })
 
   it('renders a category card with spend and remaining, and No budget set when none', async () => {
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
     expect(within(clad).getByText('£1200 known spend')).toBeTruthy()
     expect(within(clad).getByText('£800 remaining')).toBeTruthy()
@@ -188,7 +197,8 @@ describe('JobMemoryScreen — Bought tab', () => {
   })
 
   it('expands a category to its notes, each with Fix memory', async () => {
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
     expect(within(clad).queryByText(/Fix memory/)).toBeNull()
     fireEvent.click(within(clad).getByRole('button', { name: /show notes \(2\)/i }))
@@ -198,30 +208,37 @@ describe('JobMemoryScreen — Bought tab', () => {
   })
 
   it('lists uncategorised counted spend and not-counted bought items separately', async () => {
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
     expect(within(counted).getByText(/hardcore/)).toBeTruthy()
     const notCounted = screen.getByRole('region', { name: /not in known spend/i })
     expect(within(notCounted).getByText(/timber/)).toBeTruthy()
     expect(within(notCounted).getByText(/No cost remembered/i)).toBeTruthy()
   })
+})
 
-  it('switches to Used and Notes tabs', async () => {
-    renderScreen()
-    await boughtTab()
-    fireEvent.click(screen.getByRole('tab', { name: /used & left over/i }))
-    expect(screen.getByText('OSB')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: /notes/i }))
-    expect(screen.getByText('Uneven floor near back door')).toBeTruthy()
+describe('Workspace — Used and Notes tabs', () => {
+  it('Used tab shows used materials', async () => {
+    renderWorkspace()
+    openTab('Used')
+    expect(await screen.findByText('OSB')).toBeTruthy()
+  })
+
+  it('Notes tab shows watch-outs', async () => {
+    renderWorkspace()
+    openTab('Notes')
+    expect(await screen.findByText('Uneven floor near back door')).toBeTruthy()
   })
 })
 
-describe('JobMemoryScreen — manage budgets (bought tab)', () => {
+describe('Workspace — manage budgets (Spend tab)', () => {
   it('adds a budget category and refreshes the summary', async () => {
     mockGetBudgetSummary.mockResolvedValueOnce(budgetSummary()).mockResolvedValue(budgetSummary())
     mockCreateBudgetCategory.mockResolvedValue(CAT_CLAD)
-    renderScreen()
-    await boughtTab()
+    renderWorkspace()
+    openTab('Spend')
+    await spendHero()
     fireEvent.click(screen.getByRole('button', { name: /add budget category/i }))
     const form = screen.getByRole('form', { name: /budget category/i })
     fireEvent.change(form.querySelector('input[name="categoryName"]')!, { target: { value: 'roofing' } })
@@ -233,7 +250,8 @@ describe('JobMemoryScreen — manage budgets (bought tab)', () => {
 
   it('edits a category budget (via the ⋯ menu)', async () => {
     mockPatchBudgetCategory.mockResolvedValue({ ...CAT_CLAD, budgetAmount: '2500' })
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
     fireEvent.click(within(clad).getByRole('button', { name: /actions for cladding/i }))
     fireEvent.click(within(clad).getByRole('menuitem', { name: /edit budget/i }))
@@ -245,7 +263,8 @@ describe('JobMemoryScreen — manage budgets (bought tab)', () => {
 
   it('removes a category from the ⋯ menu after confirming', async () => {
     mockPatchBudgetCategory.mockResolvedValue({ ...CAT_CLAD, isArchived: true })
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
     fireEvent.click(within(clad).getByRole('button', { name: /actions for cladding/i }))
     fireEvent.click(within(clad).getByRole('menuitem', { name: /remove category/i }))
@@ -255,7 +274,8 @@ describe('JobMemoryScreen — manage budgets (bought tab)', () => {
 
   it('does not remove a category if the confirm is cancelled', async () => {
     window.confirm = vi.fn(() => false)
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
     fireEvent.click(within(clad).getByRole('button', { name: /actions for cladding/i }))
     fireEvent.click(within(clad).getByRole('menuitem', { name: /remove category/i }))
@@ -263,10 +283,11 @@ describe('JobMemoryScreen — manage budgets (bought tab)', () => {
   })
 })
 
-describe('JobMemoryScreen — assign / fix / verify', () => {
+describe('Workspace — assign / fix / verify', () => {
   it('assigns an uncategorised item to a category and refreshes the breakdown', async () => {
     mockAssignMemoryItemCategory.mockResolvedValue(orderedItem({ id: 'mem-hardcore', budgetCategoryId: 'c1' }))
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
     fireEvent.change(within(counted).getByLabelText(/budget category for hardcore/i), { target: { value: 'c1' } })
     await waitFor(() => expect(mockAssignMemoryItemCategory).toHaveBeenCalledWith('job-mem-001', 'mem-hardcore', 'c1'))
@@ -275,7 +296,8 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
 
   it('fixes a memory item via the uncategorised not-counted section', async () => {
     mockUpdateMemoryItem.mockResolvedValue(orderedItem({ id: 'mem-timber', materialName: 'timber', quantity: '6', unit: 'lengths', costAmount: '10', costQualifier: 'each', costCurrency: 'GBP', budgetCategoryId: null }))
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const notCounted = await screen.findByRole('region', { name: /not in known spend/i })
     const card = within(notCounted).getByText('timber').closest('.mem-card') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
@@ -286,7 +308,8 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
 
   it('verifies a worth-checking note (This is right) inside a category', async () => {
     mockVerifyMemoryItem.mockResolvedValue({ uncertaintyFlags: [] })
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
     fireEvent.click(within(clad).getByRole('button', { name: /show notes/i }))
     fireEvent.click(within(clad).getByRole('button', { name: /this is right/i }))
@@ -301,8 +324,9 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
     }
     mockGetMemoryView.mockResolvedValueOnce(memoryView()).mockResolvedValue(after)
     mockUpdateMemoryItem.mockResolvedValue(orderedItem({ id: 'mem-timber', materialName: 'timber', costAmount: '10', costQualifier: 'each', costCurrency: 'GBP' }))
-    renderScreen()
-    const hero = await boughtTab()
+    renderWorkspace()
+    openTab('Spend')
+    const hero = await spendHero()
     expect(within(hero).getByText(/£1440/)).toBeTruthy()
     const notCounted = screen.getByRole('region', { name: /not in known spend/i })
     const card = within(notCounted).getByText('timber').closest('.mem-card') as HTMLElement
@@ -314,7 +338,8 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
   it('on refetch failure keeps the last spend and offers retry', async () => {
     mockGetMemoryView.mockResolvedValueOnce(memoryView()).mockRejectedValue(new Error('offline'))
     mockUpdateMemoryItem.mockResolvedValue(orderedItem({ id: 'mem-timber', materialName: 'timber' }))
-    renderScreen()
+    renderWorkspace()
+    openTab('Spend')
     const notCounted = await screen.findByRole('region', { name: /not in known spend/i })
     const card = within(notCounted).getByText('timber').closest('.mem-card') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
@@ -330,15 +355,16 @@ describe('JobMemoryScreen — assign / fix / verify', () => {
     const stale = budgetSummary()
     stale.categories = [{ ...stale.categories[0], category: { ...CAT_CLAD, name: 'STALE' } }]
     mockGetBudgetSummary.mockReturnValueOnce(deferred).mockResolvedValue(budgetSummary())
-    const { rerender } = renderScreen()
-    rerender(<JobMemoryScreen job={JOB_B} onClose={onClose} onOpenReviewQueue={onOpenReviewQueue} />)
+    const { rerender } = renderWorkspace()
+    openTab('Spend')
+    rerender(<CurrentJobWorkspace job={JOB_B} onOpenReviewQueue={onOpenReviewQueue} onSwitchJob={onSwitchJob} />)
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
     await act(async () => { resolveB(stale); await deferred })
     expect(screen.queryByText('STALE')).toBeNull()
   })
 })
 
-// ── Labour in Job memory (Spend tab) ────────────────────────────────────────
+// ── Labour lens ──────────────────────────────────────────────────────────────
 
 function labourItem(over: Partial<MemoryViewItem>): MemoryViewItem {
   return orderedItem({ memoryType: 'labour', ...over })
@@ -375,32 +401,28 @@ function labourView(): MemoryViewResponse {
   }
 }
 
-describe('JobMemoryScreen — labour', () => {
+describe('Workspace — Labour tab', () => {
   beforeEach(() => {
     mockGetMemoryView.mockResolvedValue(labourView())
     mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
   })
 
-  it('hero Known spend is bought + rated labour (excludes hours-only)', async () => {
-    renderScreen()
-    const hero = await boughtTab()
+  it('Spend hero Known spend is bought + rated labour (excludes hours-only)', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    const hero = await spendHero()
     expect(within(hero).getByText(/£320/)).toBeTruthy()
   })
 
-  it('shows a Labour section separate from bought materials, with hours and person', async () => {
-    renderScreen()
-    const labour = await screen.findByRole('region', { name: /^labour$/i })
+  it('shows labour separate from bought, with hours, person, and the not-counted state', async () => {
+    renderWorkspace()
+    openTab('Labour')
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
     expect(within(labour).getByText('Tom')).toBeTruthy()
     expect(within(labour).getByText('electrics')).toBeTruthy()
     // hours-only labour is shown but flagged as not counted
     expect(within(labour).getByText(/Hours only — no cost/i)).toBeTruthy()
-    // labour is NOT under the bought sections
-    expect(screen.queryByRole('region', { name: /uncategorised bought/i })).toBeTruthy()
-  })
-
-  it('labour notes show their hours', async () => {
-    renderScreen()
-    const labour = await screen.findByRole('region', { name: /^labour$/i })
+    // and it carries the hours
     expect(within(labour).getByText('6')).toBeTruthy()
     expect(within(labour).getByText('8')).toBeTruthy()
   })

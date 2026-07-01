@@ -626,6 +626,31 @@ export interface MemoryViewResponse {
   costSummary?: CostSummary
 }
 
+// ── Workspace Overview derivations (frontend-only) ────────────────────────────
+// Compact summaries the current-job Overview shows. Derived from trusted
+// memory-view sections only — pending drafts are never included.
+
+export interface LabourTodaySummary {
+  // Sum of strict-numeric labourHours on labour items dated today (local day).
+  totalHours: number
+  hasHours: boolean
+  // Per-person hour split, e.g. [{ person: 'Mike', hours: 4 }].
+  perPerson: { person: string; hours: number }[]
+}
+
+export type LatestActivityType = 'bought' | 'used' | 'labour' | 'note'
+
+export interface LatestActivityItem {
+  memoryItemId: string
+  type: LatestActivityType
+  typeLabel: string // 'Bought' | 'Used' | 'Labour' | 'Note'
+  headline: string
+  // Right-aligned money label when the item carries a trusted/shown cost.
+  costLabel: string | null
+  // ISO effective timestamp (source.capturedAt ?? createdAt) for age display.
+  effectiveAt: string
+}
+
 // Request body for PATCH /api/jobs/:jobId/memory-items/:memoryItemId
 // Corrects trusted memory in place — never creates a queue item or draft fact.
 export interface MemoryItemEdit {
