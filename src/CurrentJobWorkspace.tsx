@@ -132,6 +132,78 @@ function InstallBanner({ isIosSafari, onInstall, onDismiss }: {
   )
 }
 
+// Interstitial shown after a recording stops. Confirms the note is safe and
+// reflects live progress (saving → saved → looking for facts) without making
+// Mike wait — he can tap Done and carry on at any point.
+function CaptureConfirmation({
+  note,
+  online,
+  onClose,
+  onOpenReviewQueue,
+}: {
+  note: LocalNote | undefined
+  online: boolean
+  onClose: () => void
+  onOpenReviewQueue: () => void
+}) {
+  const state = note?.localState
+  const uploaded = state === 'uploaded'
+  const failedSend = state === 'upload_failed' || state === 'upload_needs_attention'
+  const stillSending = !uploaded && !failedSend // saved_local / uploading
+
+  let title = 'Voice note saved'
+  let sub = "I'll pull out anything useful for this job."
+  let ready = false
+
+  if (stillSending) {
+    if (!online) {
+      title = 'Saved on this phone'
+      sub = "I'll send it through when there's signal."
+    } else {
+      title = 'Saving your note…'
+      sub = 'Keeping it safe on your phone too.'
+    }
+  } else if (failedSend) {
+    title = 'Saved on this phone'
+    sub = "Couldn't send it yet — I'll keep trying automatically."
+  } else if (note?.transcriptStatus === 'failed') {
+    sub = "Couldn't make out this recording, but it's safe."
+  } else if (note?.extractionStatus === 'ready') {
+    sub = 'Job facts are ready to check.'
+    ready = true
+  } else if (note?.extractionStatus === 'failed') {
+    sub = "Saved — I couldn't pull job facts from this one."
+  } else if (uploaded) {
+    sub = 'Looking for useful job facts…'
+  }
+
+  // Spinner only while the note is actively being sent; a saved note (locally or
+  // uploaded) shows a reassuring tick even while facts are still being found.
+  const spinner = title === 'Saving your note…'
+
+  return (
+    <div className="ws-capture-scrim" role="dialog" aria-modal="true" aria-label="Recording saved" onClick={onClose}>
+      <div className="ws-capture-card" onClick={e => e.stopPropagation()}>
+        <div className="ws-capture-icon" aria-hidden="true">
+          {spinner
+            ? <span className="ws-capture-spinner" />
+            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+        </div>
+        <p className="ws-capture-title" aria-live="polite">{title}</p>
+        <p className="ws-capture-sub" aria-live="polite">{sub}</p>
+        <div className="ws-capture-actions">
+          {ready && (
+            <button type="button" className="ws-capture-review" onClick={onOpenReviewQueue}>
+              See things to check
+            </button>
+          )}
+          <button type="button" className="ws-capture-done" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CurrentJobWorkspace({
   job,
   onOpenReviewQueue,
@@ -142,6 +214,8 @@ export default function CurrentJobWorkspace({
   onSwitchJob: () => void
 }) {
   const [tab, setTab] = useState<Tab>('overview')
+  // clientNoteId of the note just recorded — drives the capture confirmation.
+  const [justCapturedId, setJustCapturedId] = useState<string | null>(null)
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [showExplainer, setShowExplainer] = useState(
@@ -240,6 +314,7 @@ export default function CurrentJobWorkspace({
       }
       await saveNote(note)
       await refreshNotes()
+      setJustCapturedId(clientNoteId)
       syncAll()
       loadQueue()
     })
@@ -406,15 +481,13 @@ export default function CurrentJobWorkspace({
           </button>
         ) : (
           <div className="ws-recording-active">
-            <div className="recording-indicator" aria-live="polite" aria-atomic="true">
-              <span className="dot" aria-hidden="true" /> Recording
-            </div>
-            <div className="recording-elapsed">
+            <span className="ws-rec-dot" aria-hidden="true" />
+            <span className="ws-rec-elapsed" aria-live="polite" aria-atomic="true">
               {formatDuration(recorder.elapsedMs)}
-              <span className="recording-max"> / {formatDuration(MAX_DURATION_MS)}</span>
-            </div>
+              <span className="ws-rec-max"> / {formatDuration(MAX_DURATION_MS)}</span>
+            </span>
             <button
-              className="stop-btn"
+              className="ws-stop-btn"
               onClick={recorder.stop}
               disabled={recorder.state === 'stopping'}
               aria-label="Stop recording"
@@ -429,6 +502,15 @@ export default function CurrentJobWorkspace({
           </p>
         )}
       </div>
+
+      {justCapturedId && (
+        <CaptureConfirmation
+          note={notes.find(n => n.clientNoteId === justCapturedId)}
+          online={online}
+          onClose={() => setJustCapturedId(null)}
+          onOpenReviewQueue={() => { setJustCapturedId(null); onOpenReviewQueue() }}
+        />
+      )}
     </div>
   )
 }
