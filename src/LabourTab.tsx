@@ -23,7 +23,7 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
         <MemoryCard
           key={item.id}
           item={item}
-          {...cardProps(item, true)}
+          {...cardProps(item, false)}
           excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'no_rate_or_cost')}
         />
       ))}
