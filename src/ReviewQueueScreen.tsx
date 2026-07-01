@@ -398,7 +398,7 @@ function QueueItemCard({
           <button className="btn-queue-remember" onClick={() => onConfirm(selectedCategoryId)} disabled={submitting}>
             {submitting ? 'Saving…' : 'Remember this'}
           </button>
-          <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting}>Fix details</button>
+          <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting} aria-label="Fix details">Fix</button>
           <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>Dismiss</button>
           {/* On a Worth-checking draft, "Remember, but still unsure" keeps the flag. */}
           {uncertain && (

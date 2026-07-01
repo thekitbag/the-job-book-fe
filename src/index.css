@@ -3507,9 +3507,9 @@ code {
 
 /* Actions: one compact row — Remember (wide) · Fix · Dismiss */
 .queue-item-actions { flex-direction: row; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
-.btn-queue-remember { flex: 1.4 1 6rem; min-width: 0; min-height: 42px; font-size: var(--text-sm); }
+.btn-queue-remember { flex: 2 1 7rem; min-width: 0; min-height: 42px; font-size: var(--text-sm); }
 .queue-item-actions .btn-queue-correct,
-.queue-item-actions .btn-queue-dismiss { flex: 1 1 0; min-width: 0; min-height: 42px; font-size: var(--text-sm); white-space: nowrap; padding-left: 0.3rem; padding-right: 0.3rem; }
+.queue-item-actions .btn-queue-dismiss { flex: 1 1 0; min-width: 0; min-height: 42px; font-size: var(--text-sm); white-space: nowrap; padding-left: 0.4rem; padding-right: 0.4rem; }
 .btn-queue-dismiss { color: var(--ink-500); }
 .btn-queue-unsure { flex: 1 1 100%; }
 .btn-queue-addcat {
