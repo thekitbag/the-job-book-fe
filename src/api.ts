@@ -1,5 +1,5 @@
 import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, CreateMemoryItemRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
-import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
+import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, safeLineTotal, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -1400,7 +1400,7 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
   const sections = mockSectionsFor(jobId)
   const existing = findMockItem(sections, memoryItemId)
   const now = new Date().toISOString()
-  const updated: MemoryViewItem = {
+  const draft: MemoryViewItem = {
     id: memoryItemId,
     memoryType: edit.memoryType,
     summary: edit.summary ?? existing?.summary ?? '',
@@ -1413,7 +1413,7 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
     costAmount: edit.costAmount,
     costCurrency: edit.costCurrency,
     costQualifier: edit.costQualifier,
-    totalCostAmount: edit.totalCostAmount,
+    totalCostAmount: 'totalCostAmount' in edit ? (edit.totalCostAmount ?? null) : (existing?.totalCostAmount ?? null),
     // Labour fields only meaningful for labour; cleared otherwise.
     labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
     labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
@@ -1427,6 +1427,10 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     source: existing?.source ?? null,
+  }
+  const updated: MemoryViewItem = {
+    ...draft,
+    totalCostAmount: 'totalCostAmount' in edit ? draft.totalCostAmount : (safeLineTotal(draft)?.amount.toString() ?? draft.totalCostAmount),
   }
   // Remove from its current section, then re-home by the (possibly new) type.
   for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)

@@ -694,7 +694,10 @@ export interface MemoryItemEdit {
   costAmount: string | null
   costCurrency: string | null
   costQualifier: CostQualifier | null
-  totalCostAmount: string | null
+  // The backend treats presence of this key as explicit: a value sets the line
+  // total, null clears it. OMIT the key to let the backend derive it (e.g. unit
+  // cost = quantity × costAmount). Not sent → unchanged/derived, not cleared.
+  totalCostAmount?: string | null
   // Labour-specific fields (sent when memoryType is 'labour').
   labourHours?: string | null
   labourPerson?: string | null

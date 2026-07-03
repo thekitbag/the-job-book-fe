@@ -322,8 +322,11 @@ export function useJobMemory(job: Job) {
     if (basis === 'total') {
       void handleSaveEdit(memoryItemId, { ...edit, costQualifier: 'total', totalCostAmount: item.costAmount, costCurrency })
     } else {
-      // Let the backend derive/validate quantity × costAmount — don't invent a total.
-      void handleSaveEdit(memoryItemId, { ...edit, costQualifier: 'each', costAmount: item.costAmount, totalCostAmount: null, costCurrency })
+      // Unit cost: omit totalCostAmount entirely so the backend derives/validates
+      // quantity × costAmount. Sending null would clear the total, not derive it.
+      const eachEdit: MemoryItemEdit = { ...edit, costQualifier: 'each', costAmount: item.costAmount, costCurrency }
+      delete eachEdit.totalCostAmount
+      void handleSaveEdit(memoryItemId, eachEdit)
     }
   }, [orderedForCheck, handleSaveEdit])
 

@@ -158,9 +158,12 @@ describe('Spend cost-basis attention', () => {
     const area = await openSpend()
     const insulation = within(area).getByText(/4 insulation packs/).closest('.cost-check-item') as HTMLElement
     fireEvent.click(within(insulation).getByRole('button', { name: 'Set as £120 each' }))
-    await waitFor(() => expect(mockUpdateMemoryItem).toHaveBeenCalledWith('job-cb-001', 'insulation', expect.objectContaining({
-      costQualifier: 'each', costAmount: '120', totalCostAmount: null, uncertaintyResolution: 'resolved',
-    })))
+    await waitFor(() => expect(mockUpdateMemoryItem).toHaveBeenCalled())
+    const [, , patch] = mockUpdateMemoryItem.mock.calls[mockUpdateMemoryItem.mock.calls.length - 1]
+    expect(patch).toEqual(expect.objectContaining({
+      costQualifier: 'each', costAmount: '120', uncertaintyResolution: 'resolved',
+    }))
+    expect(patch).not.toHaveProperty('totalCostAmount')
   })
 
   it('keeps the item visible with an error when the patch fails', async () => {
