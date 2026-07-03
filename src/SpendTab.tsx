@@ -1,9 +1,68 @@
 import { useState } from 'react'
 import MemoryCard from './MemoryCard'
+import MemoryEditForm from './MemoryEditForm'
 import DirectAddForm from './DirectAddForm'
-import { formatMoney } from './memoryScan'
+import { memoryItemToEdit } from './memoryEdit'
+import { canDeriveUnitCost, formatMoney, formatTotalLabel } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
-import type { BudgetCategorySummary, BudgetSummaryResponse, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
+
+// One row in the "Needs cost check" attention area. Asks whether a captured
+// amount is each or total, with quick resolutions. When Mike opens Fix memory it
+// swaps to the full edit form in place.
+function CostCheckItem({
+  item,
+  editing,
+  submitting,
+  errorMsg,
+  categories,
+  onTotal,
+  onEach,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+}: {
+  item: MemoryViewItem
+  editing: boolean
+  submitting: boolean
+  errorMsg: string | null
+  categories: BudgetCategory[]
+  onTotal: () => void
+  onEach: () => void
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSave: (edit: import('./types').MemoryItemEdit) => void
+}) {
+  if (editing) {
+    return (
+      <div className="cost-check-item cost-check-item--editing">
+        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
+        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      </div>
+    )
+  }
+  const amount = formatTotalLabel(item.costAmount, item.costCurrency || 'GBP') ?? ''
+  const identity = [item.quantity, item.materialName, item.unit].filter(Boolean).join(' ') || item.materialName || item.summary
+  const showEach = canDeriveUnitCost(item)
+  return (
+    <div className="cost-check-item">
+      <p className="cost-check-headline">{identity}{amount ? ` — ${amount}` : ''}</p>
+      <p className="cost-check-q">Is {amount} each or {amount} total?</p>
+      <div className="cost-check-actions">
+        <button type="button" className="btn-cost-total" disabled={submitting} onClick={onTotal}>
+          {submitting ? 'Saving…' : `Confirm ${amount} total`}
+        </button>
+        {showEach && (
+          <button type="button" className="btn-cost-each" disabled={submitting} onClick={onEach}>
+            Set as {amount} each
+          </button>
+        )}
+        <button type="button" className="btn-cost-fix" disabled={submitting} onClick={onStartEdit}>Fix memory</button>
+      </div>
+      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+    </div>
+  )
+}
 
 // Inline name + budget form, reused for adding and editing a category.
 function CategoryForm({
@@ -68,6 +127,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, isUncategorised, cardProps,
+    costCheckItems, resolveCostBasis,
     budgetCategories, expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
@@ -79,9 +139,13 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const labourItems = sectionItems('labour')
   const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0
 
+  // Cost-basis-ambiguous items are promoted to the attention area near the hero,
+  // so keep them out of the lower "not in Known spend yet" list to avoid a second
+  // competing action for the same item. Only no-cost items remain there.
+  const costCheckIds = new Set(costCheckItems.map(i => i.id))
   const uncatBought = orderedItems.filter(isUncategorised)
   const uncatCounted = uncatBought.filter(i => includedIds.has(i.id))
-  const uncatNotCounted = uncatBought.filter(i => !includedIds.has(i.id))
+  const uncatNotCounted = uncatBought.filter(i => !includedIds.has(i.id) && !costCheckIds.has(i.id))
 
   function renderCategoryCard(cs: BudgetCategorySummary) {
     const c = cs.category
@@ -148,6 +212,31 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
       {hasSpendContent && totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
+
+      {costCheckItems.length > 0 && (
+        <section className="cost-check" aria-label="Needs cost check">
+          <p className="cost-check-title">Needs cost check</p>
+          <p className="cost-check-sub">Not counted yet — is the amount for each item, or the whole lot?</p>
+          {costCheckItems.map(item => {
+            const p = cardProps(item, budgetCategories.length > 0)
+            return (
+              <CostCheckItem
+                key={item.id}
+                item={item}
+                editing={p.isEditing}
+                submitting={p.submitting}
+                errorMsg={p.errorMsg}
+                categories={budgetCategories}
+                onTotal={() => resolveCostBasis(item.id, 'total')}
+                onEach={() => resolveCostBasis(item.id, 'each')}
+                onStartEdit={p.onStartEdit}
+                onCancelEdit={p.onCancelEdit}
+                onSave={p.onSave}
+              />
+            )
+          })}
+        </section>
+      )}
 
       <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} />
 

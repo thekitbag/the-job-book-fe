@@ -1076,6 +1076,29 @@ function buildMockSections(): MemoryViewSection[] {
             updatedAt: '2026-06-13T09:42:00.000Z',
             source: null,
           },
+          // Cost-like but excluded, with NO safe quantity/unit → attention item
+          // that can only be resolved as a total ("Set as unit cost" is hidden).
+          {
+            id: 'mem-view-013',
+            memoryType: 'ordered_material',
+            summary: 'Bought some sealant, £15',
+            materialName: 'sealant',
+            quantity: null,
+            unit: null,
+            supplierName: 'Screwfix',
+            deliveryTiming: null,
+            locationOrUse: null,
+            costAmount: '15',
+            costCurrency: 'GBP',
+            costQualifier: 'unknown' as const,
+            totalCostAmount: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-013',
+            reviewDecisionId: 'decision-013',
+            createdAt: '2026-06-13T09:43:00.000Z',
+            updatedAt: '2026-06-13T09:43:00.000Z',
+            source: null,
+          },
           // Two like-for-like membrane rows with no cost → consolidate to a single
           // quantity row (10 rolls total) that carries no money, and both are
           // excluded from Known spend as "No cost remembered".

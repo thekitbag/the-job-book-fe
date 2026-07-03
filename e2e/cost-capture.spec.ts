@@ -34,7 +34,11 @@ test.describe('Cost capture & Known spend (Spend tab)', () => {
     const nc = notCounted(page)
     await expect(nc.getByText(/6 lengths · timber|timber · 6 lengths|Item.*timber/i).first()).toBeVisible()
     await expect(nc.getByText(/No cost remembered/i).first()).toBeVisible()
-    await expect(nc.getByText(/Cost worth checking/i)).toBeVisible() // insulation (approx)
+    // Cost-basis-ambiguous items (insulation, sealant) are promoted to the top
+    // "Needs cost check" attention area, not duplicated in the not-counted list.
+    await expect(nc.getByText(/Cost worth checking/i)).toHaveCount(0)
+    const attention = page.getByRole('region', { name: /needs cost check/i })
+    await expect(attention.getByText(/insulation/i)).toBeVisible()
   })
 
   test('uncategorised safe spend is counted and shown with a Choose category action', async ({ page }) => {

@@ -98,6 +98,20 @@ export function safeLineTotal(item: MemoryViewItem): { amount: number; currency:
 
 const POS_DECIMAL = (s: string | null | undefined) => !!s && DECIMAL.test(s) && parseFloat(s) > 0
 
+// Cost-basis attention (Spend lens): an item carries a usable money amount when
+// costAmount is a strict positive decimal — that's the amount Mike can classify
+// as each vs total.
+export function hasCostLikeAmount(item: { costAmount: string | null }): boolean {
+  return POS_DECIMAL(item.costAmount)
+}
+
+// A safe unit-cost total (quantity × costAmount) can only be derived when the
+// quantity is a strict positive decimal and a unit is present. Gates the
+// "Set as unit cost" quick action.
+export function canDeriveUnitCost(item: { quantity: string | null; unit: string | null }): boolean {
+  return POS_DECIMAL(item.quantity) && !!item.unit && item.unit.trim() !== ''
+}
+
 // Labour exclusion reason → builder copy. Unknown future reason → safe fallback.
 export function labourExclusionCopy(reason: string): string {
   if (reason === 'no_rate_or_cost') return 'Hours only — no cost'

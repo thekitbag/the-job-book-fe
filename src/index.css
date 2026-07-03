@@ -4030,3 +4030,73 @@ code {
   min-height: 72px;
   font-family: inherit;
 }
+
+/* ── Spend cost-basis attention ("Needs cost check") ──────────────────────── */
+.cost-check {
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-lg);
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.cost-check-title {
+  margin: 0;
+  font-weight: 800;
+  font-size: var(--text-md);
+  color: var(--amber-fg);
+}
+.cost-check-sub {
+  margin: 0.15rem 0 0.6rem;
+  font-size: var(--text-sm);
+  color: var(--amber-fg);
+  opacity: 0.85;
+}
+.cost-check-item {
+  background: var(--surface);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  padding: 0.75rem 0.85rem;
+  margin-top: 0.5rem;
+}
+.cost-check-item--editing { padding: 0.85rem; }
+.cost-check-headline {
+  margin: 0;
+  font-weight: 800;
+  font-size: var(--text-md);
+  color: var(--ink-900);
+}
+.cost-check-q {
+  margin: 0.15rem 0 0.6rem;
+  font-size: var(--text-sm);
+  color: var(--ink-600, var(--ink-700));
+}
+.cost-check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.btn-cost-total, .btn-cost-each, .btn-cost-fix {
+  border-radius: var(--r-md);
+  min-height: 44px;
+  padding: 0 0.9rem;
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+.btn-cost-total {
+  border: none;
+  background: var(--green-600);
+  color: #fff;
+}
+.btn-cost-total:active { background: var(--green-700); }
+.btn-cost-each {
+  border: 1px solid var(--green-300, var(--green-200));
+  background: var(--green-50);
+  color: var(--green-700);
+}
+.btn-cost-fix {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-700);
+  font-weight: 700;
+}
+.btn-cost-total:disabled, .btn-cost-each:disabled, .btn-cost-fix:disabled { opacity: 0.55; }
