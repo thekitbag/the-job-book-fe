@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { deriveEachTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CostQualifier, MemoryItemEdit, MemoryType } from './types'
 
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
@@ -53,6 +54,12 @@ export default function MemoryEditForm({
   const isLabour = form.memoryType === 'labour'
   // A plain note is edited as free text (its summary) — no material/cost fields.
   const isNote = form.memoryType === 'general_note'
+  // A clear `each` material line: the total is derived from quantity × unit cost
+  // on save, so we omit totalCostAmount (backend recalculates) and preview it.
+  const eachRecalc = !isLabour && !isNote && form.costQualifier === 'each'
+  const derivedTotal = eachRecalc
+    ? deriveEachTotal({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount, costQualifier: 'each' })
+    : null
   // Pilot is GBP, but preserve any non-GBP currency already on the item.
   const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
@@ -63,7 +70,7 @@ export default function MemoryEditForm({
     const hasCost = !!(form.costAmount || form.totalCostAmount)
     const costCurrency = form.costCurrency || (hasCost ? 'GBP' : null)
     const budgetCategoryId = CATEGORY_TYPES.has(form.memoryType) ? (form.budgetCategoryId ?? null) : null
-    onSubmit({
+    const payload: MemoryItemEdit = {
       ...form,
       costCurrency,
       budgetCategoryId,
@@ -77,7 +84,11 @@ export default function MemoryEditForm({
       supplierName: isLabour ? null : form.supplierName,
       deliveryTiming: isLabour ? null : form.deliveryTiming,
       locationOrUse: isLabour ? null : form.locationOrUse,
-    })
+    }
+    // `each` → omit the total so the backend derives it (sending null would clear
+    // it). An explicit total is only sent for non-`each` bases.
+    if (eachRecalc) delete payload.totalCostAmount
+    onSubmit(payload)
   }
 
   return (
@@ -182,10 +193,21 @@ export default function MemoryEditForm({
               {COST_QUALIFIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Total cost {currencyCue}</span>
-            <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
-          </label>
+          {/* For a clear `each` line the total is derived on save — show the
+              working instead of an explicit Total field. Switch the qualifier to
+              a total to type an explicit figure. */}
+          {eachRecalc ? (
+            derivedTotal && (
+              <p className="cost-preview" role="status">
+                {form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong>
+              </p>
+            )
+          ) : (
+            <label className="queue-field">
+              <span className="queue-field-label">Total cost {currencyCue}</span>
+              <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
+            </label>
+          )}
         </>
       )}
       <div className="queue-edit-actions">

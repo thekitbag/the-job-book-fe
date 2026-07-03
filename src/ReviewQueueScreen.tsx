@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
-import { formatCostLabel, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
+import { deriveEachTotal, formatCostLabel, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
 import type {
   AlreadyRememberedItem,
   BudgetCategory,
@@ -68,7 +68,9 @@ function reviewMeta(pm: ProposedMemory): string {
 }
 function reviewCost(pm: ProposedMemory): string {
   const cost = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
-  const total = formatTotalLabel(pm.totalCostAmount, pm.costCurrency)
+  // Prefer an explicit total; otherwise show the derived each × quantity total.
+  const derived = pm.totalCostAmount ? null : deriveEachTotal({ quantity: pm.quantity, unit: pm.unit, costAmount: pm.costAmount, costQualifier: pm.costQualifier })
+  const total = formatTotalLabel(pm.totalCostAmount ?? derived, pm.costCurrency || 'GBP')
   return [cost, total ? `${total} total` : null].filter(Boolean).join(' · ')
 }
 
