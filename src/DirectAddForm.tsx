@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryType } from './types'
 
-export type DirectAddKind = 'spend' | 'labour' | 'used' | 'note'
+export type DirectAddKind = 'spend' | 'labour' | 'used' | 'leftover' | 'note'
 
 const NOTE_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'general_note', label: 'Plain note' },
@@ -50,15 +50,17 @@ function DirectAddFields({
   const [noteText, setNoteText] = useState('')
   const [noteType, setNoteType] = useState<MemoryType>('general_note')
 
+  const isMaterialUse = kind === 'used' || kind === 'leftover'
   const label =
     kind === 'spend' ? 'Add spend' :
     kind === 'labour' ? 'Add labour' :
-    kind === 'used' ? 'Add used item' : 'Add note'
+    kind === 'used' ? 'Add used item' :
+    kind === 'leftover' ? 'Add leftover' : 'Add note'
 
   const canSave =
     kind === 'spend' ? item.trim() !== '' :
     kind === 'labour' ? hours.trim() !== '' :
-    kind === 'used' ? item.trim() !== '' :
+    isMaterialUse ? item.trim() !== '' :
     noteText.trim() !== ''
 
   function build(): CreateMemoryItemRequest {
@@ -92,9 +94,9 @@ function DirectAddFields({
         costCurrency: r ? 'GBP' : null,
       }
     }
-    if (kind === 'used') {
+    if (isMaterialUse) {
       return {
-        memoryType: 'used_material',
+        memoryType: kind === 'leftover' ? 'leftover_material' : 'used_material',
         materialName: item.trim() || null,
         quantity: quantity.trim() || null,
         unit: unit.trim() || null,
@@ -186,7 +188,7 @@ function DirectAddFields({
         </>
       )}
 
-      {kind === 'used' && (
+      {isMaterialUse && (
         <>
           <label className="queue-field">
             <span className="queue-field-label">Item</span>

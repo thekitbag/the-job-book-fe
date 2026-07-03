@@ -451,7 +451,15 @@ export default function CurrentJobWorkspace({
         {tab === 'spend' && renderMemoryTab(<SpendTab mem={mem} />)}
         {tab === 'labour' && renderMemoryTab(<LabourTab mem={mem} />)}
         {tab === 'used' && renderMemoryTab(
-          <MemorySectionTab mem={mem} sectionKeys={USED_SECTION_KEYS} ariaLabel="Used and left over" directAdd={{ kind: 'used', label: 'Add used item', sectionLabel: 'Used & left over' }} />,
+          <MemorySectionTab
+            mem={mem}
+            sectionKeys={USED_SECTION_KEYS}
+            ariaLabel="Used and left over"
+            sectionAdds={{
+              used_materials: { kind: 'used', label: 'Add used item' },
+              leftovers: { kind: 'leftover', label: 'Add leftover' },
+            }}
+          />,
         )}
         {tab === 'notes' && renderMemoryTab(
           <MemorySectionTab mem={mem} sectionKeys={NOTES_SECTION_KEYS} ariaLabel="Notes" directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }} />,

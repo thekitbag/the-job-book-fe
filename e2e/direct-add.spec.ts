@@ -54,6 +54,17 @@ test.describe('Direct add job detail', () => {
     await expect(page.getByText('scaffold boards')).toBeVisible()
   })
 
+  test('add leftover appears under Left over on the Used tab', async ({ page }) => {
+    await gotoApp(page)
+    await page.getByRole('tab', { name: 'Used' }).click()
+    await page.waitForTimeout(600)
+    await page.getByRole('button', { name: 'Add leftover' }).click()
+    const form = page.getByRole('form', { name: 'Add leftover' })
+    await form.locator('input[name="materialName"]').fill('spare membrane')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('spare membrane')).toBeVisible()
+  })
+
   test('add plain note appears in Notes and is editable', async ({ page }) => {
     await gotoApp(page)
     await page.getByRole('tab', { name: 'Notes' }).click()

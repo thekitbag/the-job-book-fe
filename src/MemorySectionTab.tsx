@@ -11,24 +11,33 @@ const SECTION_HEADINGS: Record<string, string> = {
   watch_outs: 'Watch-outs',
 }
 
-// Generic non-spend, non-labour lens: renders the given memory-view section
-// keys as headed groups of MemoryCards, with an optional section-scoped direct
-// add. Used for the Used and Notes tabs.
+type SectionAdd = { kind: DirectAddKind; label: string }
+
+// Generic non-spend, non-labour lens. Renders the given memory-view section keys
+// as headed groups of MemoryCards. Two shapes of direct add:
+//  - `directAdd`  → one lens-level action (Notes: one "Add note" with a type
+//    picker, default plain note).
+//  - `sectionAdds` → a per-section "+" so each sub-section is addable even when
+//    empty (Used: separate Used and Left over adds).
 export default function MemorySectionTab({
   mem,
   sectionKeys,
   ariaLabel,
   directAdd,
+  sectionAdds,
 }: {
   mem: JobMemory
   sectionKeys: string[]
   ariaLabel: string
   directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
+  sectionAdds?: Partial<Record<string, SectionAdd>>
 }) {
   const { sectionItems, cardProps, addMemoryItem, refreshError, refetch } = mem
-  const sections = sectionKeys
-    .map(k => ({ key: k, items: sectionItems(k) }))
-    .filter(s => s.items.length > 0)
+  // A section is visible if it has items OR its own add action (so you can add
+  // the first item of that type).
+  const rows = sectionKeys
+    .map(key => ({ key, items: sectionItems(key), add: sectionAdds?.[key] }))
+    .filter(s => s.items.length > 0 || s.add)
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label={ariaLabel}>
@@ -41,15 +50,22 @@ export default function MemorySectionTab({
         </div>
       )}
 
-      {sections.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="mem-tab-empty">Nothing remembered here yet.</p>
       ) : (
-        sections.map(s => (
-          <section key={s.key} className="mem-section">
-            <h2 className="mem-section-heading">{SECTION_HEADINGS[s.key] ?? s.key}</h2>
-            {s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />)}
-          </section>
-        ))
+        rows.map(s => {
+          const heading = SECTION_HEADINGS[s.key] ?? s.key
+          return (
+            <section key={s.key} className="mem-section">
+              {s.add
+                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={heading} onAdd={addMemoryItem} />
+                : <h2 className="mem-section-heading">{heading}</h2>}
+              {s.items.length > 0
+                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />)
+                : <p className="mem-section-empty">None yet.</p>}
+            </section>
+          )
+        })
       )}
     </div>
   )

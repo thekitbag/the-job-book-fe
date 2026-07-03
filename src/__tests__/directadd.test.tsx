@@ -100,6 +100,8 @@ describe('Direct add — entry points', () => {
     expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
+    // Used and Left over each get their own add (leftover is otherwise unreachable).
+    expect(screen.getByRole('button', { name: 'Add leftover' })).toBeInTheDocument()
     await openTab('Notes')
     expect(await screen.findByRole('button', { name: 'Add note' })).toBeInTheDocument()
   })
@@ -157,6 +159,18 @@ describe('Direct add — submit contracts', () => {
       memoryType: 'used_material', materialName: 'OSB', quantity: '6',
     })))
     expect(await screen.findByText('OSB')).toBeInTheDocument()
+  })
+
+  it('leftover saves as leftover_material from the Used tab', async () => {
+    renderWorkspace()
+    await openTab('Used')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add leftover' }))
+    const form = screen.getByRole('form', { name: 'Add leftover' })
+    fireEvent.change(form.querySelector('input[name="materialName"]')!, { target: { value: 'sand' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
+      memoryType: 'leftover_material', materialName: 'sand',
+    })))
   })
 
   it('note defaults to general_note and appears in Notes', async () => {
