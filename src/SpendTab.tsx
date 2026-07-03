@@ -1,9 +1,85 @@
 import { useState } from 'react'
 import MemoryCard from './MemoryCard'
+import MemoryEditForm from './MemoryEditForm'
 import DirectAddForm from './DirectAddForm'
-import { formatMoney } from './memoryScan'
+import { memoryItemToEdit } from './memoryEdit'
+import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
-import type { BudgetCategorySummary, BudgetSummaryResponse, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
+
+// One row in the "Not counted yet" area. Two treatments share one place:
+//  - cost-basis: has a price but an unclear basis → ask each vs total.
+//  - no-price:   no amount to classify → prompt to add a price.
+// Opening the edit form (Fix memory / Add price) swaps to the full form in place.
+function NotCountedItem({
+  item,
+  mode,
+  editing,
+  submitting,
+  errorMsg,
+  categories,
+  onTotal,
+  onEach,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+}: {
+  item: MemoryViewItem
+  mode: 'cost-basis' | 'no-price'
+  editing: boolean
+  submitting: boolean
+  errorMsg: string | null
+  categories: BudgetCategory[]
+  onTotal: () => void
+  onEach: () => void
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSave: (edit: import('./types').MemoryItemEdit) => void
+}) {
+  if (editing) {
+    return (
+      <div className="cost-check-item cost-check-item--editing">
+        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
+        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      </div>
+    )
+  }
+  const identity = [item.quantity, item.materialName, item.unit].filter(Boolean).join(' ') || item.materialName || item.summary
+
+  if (mode === 'no-price') {
+    return (
+      <div className="cost-check-item">
+        <p className="cost-check-headline">{identity}</p>
+        <p className="cost-check-q">No price yet</p>
+        <div className="cost-check-actions">
+          <button type="button" className="btn-cost-total" disabled={submitting} onClick={onStartEdit}>Add price</button>
+        </div>
+        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      </div>
+    )
+  }
+
+  const amount = formatTotalLabel(item.costAmount, item.costCurrency || 'GBP') ?? ''
+  const showEach = canDeriveUnitCost(item)
+  return (
+    <div className="cost-check-item">
+      <p className="cost-check-headline">{identity}{amount ? ` — ${amount}` : ''}</p>
+      <p className="cost-check-q">Is {amount} each or {amount} total?</p>
+      <div className="cost-check-actions">
+        <button type="button" className="btn-cost-total" disabled={submitting} onClick={onTotal}>
+          {submitting ? 'Saving…' : `Confirm ${amount} total`}
+        </button>
+        {showEach && (
+          <button type="button" className="btn-cost-each" disabled={submitting} onClick={onEach}>
+            Set as {amount} each
+          </button>
+        )}
+        <button type="button" className="btn-cost-fix" disabled={submitting} onClick={onStartEdit}>Fix memory</button>
+      </div>
+      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+    </div>
+  )
+}
 
 // Inline name + budget form, reused for adding and editing a category.
 function CategoryForm({
@@ -68,6 +144,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, isUncategorised, cardProps,
+    notCountedItems, resolveCostBasis,
     budgetCategories, expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
@@ -81,7 +158,6 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
 
   const uncatBought = orderedItems.filter(isUncategorised)
   const uncatCounted = uncatBought.filter(i => includedIds.has(i.id))
-  const uncatNotCounted = uncatBought.filter(i => !includedIds.has(i.id))
 
   function renderCategoryCard(cs: BudgetCategorySummary) {
     const c = cs.category
@@ -149,6 +225,33 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
     <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
       {hasSpendContent && totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
 
+      {notCountedItems.length > 0 && (
+        <section className="cost-check" aria-label="Not counted yet">
+          <p className="cost-check-title">Not counted yet</p>
+          <p className="cost-check-sub">These bought items aren’t in your known spend — add a price, or confirm each vs total.</p>
+          {notCountedItems.map(item => {
+            const p = cardProps(item, budgetCategories.length > 0)
+            const costBasis = exclusionReason.get(item.id) === 'cost_worth_checking' && hasCostLikeAmount(item)
+            return (
+              <NotCountedItem
+                key={item.id}
+                item={item}
+                mode={costBasis ? 'cost-basis' : 'no-price'}
+                editing={p.isEditing}
+                submitting={p.submitting}
+                errorMsg={p.errorMsg}
+                categories={budgetCategories}
+                onTotal={() => resolveCostBasis(item.id, 'total')}
+                onEach={() => resolveCostBasis(item.id, 'each')}
+                onStartEdit={p.onStartEdit}
+                onCancelEdit={p.onCancelEdit}
+                onSave={p.onSave}
+              />
+            )
+          })}
+        </section>
+      )}
+
       <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} />
 
       {refreshError && (
@@ -176,16 +279,6 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
           <p className="mem-section-label">Bought · uncategorised</p>
           <p className="mem-section-note">Counted in Known spend — give each a category to track it.</p>
           {uncatCounted.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} />)}
-        </section>
-      )}
-
-      {uncatNotCounted.length > 0 && (
-        <section aria-label="Bought not in known spend">
-          <p className="mem-section-label">Bought · not in Known spend yet</p>
-          <p className="mem-section-note">Add a price (or confirm) to count these.</p>
-          {uncatNotCounted.map(item => (
-            <MemoryCard key={item.id} item={item} {...cardProps(item, true)} excludedReason={exclusionReason.get(item.id) ?? 'no_cost_remembered'} />
-          ))}
         </section>
       )}
         </>

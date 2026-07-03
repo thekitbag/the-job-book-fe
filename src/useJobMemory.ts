@@ -10,10 +10,12 @@ import {
   verifyMemoryItem,
 } from './api'
 import type { MemoryCardProps } from './MemoryCard'
+import { memoryItemToEdit } from './memoryEdit'
 import {
   deriveCostSummary,
   deriveLabourSummary,
   deriveTotalKnownCost,
+  hasCostLikeAmount,
   MEMORY_TYPE_TO_SECTION_KEY,
   SECTION_FULL_LABELS,
   SECTION_ORDER,
@@ -286,6 +288,48 @@ export function useJobMemory(job: Job) {
 
   const hasMemory = data ? data.sections.some(s => s.items.length > 0) : false
 
+  // Cost-basis attention: ordered items excluded from known spend for
+  // "cost worth checking" that carry a usable money amount Mike can classify
+  // (each vs total). No-cost exclusions are deliberately not included — there is
+  // no amount to classify. Source (voice vs direct-add) does not matter.
+  const orderedForCheck = useMemo(
+    () => data?.sections.find(s => s.key === 'ordered_materials')?.items ?? [],
+    [data],
+  )
+  const costCheckItems = useMemo(
+    () => orderedForCheck.filter(i => exclusionReason.get(i.id) === 'cost_worth_checking' && hasCostLikeAmount(i)),
+    [orderedForCheck, exclusionReason],
+  )
+
+  // Every ordered item that is bought but not in known spend and needs a nudge:
+  // priced-but-ambiguous (cost_worth_checking) and no-price (no_cost_remembered)
+  // together, so the Spend lens shows one "Not counted yet" area instead of two.
+  const notCountedItems = useMemo(
+    () => orderedForCheck.filter(i => {
+      const r = exclusionReason.get(i.id)
+      return (r === 'cost_worth_checking' || r === 'no_cost_remembered') && !includedIds.has(i.id)
+    }),
+    [orderedForCheck, exclusionReason, includedIds],
+  )
+
+  // Quick cost-basis resolution via the existing PATCH path (handleSaveEdit adds
+  // uncertaintyResolution: 'resolved' and refetches authoritative summaries).
+  const resolveCostBasis = useCallback((memoryItemId: string, basis: 'total' | 'each') => {
+    const item = orderedForCheck.find(i => i.id === memoryItemId)
+    if (!item || !hasCostLikeAmount(item)) return
+    const edit = memoryItemToEdit(item)
+    const costCurrency = item.costCurrency || 'GBP' // has a cost amount → default GBP
+    if (basis === 'total') {
+      void handleSaveEdit(memoryItemId, { ...edit, costQualifier: 'total', totalCostAmount: item.costAmount, costCurrency })
+    } else {
+      // Unit cost: omit totalCostAmount entirely so the backend derives/validates
+      // quantity × costAmount. Sending null would clear the total, not derive it.
+      const eachEdit: MemoryItemEdit = { ...edit, costQualifier: 'each', costAmount: item.costAmount, costCurrency }
+      delete eachEdit.totalCostAmount
+      void handleSaveEdit(memoryItemId, eachEdit)
+    }
+  }, [orderedForCheck, handleSaveEdit])
+
   // Shared MemoryCard props for an item; pass categories only where a picker helps.
   const cardProps = useCallback((item: MemoryViewItem, withPicker: boolean): CardExtras => ({
     isEditing: editingId === item.id,
@@ -307,6 +351,7 @@ export function useJobMemory(job: Job) {
     budgetSummary, budgetCategories,
     ordered, labourSummary, totalKnownCost,
     sectionItems, includedIds, exclusionReason, isUncategorised, hasMemory,
+    costCheckItems, notCountedItems, resolveCostBasis,
     // budget CRUD state + handlers
     expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,

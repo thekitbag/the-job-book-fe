@@ -1,5 +1,5 @@
 import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, CreateMemoryItemRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
-import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
+import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, safeLineTotal, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -1076,6 +1076,29 @@ function buildMockSections(): MemoryViewSection[] {
             updatedAt: '2026-06-13T09:42:00.000Z',
             source: null,
           },
+          // Cost-like but excluded, with NO safe quantity/unit → attention item
+          // that can only be resolved as a total ("Set as unit cost" is hidden).
+          {
+            id: 'mem-view-013',
+            memoryType: 'ordered_material',
+            summary: 'Bought some sealant, £15',
+            materialName: 'sealant',
+            quantity: null,
+            unit: null,
+            supplierName: 'Screwfix',
+            deliveryTiming: null,
+            locationOrUse: null,
+            costAmount: '15',
+            costCurrency: 'GBP',
+            costQualifier: 'unknown' as const,
+            totalCostAmount: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-013',
+            reviewDecisionId: 'decision-013',
+            createdAt: '2026-06-13T09:43:00.000Z',
+            updatedAt: '2026-06-13T09:43:00.000Z',
+            source: null,
+          },
           // Two like-for-like membrane rows with no cost → consolidate to a single
           // quantity row (10 rolls total) that carries no money, and both are
           // excluded from Known spend as "No cost remembered".
@@ -1377,7 +1400,7 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
   const sections = mockSectionsFor(jobId)
   const existing = findMockItem(sections, memoryItemId)
   const now = new Date().toISOString()
-  const updated: MemoryViewItem = {
+  const draft: MemoryViewItem = {
     id: memoryItemId,
     memoryType: edit.memoryType,
     summary: edit.summary ?? existing?.summary ?? '',
@@ -1390,7 +1413,7 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
     costAmount: edit.costAmount,
     costCurrency: edit.costCurrency,
     costQualifier: edit.costQualifier,
-    totalCostAmount: edit.totalCostAmount,
+    totalCostAmount: 'totalCostAmount' in edit ? (edit.totalCostAmount ?? null) : (existing?.totalCostAmount ?? null),
     // Labour fields only meaningful for labour; cleared otherwise.
     labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
     labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
@@ -1404,6 +1427,10 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     source: existing?.source ?? null,
+  }
+  const updated: MemoryViewItem = {
+    ...draft,
+    totalCostAmount: 'totalCostAmount' in edit ? draft.totalCostAmount : (safeLineTotal(draft)?.amount.toString() ?? draft.totalCostAmount),
   }
   // Remove from its current section, then re-home by the (possibly new) type.
   for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
