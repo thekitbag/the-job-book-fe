@@ -100,7 +100,7 @@ function renderWorkspace(job: Job = JOB) {
 }
 async function openSpend() {
   fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
-  return screen.findByRole('region', { name: /needs cost check/i })
+  return screen.findByRole('region', { name: /not counted yet/i })
 }
 
 describe('Spend cost-basis attention', () => {
@@ -112,13 +112,15 @@ describe('Spend cost-basis attention', () => {
     expect(within(area).getByText(/sealant/)).toBeInTheDocument()
   })
 
-  it('does not put a no-cost item in the attention area', async () => {
+  it('shows a no-cost item as no-price (not a cost-basis question)', async () => {
     renderWorkspace()
     const area = await openSpend()
-    expect(within(area).queryByText(/timber/)).not.toBeInTheDocument()
-    // the no-cost item stays in the lower not-counted list
-    const nc = screen.getByRole('region', { name: /bought not in known spend/i })
-    expect(within(nc).getByText(/timber/)).toBeInTheDocument()
+    // no-cost timber shares the unified area but with an "add price" treatment,
+    // not an each/total question.
+    const timber = within(area).getByText(/timber/).closest('.cost-check-item') as HTMLElement
+    expect(within(timber).getByText(/No price yet/i)).toBeInTheDocument()
+    expect(within(timber).getByRole('button', { name: /add price/i })).toBeInTheDocument()
+    expect(within(timber).queryByRole('button', { name: /each|total/i })).not.toBeInTheDocument()
   })
 
   it('offers unit cost only when quantity and unit are safe', async () => {

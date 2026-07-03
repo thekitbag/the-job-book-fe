@@ -19,7 +19,7 @@ async function openSpend(page: Page) {
   await page.waitForTimeout(700)
 }
 
-const attention = (page: Page) => page.getByRole('region', { name: /needs cost check/i })
+const attention = (page: Page) => page.getByRole('region', { name: /not counted yet/i })
 
 test.describe('Spend cost-basis attention', () => {
   test('ambiguous cost-like item is near the top and asks each vs total', async ({ page }) => {
@@ -35,7 +35,7 @@ test.describe('Spend cost-basis attention', () => {
     expect(areaY).toBeLessThan(catY)
   })
 
-  test('unit cost shown only with safe quantity; no-cost item is not here', async ({ page }) => {
+  test('unit cost shown only with safe quantity; no-cost item asks for a price', async ({ page }) => {
     await openSpend(page)
     const area = attention(page)
     const insulation = area.locator('.cost-check-item', { hasText: 'insulation' })
@@ -43,8 +43,11 @@ test.describe('Spend cost-basis attention', () => {
     const sealant = area.locator('.cost-check-item', { hasText: 'sealant' })
     await expect(sealant.getByRole('button', { name: /each/i })).toHaveCount(0)
     await expect(sealant.getByRole('button', { name: /Confirm .*total/i })).toBeVisible()
-    // a no-cost item (timber) is not treated as cost-basis ambiguity
-    await expect(area.getByText(/timber/i)).toHaveCount(0)
+    // a no-cost item (timber) shares the area but with an add-price treatment
+    const timber = area.locator('.cost-check-item', { hasText: 'timber' })
+    await expect(timber.getByText(/No price yet/i)).toBeVisible()
+    await expect(timber.getByRole('button', { name: /add price/i })).toBeVisible()
+    await expect(timber.getByRole('button', { name: /each|total/i })).toHaveCount(0)
   })
 
   test('Confirm as total moves the amount into known spend from the refetched summary', async ({ page }) => {

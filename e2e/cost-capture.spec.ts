@@ -14,7 +14,7 @@ async function openBought(page: Page) {
 }
 
 const heroRegion = (page: Page) => page.getByRole('region', { name: /^known spend$/i })
-const notCounted = (page: Page) => page.getByRole('region', { name: /bought not in known spend/i })
+const notCounted = (page: Page) => page.getByRole('region', { name: /not counted yet/i })
 const uncategorised = (page: Page) => page.getByRole('region', { name: /uncategorised bought/i })
 
 // Total known cost = bought £1240 + rated/total labour £880 = £2120, of the
@@ -29,16 +29,15 @@ test.describe('Cost capture & Known spend (Spend tab)', () => {
     await expect(page.getByText(/total spend/i)).toHaveCount(0)
   })
 
-  test('bought items with no trusted price are listed separately and not counted', async ({ page }) => {
+  test('one "Not counted yet" area holds no-price and cost-basis items', async ({ page }) => {
     await openBought(page)
     const nc = notCounted(page)
-    await expect(nc.getByText(/6 lengths · timber|timber · 6 lengths|Item.*timber/i).first()).toBeVisible()
-    await expect(nc.getByText(/No cost remembered/i).first()).toBeVisible()
-    // Cost-basis-ambiguous items (insulation, sealant) are promoted to the top
-    // "Needs cost check" attention area, not duplicated in the not-counted list.
-    await expect(nc.getByText(/Cost worth checking/i)).toHaveCount(0)
-    const attention = page.getByRole('region', { name: /needs cost check/i })
-    await expect(attention.getByText(/insulation/i)).toBeVisible()
+    // no-price item (timber) → prompt to add a price
+    await expect(nc.getByText(/timber/i).first()).toBeVisible()
+    await expect(nc.getByText(/No price yet/i).first()).toBeVisible()
+    // cost-basis-ambiguous item (insulation) → each vs total, same area
+    await expect(nc.getByText(/insulation/i)).toBeVisible()
+    await expect(nc.getByText(/each or .*total/i).first()).toBeVisible()
   })
 
   test('uncategorised safe spend is counted and shown with a Choose category action', async ({ page }) => {
@@ -61,8 +60,8 @@ test.describe('Cost capture & Known spend (Spend tab)', () => {
     await openBought(page)
     await expect(heroRegion(page).getByText(/£2120/)).toBeVisible()
 
-    const timber = notCounted(page).locator('.mem-card', { hasText: '6 lengths' })
-    await timber.getByRole('button', { name: /fix memory/i }).click()
+    const timber = notCounted(page).locator('.cost-check-item', { hasText: 'timber' })
+    await timber.getByRole('button', { name: /add price/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await expect(form.getByText(/Cost amount \(£\)/)).toBeVisible()
     await form.locator('input[name="costAmount"]').fill('10')

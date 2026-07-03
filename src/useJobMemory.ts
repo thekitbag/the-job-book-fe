@@ -301,6 +301,17 @@ export function useJobMemory(job: Job) {
     [orderedForCheck, exclusionReason],
   )
 
+  // Every ordered item that is bought but not in known spend and needs a nudge:
+  // priced-but-ambiguous (cost_worth_checking) and no-price (no_cost_remembered)
+  // together, so the Spend lens shows one "Not counted yet" area instead of two.
+  const notCountedItems = useMemo(
+    () => orderedForCheck.filter(i => {
+      const r = exclusionReason.get(i.id)
+      return (r === 'cost_worth_checking' || r === 'no_cost_remembered') && !includedIds.has(i.id)
+    }),
+    [orderedForCheck, exclusionReason, includedIds],
+  )
+
   // Quick cost-basis resolution via the existing PATCH path (handleSaveEdit adds
   // uncertaintyResolution: 'resolved' and refetches authoritative summaries).
   const resolveCostBasis = useCallback((memoryItemId: string, basis: 'total' | 'each') => {
@@ -337,7 +348,7 @@ export function useJobMemory(job: Job) {
     budgetSummary, budgetCategories,
     ordered, labourSummary, totalKnownCost,
     sectionItems, includedIds, exclusionReason, isUncategorised, hasMemory,
-    costCheckItems, resolveCostBasis,
+    costCheckItems, notCountedItems, resolveCostBasis,
     // budget CRUD state + handlers
     expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
