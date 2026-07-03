@@ -484,7 +484,7 @@ export default function CurrentJobWorkspace({
             </span>
             <span className="ws-record-text">
               <span className="ws-record-title">Record</span>
-              <span className="ws-record-sub">Pinned on every tab</span>
+              <span className="ws-record-sub">Tap · say it · done</span>
             </span>
           </button>
         ) : (
