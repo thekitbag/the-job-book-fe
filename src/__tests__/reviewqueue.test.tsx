@@ -706,6 +706,21 @@ describe('ReviewQueueScreen', () => {
     expect(decision.corrected).not.toHaveProperty('totalCostAmount')
   })
 
+  it('blocks save with a warning for an each line missing quantity/unit', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [{
+        ...ITEM_SINGLE,
+        proposedMemory: { ...ITEM_SINGLE.proposedMemory, quantity: null, unit: null },
+      }] }],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    expect(within(form).getByRole('alert').textContent).toMatch(/Add a quantity and a unit/)
+    expect(screen.getByRole('button', { name: /save correction/i })).toBeDisabled()
+  })
+
   it('shows one editable field for a `total` basis, not a second Cost amount field', async () => {
     mockGetReviewQueue.mockResolvedValue(makeQueue({
       sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [{
@@ -1349,6 +1364,21 @@ describe('ReviewQueueScreen — labour', () => {
     expect(within(rated).getByLabelText('Hours')).toBeTruthy()
     const quals = Array.from(within(rated).getAllByRole('combobox')).flatMap(s => Array.from(s.querySelectorAll('option')).map(o => o.value))
     expect(quals).toContain('per_hour')
+  })
+
+  it('blocks save with a warning for a per_hour line missing hours', async () => {
+    mockGetReviewQueue.mockResolvedValue({
+      ...labourQueue(),
+      sections: [{ key: 'labour', label: 'Labour', items: [{
+        ...ITEM_LABOUR_RATED,
+        proposedMemory: { ...ITEM_LABOUR_RATED.proposedMemory, labourHours: null },
+      }] }],
+    })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
+    fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
+    expect(within(rated).getByRole('alert').textContent).toMatch(/Add hours/)
+    expect(within(rated).getByRole('button', { name: /save correction/i })).toBeDisabled()
   })
 
   it('shows a derived hours × rate preview for a per_hour line and omits the explicit total on save', async () => {

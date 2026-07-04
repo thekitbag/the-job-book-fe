@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -798,6 +798,27 @@ describe('deriveHourlyTotal', () => {
     for (const c of ['', 'abc', null, '0']) {
       expect(deriveHourlyTotal({ ...base, costAmount: c })).toBeNull()
     }
+  })
+})
+
+describe('eachTotalGaps / hourlyTotalGaps / joinWithAnd', () => {
+  it('names only what is actually missing for each', () => {
+    expect(eachTotalGaps({ quantity: '5', unit: 'sheets', costAmount: '20' })).toEqual([])
+    expect(eachTotalGaps({ quantity: '5', unit: null, costAmount: '20' })).toEqual(['a unit'])
+    expect(eachTotalGaps({ quantity: null, unit: null, costAmount: null })).toEqual(['a quantity', 'a unit', 'a unit cost'])
+  })
+
+  it('names only what is actually missing for per_hour', () => {
+    expect(hourlyTotalGaps({ labourHours: '8', costAmount: '35' })).toEqual([])
+    expect(hourlyTotalGaps({ labourHours: null, costAmount: '35' })).toEqual(['hours'])
+    expect(hourlyTotalGaps({ labourHours: null, costAmount: null })).toEqual(['hours', 'a rate'])
+  })
+
+  it('joins a list of gaps into readable prose', () => {
+    expect(joinWithAnd([])).toBe('')
+    expect(joinWithAnd(['a unit'])).toBe('a unit')
+    expect(joinWithAnd(['a quantity', 'a unit'])).toBe('a quantity and a unit')
+    expect(joinWithAnd(['a quantity', 'a unit', 'a unit cost'])).toBe('a quantity, a unit and a unit cost')
   })
 })
 

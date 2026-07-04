@@ -56,20 +56,19 @@ test.describe('Cost capture & Known spend (Spend tab)', () => {
     await expect(hardcore.getByText('Total')).toBeVisible()
   })
 
-  test('correcting a currency-null no-price item moves it into Known spend', async ({ page }) => {
+  test('adding a total price to a no-price item moves it into Known spend', async ({ page }) => {
     await openBought(page)
     await expect(heroRegion(page).getByText(/£2120/)).toBeVisible()
 
+    // No-price timber → Add price → enter a total (£60)
     const timber = notCounted(page).locator('.cost-check-item', { hasText: 'timber' })
-    await timber.getByRole('button', { name: /add price/i }).click()
-    const form = page.getByRole('form', { name: /edit memory/i })
-    await expect(form.getByText(/Cost amount \(£\)/)).toBeVisible()
-    await form.locator('input[name="costAmount"]').fill('10')
-    await form.getByLabel('Cost qualifier').selectOption('each')
-    await page.getByRole('button', { name: /save memory/i }).click()
+    await timber.getByRole('button', { name: 'Add price' }).click()
+    const form = page.getByRole('form', { name: 'Add price' })
+    await form.locator('input[name="price"]').fill('60')
+    await form.getByRole('button', { name: /save price/i }).click()
     await page.waitForTimeout(1000)
 
-    // Refetched total known cost: bought (1240 + 6×£10) + labour 880 = £2180.
+    // Refetched total known cost: bought (1240 + £60) + labour 880 = £2180.
     await expect(heroRegion(page).getByText(/£2180/)).toBeVisible()
   })
 

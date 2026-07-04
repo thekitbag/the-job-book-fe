@@ -139,6 +139,31 @@ export function deriveHourlyTotal(fields: {
   return String(Math.round(total * 100) / 100)
 }
 
+// Precisely what's missing for a safe `each` derivation, so the edit forms can
+// prompt for exactly what's absent ("add a unit") instead of a generic message
+// that lists fields the user already filled in.
+export function eachTotalGaps(fields: { quantity?: string | null; unit?: string | null; costAmount: string | null }): string[] {
+  const gaps: string[] = []
+  if (!POS_DECIMAL(fields.quantity)) gaps.push('a quantity')
+  if (!fields.unit || fields.unit.trim() === '') gaps.push('a unit')
+  if (!POS_DECIMAL(fields.costAmount)) gaps.push('a unit cost')
+  return gaps
+}
+
+// Precisely what's missing for a safe `per_hour` derivation.
+export function hourlyTotalGaps(fields: { labourHours?: string | null; costAmount: string | null }): string[] {
+  const gaps: string[] = []
+  if (!POS_DECIMAL(fields.labourHours)) gaps.push('hours')
+  if (!POS_DECIMAL(fields.costAmount)) gaps.push('a rate')
+  return gaps
+}
+
+// "a quantity" / "a quantity and a unit" / "a quantity, a unit and a unit cost"
+export function joinWithAnd(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
 // Cost-basis attention (Spend lens): an item carries a usable money amount when
 // costAmount is a strict positive decimal — that's the amount Mike can classify
 // as each vs total.

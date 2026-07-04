@@ -330,6 +330,22 @@ export function useJobMemory(job: Job) {
     }
   }, [orderedForCheck, handleSaveEdit])
 
+  // Add a price to a no-price ordered item. Defaults to an explicit total so the
+  // typed figure lands as totalCostAmount (+ GBP) and enters known spend; `each`
+  // stores the unit cost and lets the total be derived (omit totalCostAmount).
+  const addPrice = useCallback((memoryItemId: string, price: string, basis: 'total' | 'each') => {
+    const item = orderedForCheck.find(i => i.id === memoryItemId)
+    if (!item) return
+    const edit = memoryItemToEdit(item)
+    if (basis === 'total') {
+      void handleSaveEdit(memoryItemId, { ...edit, costAmount: price, costQualifier: 'total', totalCostAmount: price, costCurrency: 'GBP' })
+    } else {
+      const eachEdit: MemoryItemEdit = { ...edit, costAmount: price, costQualifier: 'each', costCurrency: 'GBP' }
+      delete eachEdit.totalCostAmount
+      void handleSaveEdit(memoryItemId, eachEdit)
+    }
+  }, [orderedForCheck, handleSaveEdit])
+
   // Shared MemoryCard props for an item; pass categories only where a picker helps.
   const cardProps = useCallback((item: MemoryViewItem, withPicker: boolean): CardExtras => ({
     isEditing: editingId === item.id,
@@ -351,7 +367,7 @@ export function useJobMemory(job: Job) {
     budgetSummary, budgetCategories,
     ordered, labourSummary, totalKnownCost,
     sectionItems, includedIds, exclusionReason, isUncategorised, hasMemory,
-    costCheckItems, notCountedItems, resolveCostBasis,
+    costCheckItems, notCountedItems, resolveCostBasis, addPrice,
     // budget CRUD state + handlers
     expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,

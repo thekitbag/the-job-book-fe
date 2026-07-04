@@ -95,6 +95,37 @@ describe('MemoryEditForm — cost qualifier basis', () => {
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('totalCostAmount')
   })
+
+  it('blocks save with a warning for an `each` item missing quantity/unit — no total to derive', () => {
+    const { onSubmit } = setup(initialEdit({ quantity: null, unit: null, costAmount: '20', costQualifier: 'each' }))
+    expect(screen.getByRole('alert').textContent).toMatch(/Add a quantity and a unit/)
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('names only the field that is actually missing (quantity present, unit missing)', () => {
+    setup(initialEdit({ quantity: '10', unit: null, costAmount: '20', costQualifier: 'each' }))
+    expect(screen.getByRole('alert').textContent).toBe('Add a unit above to calculate a total — until then this stays worth checking.')
+  })
+
+  it('unblocks save once quantity and unit are filled in for an `each` item', () => {
+    const { onSubmit } = setup(initialEdit({ quantity: null, unit: null, costAmount: '20', costQualifier: 'each' }))
+    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'rolls' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: /save memory/i })).not.toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalled()
+  })
+
+  it('blocks save with a warning for a `per_hour` labour item missing hours', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', materialName: null, labourHours: null, costAmount: '35', costQualifier: 'per_hour' }))
+    expect(screen.getByRole('alert').textContent).toMatch(/Add hours/)
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
 })
 
 describe('MemoryEditForm — budget category', () => {
