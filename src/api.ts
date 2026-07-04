@@ -98,13 +98,18 @@ async function authErrorMessage(res: Response, fallback: string): Promise<string
 // Mock mode mirrors per-account job ownership without a real backend: Mike is
 // the seeded pilot account and owns MOCK_JOBS; anyone who signs up fresh in
 // mock mode starts with no jobs (see the `mockSession` check in getJobs below).
+//
+// Mock mode starts already signed in as Mike — every existing mock-mode e2e
+// spec across the app (spend, direct-add, review queue, etc.) relies on
+// landing straight on the workspace with no login step. A spec that wants a
+// genuinely unauthenticated start should call logout() first.
 const MOCK_MIKE_EMAIL = 'mike@thejobbook.test'
 const MOCK_MIKE_USER: AuthUser = { id: 'user-mock-mike', email: MOCK_MIKE_EMAIL, name: 'Mike', role: 'PILOT' }
 const MOCK_RESET_TOKEN = 'mock-reset-token'
 const mockAccounts = new Map<string, { password: string; user: AuthUser }>([
   [MOCK_MIKE_EMAIL, { password: 'demo', user: MOCK_MIKE_USER }],
 ])
-let mockSession: AuthUser | null = null
+let mockSession: AuthUser | null = MOCK_MIKE_USER
 
 // POST /api/auth/signup — 201 on success.
 export async function signup(email: string, password: string, name?: string): Promise<AuthUser> {

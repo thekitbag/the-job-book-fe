@@ -24,7 +24,11 @@ vi.mock('../PasscodeScreen', () => ({
 }))
 
 vi.mock('../AuthScreen', () => ({
-  default: () => <div data-testid="auth-screen" />,
+  default: ({ onAuthSuccess }: { onAuthSuccess: (user: { id: string; email: string; name: string; role: string }) => void }) => (
+    <div data-testid="auth-screen">
+      <button onClick={() => onAuthSuccess({ id: 'user-internal', email: 'founder@thejobbook.test', name: 'Founder', role: 'INTERNAL' })}>mock-login</button>
+    </div>
+  ),
 }))
 
 const mockGetJobs = vi.mocked(api.getJobs)
@@ -187,7 +191,7 @@ beforeEach(() => {
 })
 
 async function enterKeyAndLoad(key = 'test-key-abc') {
-  const input = screen.getByPlaceholderText('Enter inspection key')
+  const input = await screen.findByPlaceholderText('Enter inspection key')
   fireEvent.change(input, { target: { value: key } })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
@@ -208,9 +212,9 @@ describe('PilotInspectionPage', () => {
     expect(screen.getByRole('heading', { name: 'Pilot inspection' })).toBeTruthy()
   })
 
-  it('shows key prompt when no key is stored in sessionStorage', () => {
+  it('shows key prompt when no key is stored in sessionStorage', async () => {
     render(<PilotInspectionPage />)
-    expect(screen.getByPlaceholderText('Enter inspection key')).toBeTruthy()
+    expect(await screen.findByPlaceholderText('Enter inspection key')).toBeTruthy()
   })
 
   it('skips key prompt when key already in sessionStorage', async () => {
@@ -230,11 +234,12 @@ describe('PilotInspectionPage', () => {
     expect(sessionStorage.getItem('job-book-inspection-key')).toBe('my-secret-key')
   })
 
-  it('Continue button is disabled while key field is empty', () => {
+  it('Continue button is disabled while key field is empty', async () => {
     render(<PilotInspectionPage />)
+    const input = await screen.findByPlaceholderText('Enter inspection key')
     const btn = screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement
     expect(btn.disabled).toBe(true)
-    fireEvent.change(screen.getByPlaceholderText('Enter inspection key'), { target: { value: 'k' } })
+    fireEvent.change(input, { target: { value: 'k' } })
     expect(btn.disabled).toBe(false)
   })
 
@@ -409,12 +414,12 @@ describe('PilotInspectionPage', () => {
     expect(screen.queryByRole('heading', { name: 'Possible misses' })).toBeNull()
   })
 
-  it('shows PasscodeScreen when getInspectionData returns 401', async () => {
+  it('shows auth screen when getInspectionData returns 401', async () => {
     mockGetJobs.mockResolvedValue([JOB_A])
     mockGetInspectionData.mockRejectedValue(new api.ApiError('Unauthorized', 401))
     render(<PilotInspectionPage />)
     await enterKeyAndLoad()
-    await waitFor(() => screen.getByTestId('passcode-screen'))
+    await waitFor(() => screen.getByTestId('auth-screen'))
   })
 
   it('shows retryable error when getInspectionData throws a generic error', async () => {
@@ -446,14 +451,14 @@ describe('PilotInspectionPage', () => {
     expect(screen.getByPlaceholderText('Enter inspection key')).toBeTruthy()
   })
 
-  it('shows PasscodeScreen when getJobs returns 401, and retries after login', async () => {
+  it('shows auth screen when getJobs returns 401, and retries after login', async () => {
     mockGetJobs
       .mockRejectedValueOnce(new api.ApiError('Unauthorized', 401))
       .mockResolvedValue([JOB_A])
     mockGetInspectionData.mockResolvedValue(INSPECTION_DATA)
     render(<PilotInspectionPage />)
     await enterKeyAndLoad()
-    await waitFor(() => screen.getByTestId('passcode-screen'))
+    await waitFor(() => screen.getByTestId('auth-screen'))
     fireEvent.click(screen.getByRole('button', { name: 'mock-login' }))
     await waitFor(() => expect(mockGetJobs).toHaveBeenCalledTimes(2))
     await waitFor(() => screen.getByRole('combobox', { name: 'Select job' }))
