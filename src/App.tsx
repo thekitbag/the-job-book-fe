@@ -41,6 +41,10 @@ type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
 type AppView = 'workspace' | 'reviewQueue' | 'jobPicker'
 
 export default function App() {
+  // A password-reset link must work even for a browser that still has a valid
+  // session (an old tab left open, a stale cookie, etc.) — always defer to
+  // AuthScreen's reset-confirm flow when the URL carries a reset token.
+  const [hasResetToken, setHasResetToken] = useState(() => new URLSearchParams(window.location.search).has('reset_token'))
   const [appState, setAppState] = useState<AppState>('loading')
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
@@ -135,6 +139,10 @@ export default function App() {
     setJobs([])
     setSelectedJob(null)
     setAppState('unauthenticated')
+  }
+
+  if (hasResetToken) {
+    return <AuthScreen onAuthSuccess={() => { setHasResetToken(false); loadJobs() }} />
   }
 
   if (appState === 'loading') {

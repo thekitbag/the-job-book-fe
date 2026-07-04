@@ -290,4 +290,26 @@ describe('App', () => {
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
     expect(localStorage.getItem(CACHED_JOBS_KEY)).toBeNull()
   })
+
+  it('shows the auth screen for a reset-token URL even with a valid session — an old tab may still be logged in', async () => {
+    const originalLocation = window.location.href
+    window.history.pushState({}, '', '/?reset_token=some-token')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    window.history.pushState({}, '', originalLocation)
+  })
+
+  it('proceeds to the workspace once the reset-token auth screen reports success', async () => {
+    const originalLocation = window.location.href
+    window.history.pushState({}, '', '/?reset_token=some-token')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'mock-login' }))
+
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('auth-screen')).not.toBeInTheDocument()
+    window.history.pushState({}, '', originalLocation)
+  })
 })
