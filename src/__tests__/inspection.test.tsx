@@ -10,18 +10,9 @@ vi.mock('../api', async (importOriginal) => {
     ...actual,
     getJobs: vi.fn(),
     getInspectionData: vi.fn(),
-    pilotLogin: vi.fn(),
     getCurrentUser: vi.fn(),
   }
 })
-
-vi.mock('../PasscodeScreen', () => ({
-  default: ({ onLoginSuccess }: { onLoginSuccess: () => void }) => (
-    <div data-testid="passcode-screen">
-      <button onClick={onLoginSuccess}>mock-login</button>
-    </div>
-  ),
-}))
 
 vi.mock('../AuthScreen', () => ({
   default: ({ onAuthSuccess }: { onAuthSuccess: (user: { id: string; email: string; name: string; role: string }) => void }) => (
@@ -197,12 +188,11 @@ async function enterKeyAndLoad(key = 'test-key-abc') {
 }
 
 describe('PilotInspectionPage — unauthenticated', () => {
-  it('shows email/password auth, not the inspection key form and not PasscodeScreen', async () => {
+  it('shows email/password auth, not the inspection key form', async () => {
     mockGetCurrentUser.mockRejectedValue(new api.ApiError('Unauthorized', 401))
     render(<PilotInspectionPage />)
     await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
     expect(screen.queryByPlaceholderText('Enter inspection key')).toBeNull()
-    expect(screen.queryByTestId('passcode-screen')).toBeNull()
   })
 })
 

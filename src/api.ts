@@ -59,22 +59,6 @@ function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
 }
 
-// POST /api/auth/pilot-login — exchange passcode for a session cookie.
-export async function pilotLogin(passcode: string): Promise<void> {
-  if (USE_MOCK) {
-    await delay(300)
-    if (passcode !== 'demo') throw new ApiError('Wrong passcode', 401)
-    return
-  }
-  const res = await apiFetch('/api/auth/pilot-login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ passcode }),
-  })
-  if (res.status === 401) throw new ApiError('Wrong passcode', 401)
-  if (!res.ok) throw new ApiError(`POST /api/auth/pilot-login → ${res.status}`, res.status)
-}
-
 // ── Email/password auth ──────────────────────────────────────────────────────
 // Error bodies are `{ code, message }` (see backend AUTH_STATUS_MAP). Known
 // codes get fixed, tested frontend copy; anything else falls back to the
