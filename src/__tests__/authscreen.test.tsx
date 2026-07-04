@@ -202,7 +202,7 @@ describe('AuthScreen — reset confirm', () => {
     const user = userEvent.setup()
     render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)
 
-    await user.type(screen.getByLabelText(/new password/i), 'a-new-strong-password')
+    await user.type(screen.getByLabelText(/^new password$/i), 'a-new-strong-password')
     await user.click(screen.getByRole('button', { name: /save new password/i }))
 
     await waitFor(() => expect(mockConfirmPasswordReset).toHaveBeenCalledWith('mock-reset-token', 'a-new-strong-password'))
@@ -215,7 +215,7 @@ describe('AuthScreen — reset confirm', () => {
     const user = userEvent.setup()
     render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)
 
-    await user.type(screen.getByLabelText(/new password/i), 'a-new-strong-password')
+    await user.type(screen.getByLabelText(/^new password$/i), 'a-new-strong-password')
     await user.click(screen.getByRole('button', { name: /save new password/i }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/no longer valid/i))
