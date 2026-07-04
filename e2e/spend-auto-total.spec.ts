@@ -62,4 +62,19 @@ test.describe('Auto-total unit cost', () => {
     await expect(timber.getByText(/£20 each/)).toBeVisible()
     await expect(timber.getByText(/£120 total/)).toBeVisible()
   })
+
+  test('correcting a draft shows the same derived total as Fix Memory', async ({ page }) => {
+    await gotoApp(page)
+    await page.waitForTimeout(700)
+    await page.getByRole('button', { name: /things to check/i }).click()
+    await page.waitForTimeout(600)
+
+    // hardcore draft: £5 each × 8 bags → the correction form derives £40 total
+    const hardcore = page.getByTestId('queue-item-queue-item-mock-001')
+    await hardcore.getByRole('button', { name: 'Fix' }).click()
+    const form = page.getByRole('form', { name: /edit correction/i })
+    await expect(form.getByText(/£40 total/)).toBeVisible()
+    // no manual total field for an each line
+    await expect(form.locator('input[placeholder="e.g. 40"]')).toHaveCount(0)
+  })
 })

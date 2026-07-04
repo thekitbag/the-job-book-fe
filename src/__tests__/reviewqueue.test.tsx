@@ -677,7 +677,7 @@ describe('ReviewQueueScreen', () => {
     expect(screen.getByText(/Worth checking/)).toBeInTheDocument()
   })
 
-  it('edit form includes cost amount, cost qualifier, and total cost fields', async () => {
+  it('edit form has cost amount + qualifier, and derives the total for an each line', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     await waitFor(() => screen.getByText('Bought / ordered'))
 
@@ -685,9 +685,25 @@ describe('ReviewQueueScreen', () => {
 
     const form = screen.getByRole('form', { name: /edit correction/i })
     expect(form.querySelector('input[placeholder="e.g. 5.00"]')).toBeInTheDocument()
-    expect(form.querySelector('input[placeholder="e.g. 40"]')).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /each \(per item\)/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /approximate/i })).toBeInTheDocument()
+    // hardcore is £5 each × 8 bags → derived total shown, no manual Total field
+    expect(form.querySelector('input[placeholder="e.g. 40"]')).not.toBeInTheDocument()
+    expect(form.textContent).toMatch(/£40 total/)
+  })
+
+  it('correction omits an explicit total for an each line so the backend derives it', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-001', action: 'correct', status: 'corrected', memoryItemId: 'mem-001', sourceCandidateFactIds: ['cf-001'] })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    fireEvent.change(form.querySelector('input[placeholder="e.g. 5.00"]')!, { target: { value: '6' } })
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.corrected).toMatchObject({ costQualifier: 'each', costAmount: '6' })
+    expect(decision.corrected).not.toHaveProperty('totalCostAmount')
   })
 
   it('correction payload includes cost fields when changed', async () => {

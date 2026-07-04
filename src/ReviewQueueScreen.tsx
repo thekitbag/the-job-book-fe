@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
-import { deriveEachTotal, formatCostLabel, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
+import { deriveEachTotal, formatCostLabel, formatMoney, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
 import type {
   AlreadyRememberedItem,
   BudgetCategory,
@@ -201,12 +201,26 @@ function EditForm({
     setForm(f => ({ ...f, costQualifier: (v as CostQualifier) || null }))
   const isLabour = form.memoryType === 'labour'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
+  // A clear `each` material line: derive the total (quantity × unit cost) and show
+  // the working, matching the Fix-memory form. Omit the explicit total on save so
+  // the backend derives it rather than trusting a stale figure.
+  const eachRecalc = !isLabour && form.costQualifier === 'each'
+  const derivedTotal = eachRecalc
+    ? deriveEachTotal({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount, costQualifier: 'each' })
+    : null
+
+  const submit = () => {
+    if (!eachRecalc) { onSubmit(form); return }
+    const corrected = { ...form }
+    delete (corrected as Partial<ProposedMemory>).totalCostAmount
+    onSubmit(corrected)
+  }
 
   return (
     <form
       className="queue-edit-form"
       aria-label="Edit correction"
-      onSubmit={e => { e.preventDefault(); onSubmit(form) }}
+      onSubmit={e => { e.preventDefault(); submit() }}
     >
       <label className="queue-field">
         <span className="queue-field-label">Type</span>
@@ -280,10 +294,18 @@ function EditForm({
           ))}
         </select>
       </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Total cost</span>
-        <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
-      </label>
+      {eachRecalc ? (
+        derivedTotal && (
+          <p className="cost-preview" role="status">
+            {form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong>
+          </p>
+        )
+      ) : (
+        <label className="queue-field">
+          <span className="queue-field-label">Total cost</span>
+          <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
+        </label>
+      )}
       <label className="queue-field">
         <span className="queue-field-label">Summary (optional)</span>
         <input className="queue-field-input queue-field-summary" name="summary" value={form.summary} onChange={e => setStr('summary', e.target.value)} />
