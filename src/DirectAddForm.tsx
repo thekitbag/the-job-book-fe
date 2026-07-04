@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { deriveEachTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryType } from './types'
 
 export type DirectAddKind = 'spend' | 'labour' | 'used' | 'leftover' | 'note'
@@ -63,10 +64,15 @@ function DirectAddFields({
     isMaterialUse ? item.trim() !== '' :
     noteText.trim() !== ''
 
+  // Live derived-total preview for a clear `each` spend line (display only).
+  const spendPreviewTotal = kind === 'spend' && costBasis === 'each'
+    ? deriveEachTotal({ quantity, unit, costAmount, costQualifier: 'each' })
+    : null
+
   function build(): CreateMemoryItemRequest {
     if (kind === 'spend') {
       const amount = costAmount.trim() || null
-      return {
+      const req: CreateMemoryItemRequest = {
         memoryType: 'ordered_material',
         materialName: item.trim() || null,
         quantity: quantity.trim() || null,
@@ -76,10 +82,13 @@ function DirectAddFields({
         costAmount: amount,
         // 'total' → the amount is the trusted line total; 'each' → per-item cost.
         costQualifier: amount ? costBasis : null,
-        totalCostAmount: amount && costBasis === 'total' ? amount : null,
         costCurrency: amount ? 'GBP' : null,
         budgetCategoryId: categoryId || null,
       }
+      // Only send an explicit total for a `total` basis; for `each` omit the key
+      // so the backend derives quantity × unit cost.
+      if (amount && costBasis === 'total') req.totalCostAmount = amount
+      return req
     }
     if (kind === 'labour') {
       const r = rate.trim() || null
@@ -141,6 +150,11 @@ function DirectAddFields({
               </select>
             </label>
           </div>
+          {spendPreviewTotal && (
+            <p className="cost-preview" role="status">
+              {quantity} × {formatMoney(Number(costAmount), 'GBP')} each = <strong>{formatMoney(Number(spendPreviewTotal), 'GBP')} total</strong>
+            </p>
+          )}
           <label className="queue-field">
             <span className="queue-field-label">Supplier (optional)</span>
             <input className="queue-field-input" name="supplierName" value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g. Jewson" />

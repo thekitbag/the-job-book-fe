@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -731,5 +731,93 @@ describe('deriveLatestActivity', () => {
     const latest = deriveLatestActivity(sections, 1)
     expect(latest).toHaveLength(1)
     expect(latest[0].memoryItemId).toBe('a')
+  })
+})
+
+// ── deriveEachTotal + costDetailRows derived total ───────────────────────────
+
+describe('deriveEachTotal', () => {
+  const base = { quantity: '5', unit: 'sheets', costAmount: '20', costQualifier: 'each' }
+
+  it('derives quantity × unit cost for a clear each line', () => {
+    expect(deriveEachTotal(base)).toBe('100')
+  })
+
+  it('handles a decimal quantity', () => {
+    expect(deriveEachTotal({ ...base, quantity: '2.5', costAmount: '20' })).toBe('50')
+  })
+
+  it('returns null for a non-each basis', () => {
+    for (const q of ['total', 'approx', 'unknown', 'per_hour', null]) {
+      expect(deriveEachTotal({ ...base, costQualifier: q })).toBeNull()
+    }
+  })
+
+  it('returns null without a unit', () => {
+    expect(deriveEachTotal({ ...base, unit: '' })).toBeNull()
+    expect(deriveEachTotal({ ...base, unit: null })).toBeNull()
+  })
+
+  it('returns null for missing / approximate / non-numeric quantity', () => {
+    for (const q of ['about 5', '', '5-ish', null, '0']) {
+      expect(deriveEachTotal({ ...base, quantity: q })).toBeNull()
+    }
+  })
+
+  it('returns null for a bad unit cost', () => {
+    for (const c of ['', 'abc', null, '0']) {
+      expect(deriveEachTotal({ ...base, costAmount: c })).toBeNull()
+    }
+  })
+})
+
+describe('deriveHourlyTotal', () => {
+  const base = { labourHours: '8', costAmount: '35', costQualifier: 'per_hour' }
+
+  it('derives hours × rate for a clear per_hour labour line', () => {
+    expect(deriveHourlyTotal(base)).toBe('280')
+  })
+
+  it('handles a decimal rate', () => {
+    expect(deriveHourlyTotal({ ...base, costAmount: '17.5' })).toBe('140')
+  })
+
+  it('returns null for a non-per_hour basis', () => {
+    for (const q of ['total', 'approx', 'unknown', 'each', null]) {
+      expect(deriveHourlyTotal({ ...base, costQualifier: q })).toBeNull()
+    }
+  })
+
+  it('returns null for missing / non-positive hours', () => {
+    for (const h of ['', null, '0', undefined]) {
+      expect(deriveHourlyTotal({ ...base, labourHours: h })).toBeNull()
+    }
+  })
+
+  it('returns null for a bad rate', () => {
+    for (const c of ['', 'abc', null, '0']) {
+      expect(deriveHourlyTotal({ ...base, costAmount: c })).toBeNull()
+    }
+  })
+})
+
+describe('costDetailRows — derived total', () => {
+  const each = { quantity: '5', unit: 'sheets', costAmount: '20', costCurrency: 'GBP', costQualifier: 'each' }
+
+  it('shows a derived Total for a clear each line with no explicit total', () => {
+    const rows = costDetailRows({ ...each, totalCostAmount: null })
+    expect(rows).toContainEqual(['Unit cost', '£20 each'])
+    expect(rows).toContainEqual(['Total', '£100'])
+  })
+
+  it('prefers an explicit total over the derived one', () => {
+    const rows = costDetailRows({ ...each, totalCostAmount: '90' })
+    expect(rows).toContainEqual(['Total', '£90'])
+    expect(rows).not.toContainEqual(['Total', '£100'])
+  })
+
+  it('does not derive a total when quantity is missing', () => {
+    const rows = costDetailRows({ ...each, quantity: null, totalCostAmount: null })
+    expect(rows.find(r => r[0] === 'Total')).toBeUndefined()
   })
 })

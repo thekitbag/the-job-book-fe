@@ -30,7 +30,10 @@ export function formatMoney(amount: number, currency: string | null): string {
 
 // Detail-card cost rows: distinguish unit cost from line total, and mark an
 // unclear basis as worth checking rather than a trusted figure. No bare numbers.
+// For a clear `each` item with no explicit total, show the derived line total.
 export function costDetailRows(item: {
+  quantity?: string | null
+  unit?: string | null
   costAmount: string | null
   costCurrency: string | null
   costQualifier: string | null
@@ -53,7 +56,12 @@ export function costDetailRows(item: {
     rows.push(['Cost', `${sym}${amount} — worth checking`])
   }
 
-  if (total) rows.push(['Total', `${sym}${total}`])
+  if (total) {
+    rows.push(['Total', `${sym}${total}`])
+  } else {
+    const derived = deriveEachTotal(item)
+    if (derived) rows.push(['Total', `${sym}${derived}`])
+  }
   return rows
 }
 
@@ -97,6 +105,39 @@ export function safeLineTotal(item: MemoryViewItem): { amount: number; currency:
 }
 
 const POS_DECIMAL = (s: string | null | undefined) => !!s && DECIMAL.test(s) && parseFloat(s) > 0
+
+// Display-only safe line total for a clear `each` material — mirrors the backend
+// derivation rule (quantity × unit cost). Returns a decimal string (no currency
+// symbol), or null when it is not safe to derive: non-`each` basis, missing/
+// approximate/non-numeric quantity, missing unit, or a bad unit cost. Currency
+// is the caller's concern (the spend forms default to GBP).
+export function deriveEachTotal(fields: {
+  quantity?: string | null
+  unit?: string | null
+  costAmount: string | null
+  costQualifier: string | null
+}): string | null {
+  if (fields.costQualifier !== 'each') return null
+  if (!fields.unit || fields.unit.trim() === '') return null
+  if (!POS_DECIMAL(fields.quantity) || !POS_DECIMAL(fields.costAmount)) return null
+  const total = parseFloat(fields.quantity!) * parseFloat(fields.costAmount!)
+  return String(Math.round(total * 100) / 100)
+}
+
+// Display-only safe line total for labour paid per hour — mirrors safeLabourCost's
+// hours × rate derivation. Returns a decimal string (no currency symbol), or null
+// when it is not safe to derive: non-`per_hour` basis, or missing/non-positive
+// hours or rate.
+export function deriveHourlyTotal(fields: {
+  labourHours?: string | null
+  costAmount: string | null
+  costQualifier: string | null
+}): string | null {
+  if (fields.costQualifier !== 'per_hour') return null
+  if (!POS_DECIMAL(fields.labourHours) || !POS_DECIMAL(fields.costAmount)) return null
+  const total = parseFloat(fields.labourHours!) * parseFloat(fields.costAmount!)
+  return String(Math.round(total * 100) / 100)
+}
 
 // Cost-basis attention (Spend lens): an item carries a usable money amount when
 // costAmount is a strict positive decimal — that's the amount Mike can classify
