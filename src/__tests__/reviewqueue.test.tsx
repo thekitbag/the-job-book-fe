@@ -706,6 +706,42 @@ describe('ReviewQueueScreen', () => {
     expect(decision.corrected).not.toHaveProperty('totalCostAmount')
   })
 
+  it('shows one editable field for a `total` basis, not a second Cost amount field', async () => {
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [{
+        ...ITEM_SINGLE,
+        proposedMemory: { ...ITEM_SINGLE.proposedMemory, costQualifier: 'total', costAmount: '40' },
+      }] }],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    expect(within(form).getByText('Total cost')).toBeTruthy()
+    expect(within(form).queryByText('Cost amount')).toBeNull()
+    expect(form.querySelectorAll('input[name="costAmount"]')).toHaveLength(1)
+    expect(form.querySelector('input[name="totalCostAmount"]')).not.toBeInTheDocument()
+  })
+
+  it('mirrors an edited `total` figure into totalCostAmount on save, not a stale value', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-001', action: 'correct', status: 'corrected', memoryItemId: 'mem-001', sourceCandidateFactIds: ['cf-001'] })
+    mockGetReviewQueue.mockResolvedValue(makeQueue({
+      sections: [{ key: 'ordered_materials', label: 'Ordered materials', items: [{
+        ...ITEM_SINGLE,
+        proposedMemory: { ...ITEM_SINGLE.proposedMemory, costQualifier: 'total', costAmount: '40' },
+      }] }],
+    }))
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    await waitFor(() => screen.getByText('Bought / ordered'))
+    fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
+    const form = screen.getByRole('form', { name: /edit correction/i })
+    fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '55' } })
+    fireEvent.click(screen.getByRole('button', { name: /save correction/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.corrected).toMatchObject({ costQualifier: 'total', costAmount: '55', totalCostAmount: '55' })
+  })
+
   it('correction payload includes cost fields when changed', async () => {
     mockSubmitQueueDecision.mockResolvedValue({
       queueItemId: 'qi-001',
@@ -1313,5 +1349,19 @@ describe('ReviewQueueScreen — labour', () => {
     expect(within(rated).getByLabelText('Hours')).toBeTruthy()
     const quals = Array.from(within(rated).getAllByRole('combobox')).flatMap(s => Array.from(s.querySelectorAll('option')).map(o => o.value))
     expect(quals).toContain('per_hour')
+  })
+
+  it('shows a derived hours × rate preview for a per_hour line and omits the explicit total on save', async () => {
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-labour-rated', action: 'correct', status: 'corrected', memoryItemId: 'mem-y', sourceCandidateFactIds: [] })
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
+    fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
+    expect(within(rated).getByText('Rate per hour')).toBeTruthy()
+    expect(within(rated).queryByText('Total cost')).toBeNull()
+    expect(within(rated).getByRole('status').textContent).toBe('8 hours × £35/hour = £280 total')
+    fireEvent.click(within(rated).getByRole('button', { name: /save correction/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.corrected).not.toHaveProperty('totalCostAmount')
   })
 })

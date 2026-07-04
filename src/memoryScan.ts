@@ -124,6 +124,21 @@ export function deriveEachTotal(fields: {
   return String(Math.round(total * 100) / 100)
 }
 
+// Display-only safe line total for labour paid per hour — mirrors safeLabourCost's
+// hours × rate derivation. Returns a decimal string (no currency symbol), or null
+// when it is not safe to derive: non-`per_hour` basis, or missing/non-positive
+// hours or rate.
+export function deriveHourlyTotal(fields: {
+  labourHours?: string | null
+  costAmount: string | null
+  costQualifier: string | null
+}): string | null {
+  if (fields.costQualifier !== 'per_hour') return null
+  if (!POS_DECIMAL(fields.labourHours) || !POS_DECIMAL(fields.costAmount)) return null
+  const total = parseFloat(fields.labourHours!) * parseFloat(fields.costAmount!)
+  return String(Math.round(total * 100) / 100)
+}
+
 // Cost-basis attention (Spend lens): an item carries a usable money amount when
 // costAmount is a strict positive decimal — that's the amount Mike can classify
 // as each vs total.

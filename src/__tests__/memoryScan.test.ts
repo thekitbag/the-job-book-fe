@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -767,6 +767,36 @@ describe('deriveEachTotal', () => {
   it('returns null for a bad unit cost', () => {
     for (const c of ['', 'abc', null, '0']) {
       expect(deriveEachTotal({ ...base, costAmount: c })).toBeNull()
+    }
+  })
+})
+
+describe('deriveHourlyTotal', () => {
+  const base = { labourHours: '8', costAmount: '35', costQualifier: 'per_hour' }
+
+  it('derives hours × rate for a clear per_hour labour line', () => {
+    expect(deriveHourlyTotal(base)).toBe('280')
+  })
+
+  it('handles a decimal rate', () => {
+    expect(deriveHourlyTotal({ ...base, costAmount: '17.5' })).toBe('140')
+  })
+
+  it('returns null for a non-per_hour basis', () => {
+    for (const q of ['total', 'approx', 'unknown', 'each', null]) {
+      expect(deriveHourlyTotal({ ...base, costQualifier: q })).toBeNull()
+    }
+  })
+
+  it('returns null for missing / non-positive hours', () => {
+    for (const h of ['', null, '0', undefined]) {
+      expect(deriveHourlyTotal({ ...base, labourHours: h })).toBeNull()
+    }
+  })
+
+  it('returns null for a bad rate', () => {
+    for (const c of ['', 'abc', null, '0']) {
+      expect(deriveHourlyTotal({ ...base, costAmount: c })).toBeNull()
     }
   })
 })

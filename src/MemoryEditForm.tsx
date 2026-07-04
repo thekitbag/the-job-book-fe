@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { deriveEachTotal, formatMoney } from './memoryScan'
+import { deriveEachTotal, deriveHourlyTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CostQualifier, MemoryItemEdit, MemoryType } from './types'
 
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
@@ -54,12 +54,18 @@ export default function MemoryEditForm({
   const isLabour = form.memoryType === 'labour'
   // A plain note is edited as free text (its summary) — no material/cost fields.
   const isNote = form.memoryType === 'general_note'
-  // A clear `each` material line: the total is derived from quantity × unit cost
-  // on save, so we omit totalCostAmount (backend recalculates) and preview it.
-  const eachRecalc = !isLabour && !isNote && form.costQualifier === 'each'
+  // A clear `each` material line or `per_hour` labour line: the total is derived
+  // (quantity × unit cost, or hours × rate) on save, so we omit totalCostAmount
+  // (backend recalculates) and preview it instead of an explicit total field.
+  const eachRecalc = !isNote && (isLabour ? form.costQualifier === 'per_hour' : form.costQualifier === 'each')
   const derivedTotal = eachRecalc
-    ? deriveEachTotal({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount, costQualifier: 'each' })
+    ? (isLabour
+        ? deriveHourlyTotal({ labourHours: form.labourHours, costAmount: form.costAmount, costQualifier: form.costQualifier })
+        : deriveEachTotal({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount, costQualifier: 'each' }))
     : null
+  // For any other basis (`total`, `approx`, `unknown`, not stated) there is a
+  // single cost figure — no separate unit-cost-vs-total split to show.
+  const isTotalBasis = !isNote && !eachRecalc && form.costQualifier === 'total'
   // Pilot is GBP, but preserve any non-GBP currency already on the item.
   const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
@@ -85,9 +91,15 @@ export default function MemoryEditForm({
       deliveryTiming: isLabour ? null : form.deliveryTiming,
       locationOrUse: isLabour ? null : form.locationOrUse,
     }
-    // `each` → omit the total so the backend derives it (sending null would clear
-    // it). An explicit total is only sent for non-`each` bases.
-    if (eachRecalc) delete payload.totalCostAmount
+    // `each`/`per_hour` → omit the total so the backend derives it (sending null
+    // would clear it). `total` → there is one field on screen, so mirror it into
+    // the explicit total. Anything else (`approx`/`unknown`/not stated) has no
+    // trusted total to send — omit rather than push a stale value.
+    if (!isNote) {
+      if (eachRecalc) delete payload.totalCostAmount
+      else if (isTotalBasis) payload.totalCostAmount = payload.costAmount
+      else delete payload.totalCostAmount
+    }
     onSubmit(payload)
   }
 
@@ -178,8 +190,14 @@ export default function MemoryEditForm({
       )}
       {!isNote && (
         <>
+          {/* One cost figure on screen at a time: an editable rate/cost amount
+              plus a derived preview for `each`/`per_hour`, or a single editable
+              total for any other basis. Switching the qualifier swaps which one
+              is shown rather than adding a second field alongside it. */}
           <label className="queue-field">
-            <span className="queue-field-label">Cost amount {currencyCue}</span>
+            <span className="queue-field-label">
+              {eachRecalc ? (isLabour ? 'Rate per hour' : 'Unit cost') : (isTotalBasis ? 'Total cost' : 'Cost amount')} {currencyCue}
+            </span>
             <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
           </label>
           <label className="queue-field">
@@ -193,20 +211,12 @@ export default function MemoryEditForm({
               {COST_QUALIFIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
-          {/* For a clear `each` line the total is derived on save — show the
-              working instead of an explicit Total field. Switch the qualifier to
-              a total to type an explicit figure. */}
-          {eachRecalc ? (
-            derivedTotal && (
-              <p className="cost-preview" role="status">
-                {form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong>
-              </p>
-            )
-          ) : (
-            <label className="queue-field">
-              <span className="queue-field-label">Total cost {currencyCue}</span>
-              <input className="queue-field-input" name="totalCostAmount" value={form.totalCostAmount ?? ''} onChange={e => setStr('totalCostAmount', e.target.value)} placeholder="e.g. 40" />
-            </label>
+          {eachRecalc && derivedTotal && (
+            <p className="cost-preview" role="status">
+              {isLabour
+                ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
+                : <>{form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>}
+            </p>
           )}
         </>
       )}
