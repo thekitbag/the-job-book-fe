@@ -717,7 +717,7 @@ describe('ReviewQueueScreen', () => {
     await waitFor(() => screen.getByText('Bought / ordered'))
     fireEvent.click(screen.getAllByRole('button', { name: /fix details/i })[0])
     const form = screen.getByRole('form', { name: /edit correction/i })
-    expect(within(form).getByRole('alert').textContent).toMatch(/Add a quantity and unit/)
+    expect(within(form).getByRole('alert').textContent).toMatch(/Add a quantity and a unit/)
     expect(screen.getByRole('button', { name: /save correction/i })).toBeDisabled()
   })
 

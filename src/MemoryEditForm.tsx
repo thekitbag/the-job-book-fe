@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { deriveEachTotal, deriveHourlyTotal, formatMoney } from './memoryScan'
+import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatMoney } from './memoryScan'
 import type { BudgetCategory, CostQualifier, MemoryItemEdit, MemoryType } from './types'
 
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
@@ -66,10 +66,15 @@ export default function MemoryEditForm({
   // For any other basis (`total`, `approx`, `unknown`, not stated) there is a
   // single cost figure — no separate unit-cost-vs-total split to show.
   const isTotalBasis = !isNote && !eachRecalc && form.costQualifier === 'total'
-  // `each`/`per_hour` claim a computable total, but without quantity+unit (or
-  // hours) there is nothing to derive it from — block save rather than silently
-  // dropping the total and leaving the item stuck worth-checking.
-  const eachRecalcBlocked = eachRecalc && !derivedTotal
+  // `each`/`per_hour` claim a computable total, but without quantity+unit+cost
+  // (or hours+rate) there is nothing to derive it from — block save rather than
+  // silently dropping the total and leaving the item stuck worth-checking.
+  const eachGaps = eachRecalc
+    ? (isLabour
+        ? hourlyTotalGaps({ labourHours: form.labourHours, costAmount: form.costAmount })
+        : eachTotalGaps({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount }))
+    : []
+  const eachRecalcBlocked = eachRecalc && eachGaps.length > 0
   // Pilot is GBP, but preserve any non-GBP currency already on the item.
   const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
@@ -176,7 +181,7 @@ export default function MemoryEditForm({
           </label>
           <label className="queue-field">
             <span className="queue-field-label">Unit</span>
-            <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} />
+            <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} placeholder="e.g. sheets, bags, m²" />
           </label>
           <label className="queue-field">
             <span className="queue-field-label">Supplier</span>
@@ -224,9 +229,7 @@ export default function MemoryEditForm({
               </p>
             ) : (
               <p className="cost-preview cost-preview--warning" role="alert">
-                {isLabour
-                  ? 'Add hours above to calculate a total — until then this stays worth checking.'
-                  : 'Add a quantity and unit above to calculate a total — until then this stays worth checking.'}
+                Add {joinWithAnd(eachGaps)} above to calculate a total — until then this stays worth checking.
               </p>
             )
           )}
