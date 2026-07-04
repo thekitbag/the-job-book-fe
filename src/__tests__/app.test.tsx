@@ -131,6 +131,15 @@ describe('App', () => {
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
+  it('shows no protected screen — workspace, review queue, or job picker — when unauthenticated', async () => {
+    mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('review-queue-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('job-picker-screen')).not.toBeInTheDocument()
+  })
+
   it('does not use cached jobs for a 401 — user must re-authenticate', async () => {
     localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify([JOB_A]))
     mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))

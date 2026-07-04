@@ -11,6 +11,7 @@ vi.mock('../api', async (importOriginal) => {
     getJobs: vi.fn(),
     getInspectionData: vi.fn(),
     pilotLogin: vi.fn(),
+    getCurrentUser: vi.fn(),
   }
 })
 
@@ -22,8 +23,13 @@ vi.mock('../PasscodeScreen', () => ({
   ),
 }))
 
+vi.mock('../AuthScreen', () => ({
+  default: () => <div data-testid="auth-screen" />,
+}))
+
 const mockGetJobs = vi.mocked(api.getJobs)
 const mockGetInspectionData = vi.mocked(api.getInspectionData)
+const mockGetCurrentUser = vi.mocked(api.getCurrentUser)
 
 const JOB_A: Job = {
   id: 'job-inspect-001',
@@ -174,6 +180,10 @@ const INSPECTION_DATA: InspectionData = {
 
 beforeEach(() => {
   sessionStorage.clear()
+  // Default to an authenticated internal user so the existing key-prompt/data
+  // flow below is unaffected — tests that care about the unauthenticated case
+  // override this explicitly.
+  mockGetCurrentUser.mockResolvedValue({ id: 'user-internal', email: 'founder@thejobbook.test', name: 'Founder', role: 'INTERNAL' })
 })
 
 async function enterKeyAndLoad(key = 'test-key-abc') {
@@ -181,6 +191,16 @@ async function enterKeyAndLoad(key = 'test-key-abc') {
   fireEvent.change(input, { target: { value: key } })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
+
+describe('PilotInspectionPage — unauthenticated', () => {
+  it('shows email/password auth, not the inspection key form and not PasscodeScreen', async () => {
+    mockGetCurrentUser.mockRejectedValue(new api.ApiError('Unauthorized', 401))
+    render(<PilotInspectionPage />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByPlaceholderText('Enter inspection key')).toBeNull()
+    expect(screen.queryByTestId('passcode-screen')).toBeNull()
+  })
+})
 
 describe('PilotInspectionPage', () => {
   it('shows the Pilot inspection heading', () => {
