@@ -4106,7 +4106,7 @@ code {
 }
 .btn-cost-total:disabled, .btn-cost-each:disabled, .btn-cost-fix:disabled { opacity: 0.55; }
 
-/* Add-price form derived-total preview */
+/* Derived line-total preview (direct add / edit / add-price form) */
 .cost-preview {
   margin: 0.1rem 0 0.2rem;
   font-size: var(--text-sm);

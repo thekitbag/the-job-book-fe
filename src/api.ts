@@ -1,5 +1,5 @@
 import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, CreateMemoryItemRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
-import { deriveBudgetSummary, deriveCostSummary, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, safeLineTotal, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
+import { deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 // Mock is opt-in only — real backend is the default
@@ -1430,7 +1430,9 @@ function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryI
   }
   const updated: MemoryViewItem = {
     ...draft,
-    totalCostAmount: 'totalCostAmount' in edit ? draft.totalCostAmount : (safeLineTotal(draft)?.amount.toString() ?? draft.totalCostAmount),
+    // Present key → honour value/null (explicit set/clear). Omitted → derive
+    // fresh quantity × unit cost for an `each` line, else preserve existing.
+    totalCostAmount: 'totalCostAmount' in edit ? draft.totalCostAmount : (deriveEachTotal(draft) ?? draft.totalCostAmount),
   }
   // Remove from its current section, then re-home by the (possibly new) type.
   for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
@@ -1499,7 +1501,9 @@ function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest): Memo
     costAmount: req.costAmount ?? null,
     costCurrency: req.costCurrency ?? (hasCost ? 'GBP' : null),
     costQualifier: req.costQualifier ?? null,
-    totalCostAmount: req.totalCostAmount ?? null,
+    // Explicit total wins; otherwise derive an `each` line total (quantity × unit
+    // cost) so direct-added spend counts like the backend would.
+    totalCostAmount: req.totalCostAmount ?? deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount: req.costAmount ?? null, costQualifier: req.costQualifier ?? null }),
     labourHours: isLabour ? (req.labourHours ?? null) : null,
     labourPerson: isLabour ? (req.labourPerson ?? null) : null,
     labourTask: isLabour ? (req.labourTask ?? null) : null,

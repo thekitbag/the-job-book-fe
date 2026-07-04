@@ -34,8 +34,8 @@ describe('MemoryEditForm — cost currency', () => {
   })
 
   it('defaults currency to GBP when only a total cost is added', () => {
-    const { onSubmit } = setup(initialEdit({ costCurrency: null }))
-    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="totalCostAmount"]')!, { target: { value: '60' } })
+    const { onSubmit } = setup(initialEdit({ costCurrency: null, costQualifier: 'total' }))
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '60' } })
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ totalCostAmount: '60', costCurrency: 'GBP' }))
   })
@@ -54,15 +54,46 @@ describe('MemoryEditForm — cost currency', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ costAmount: '8', costCurrency: 'EUR' }))
   })
 
-  it('shows a GBP cue on the cost labels by default', () => {
+  it('shows a single cost field with a GBP cue by default', () => {
     setup(initialEdit({ costCurrency: null }))
     expect(screen.getByText(/Cost amount \(£\)/)).toBeTruthy()
-    expect(screen.getByText(/Total cost \(£\)/)).toBeTruthy()
+    expect(screen.queryByText(/Total cost/)).toBeNull()
   })
 
   it('shows the actual currency in the cue for a non-GBP item', () => {
     setup(initialEdit({ costAmount: '5', costCurrency: 'EUR' }))
     expect(screen.getByText(/Cost amount \(EUR\)/)).toBeTruthy()
+  })
+})
+
+describe('MemoryEditForm — cost qualifier basis', () => {
+  it('shows one editable field labelled Total cost for a `total` basis, not a second Cost amount field', () => {
+    setup(initialEdit({ costAmount: '40', costQualifier: 'total', totalCostAmount: '40' }))
+    expect(screen.getByText(/Total cost \(£\)/)).toBeTruthy()
+    expect(screen.queryByText(/^Cost amount/)).toBeNull()
+    expect(screen.getAllByRole('textbox').filter(el => (el as HTMLInputElement).name === 'costAmount')).toHaveLength(1)
+  })
+
+  it('mirrors an edited `total` figure into totalCostAmount on save, not a stale value', () => {
+    const { onSubmit } = setup(initialEdit({ costAmount: '40', costQualifier: 'total', totalCostAmount: '40' }))
+    fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '55' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ costAmount: '55', totalCostAmount: '55' }))
+  })
+
+  it('omits totalCostAmount for an approximate/unclear basis rather than sending a stale figure', () => {
+    const { onSubmit } = setup(initialEdit({ costAmount: '40', costQualifier: 'approx', totalCostAmount: '999' }))
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('totalCostAmount')
+  })
+
+  it('shows a derived hours × rate preview for a `per_hour` labour line and omits the explicit total on save', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', materialName: null, labourHours: '8', costAmount: '35', costQualifier: 'per_hour' }))
+    expect(screen.getByText(/Rate per hour/)).toBeTruthy()
+    expect(screen.queryByText(/Total cost/)).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('8 hours × £35/hour = £280 total')
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('totalCostAmount')
   })
 })
 
