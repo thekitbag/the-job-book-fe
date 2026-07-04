@@ -4105,3 +4105,12 @@ code {
   font-weight: 700;
 }
 .btn-cost-total:disabled, .btn-cost-each:disabled, .btn-cost-fix:disabled { opacity: 0.55; }
+
+/* Add-price form derived-total preview */
+.cost-preview {
+  margin: 0.1rem 0 0.2rem;
+  font-size: var(--text-sm);
+  color: var(--green-700);
+  font-weight: 600;
+}
+.cost-preview strong { font-weight: 800; }

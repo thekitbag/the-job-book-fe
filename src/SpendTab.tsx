@@ -7,10 +7,55 @@ import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount } f
 import type { JobMemory } from './useJobMemory'
 import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
 
+const POS_DECIMAL = /^\d+(\.\d+)?$/
+
+// Compact, purpose-built price entry for a no-price bought item. Defaults to an
+// explicit total (so the typed figure becomes totalCostAmount + GBP and enters
+// known spend); offers a per-item basis only when quantity + unit are known.
+function PriceForm({ item, submitting, error, onSave, onCancel }: {
+  item: MemoryViewItem
+  submitting: boolean
+  error: string | null
+  onSave: (price: string, basis: 'total' | 'each') => void
+  onCancel: () => void
+}) {
+  const [price, setPrice] = useState('')
+  const [basis, setBasis] = useState<'total' | 'each'>('total')
+  const eachAvailable = canDeriveUnitCost(item)
+  const priceOk = POS_DECIMAL.test(price.trim()) && parseFloat(price) > 0
+  const derived = basis === 'each' && eachAvailable && priceOk
+    ? String(Math.round(parseFloat(item.quantity!) * parseFloat(price) * 100) / 100)
+    : null
+  return (
+    <form className="price-form queue-edit-form" aria-label="Add price" onSubmit={e => { e.preventDefault(); if (priceOk) onSave(price.trim(), basis) }}>
+      <label className="queue-field">
+        <span className="queue-field-label">Price (£)</span>
+        <input className="queue-field-input" name="price" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 120" autoFocus />
+      </label>
+      {eachAvailable && (
+        <label className="queue-field">
+          <span className="queue-field-label">This price is</span>
+          <select className="queue-field-input" name="priceBasis" aria-label="Price basis" value={basis} onChange={e => setBasis(e.target.value as 'total' | 'each')}>
+            <option value="total">the total</option>
+            <option value="each">per {item.unit}</option>
+          </select>
+        </label>
+      )}
+      {derived && (
+        <p className="cost-preview">{item.quantity} × {formatMoney(Number(price), 'GBP')} each = <strong>{formatMoney(Number(derived), 'GBP')} total</strong></p>
+      )}
+      <div className="queue-edit-actions">
+        <button type="submit" className="btn-queue-save" disabled={submitting || !priceOk}>{submitting ? 'Saving…' : 'Save price'}</button>
+        <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>Cancel</button>
+      </div>
+      {error && <p className="queue-item-error" role="alert">{error}</p>}
+    </form>
+  )
+}
+
 // One row in the "Not counted yet" area. Two treatments share one place:
 //  - cost-basis: has a price but an unclear basis → ask each vs total.
-//  - no-price:   no amount to classify → prompt to add a price.
-// Opening the edit form (Fix memory / Add price) swaps to the full form in place.
+//  - no-price:   no amount to classify → add a price (defaults to a total).
 function NotCountedItem({
   item,
   mode,
@@ -20,6 +65,7 @@ function NotCountedItem({
   categories,
   onTotal,
   onEach,
+  onAddPrice,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -32,10 +78,13 @@ function NotCountedItem({
   categories: BudgetCategory[]
   onTotal: () => void
   onEach: () => void
+  onAddPrice: (price: string, basis: 'total' | 'each') => void
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: import('./types').MemoryItemEdit) => void
 }) {
+  const [addingPrice, setAddingPrice] = useState(false)
+
   if (editing) {
     return (
       <div className="cost-check-item cost-check-item--editing">
@@ -47,12 +96,21 @@ function NotCountedItem({
   const identity = [item.quantity, item.materialName, item.unit].filter(Boolean).join(' ') || item.materialName || item.summary
 
   if (mode === 'no-price') {
+    if (addingPrice) {
+      return (
+        <div className="cost-check-item cost-check-item--editing">
+          <p className="cost-check-headline">{identity}</p>
+          <PriceForm item={item} submitting={submitting} error={errorMsg} onSave={onAddPrice} onCancel={() => setAddingPrice(false)} />
+        </div>
+      )
+    }
     return (
       <div className="cost-check-item">
         <p className="cost-check-headline">{identity}</p>
         <p className="cost-check-q">No price yet</p>
         <div className="cost-check-actions">
-          <button type="button" className="btn-cost-total" disabled={submitting} onClick={onStartEdit}>Add price</button>
+          <button type="button" className="btn-cost-total" disabled={submitting} onClick={() => setAddingPrice(true)}>Add price</button>
+          <button type="button" className="btn-cost-fix" disabled={submitting} onClick={onStartEdit}>Fix memory</button>
         </div>
         {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
       </div>
@@ -144,7 +202,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, isUncategorised, cardProps,
-    notCountedItems, resolveCostBasis,
+    notCountedItems, resolveCostBasis, addPrice,
     budgetCategories, expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
@@ -243,6 +301,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
                 categories={budgetCategories}
                 onTotal={() => resolveCostBasis(item.id, 'total')}
                 onEach={() => resolveCostBasis(item.id, 'each')}
+                onAddPrice={(price, basis) => addPrice(item.id, price, basis)}
                 onStartEdit={p.onStartEdit}
                 onCancelEdit={p.onCancelEdit}
                 onSave={p.onSave}

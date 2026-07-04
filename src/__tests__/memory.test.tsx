@@ -306,7 +306,7 @@ describe('Workspace — assign / fix / verify', () => {
     openTab('Spend')
     const notCounted = await screen.findByRole('region', { name: /not counted yet/i })
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /add price/i }))
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '10' } })
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => expect(mockUpdateMemoryItem).toHaveBeenCalledWith('job-mem-001', 'mem-timber', expect.objectContaining({ costAmount: '10' })))
@@ -336,7 +336,7 @@ describe('Workspace — assign / fix / verify', () => {
     expect(within(hero).getByText(/£1440/)).toBeTruthy()
     const notCounted = screen.getByRole('region', { name: /not counted yet/i })
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /add price/i }))
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => expect(within(screen.getByRole('region', { name: /^known spend$/i })).getByText(/£1500/)).toBeTruthy())
   })
@@ -348,7 +348,7 @@ describe('Workspace — assign / fix / verify', () => {
     openTab('Spend')
     const notCounted = await screen.findByRole('region', { name: /not counted yet/i })
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /add price/i }))
+    fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => screen.getByText(/couldn’t refresh/i))
     expect(within(screen.getByRole('region', { name: /^known spend$/i })).getByText(/£1440/)).toBeTruthy()
