@@ -66,6 +66,10 @@ export default function MemoryEditForm({
   // For any other basis (`total`, `approx`, `unknown`, not stated) there is a
   // single cost figure — no separate unit-cost-vs-total split to show.
   const isTotalBasis = !isNote && !eachRecalc && form.costQualifier === 'total'
+  // `each`/`per_hour` claim a computable total, but without quantity+unit (or
+  // hours) there is nothing to derive it from — block save rather than silently
+  // dropping the total and leaving the item stuck worth-checking.
+  const eachRecalcBlocked = eachRecalc && !derivedTotal
   // Pilot is GBP, but preserve any non-GBP currency already on the item.
   const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
@@ -211,17 +215,25 @@ export default function MemoryEditForm({
               {COST_QUALIFIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
-          {eachRecalc && derivedTotal && (
-            <p className="cost-preview" role="status">
-              {isLabour
-                ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
-                : <>{form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>}
-            </p>
+          {eachRecalc && (
+            derivedTotal ? (
+              <p className="cost-preview" role="status">
+                {isLabour
+                  ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
+                  : <>{form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>}
+              </p>
+            ) : (
+              <p className="cost-preview cost-preview--warning" role="alert">
+                {isLabour
+                  ? 'Add hours above to calculate a total — until then this stays worth checking.'
+                  : 'Add a quantity and unit above to calculate a total — until then this stays worth checking.'}
+              </p>
+            )
           )}
         </>
       )}
       <div className="queue-edit-actions">
-        <button type="submit" className="btn-queue-save" disabled={submitting}>
+        <button type="submit" className="btn-queue-save" disabled={submitting || eachRecalcBlocked}>
           {submitting ? 'Saving…' : 'Save memory'}
         </button>
         <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>

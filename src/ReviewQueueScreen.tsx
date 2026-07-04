@@ -214,6 +214,10 @@ function EditForm({
   // For any other basis (`total`, `approx`, `unknown`, not stated) there is a
   // single cost figure — no separate unit-cost-vs-total split to show.
   const isTotalBasis = !eachRecalc && form.costQualifier === 'total'
+  // `each`/`per_hour` claim a computable total, but without quantity+unit (or
+  // hours) there is nothing to derive it from — block save rather than silently
+  // dropping the total and leaving the item stuck worth-checking.
+  const eachRecalcBlocked = eachRecalc && !derivedTotal
 
   const submit = () => {
     const corrected = { ...form }
@@ -307,19 +311,27 @@ function EditForm({
           ))}
         </select>
       </label>
-      {eachRecalc && derivedTotal && (
-        <p className="cost-preview" role="status">
-          {isLabour
-            ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
-            : <>{form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>}
-        </p>
+      {eachRecalc && (
+        derivedTotal ? (
+          <p className="cost-preview" role="status">
+            {isLabour
+              ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
+              : <>{form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>}
+          </p>
+        ) : (
+          <p className="cost-preview cost-preview--warning" role="alert">
+            {isLabour
+              ? 'Add hours above to calculate a total — until then this stays worth checking.'
+              : 'Add a quantity and unit above to calculate a total — until then this stays worth checking.'}
+          </p>
+        )
       )}
       <label className="queue-field">
         <span className="queue-field-label">Summary (optional)</span>
         <input className="queue-field-input queue-field-summary" name="summary" value={form.summary} onChange={e => setStr('summary', e.target.value)} />
       </label>
       <div className="queue-edit-actions">
-        <button type="submit" className="btn-queue-save" disabled={submitting}>
+        <button type="submit" className="btn-queue-save" disabled={submitting || eachRecalcBlocked}>
           {submitting ? 'Saving…' : 'Save correction'}
         </button>
         <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>

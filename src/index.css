@@ -4114,3 +4114,4 @@ code {
   font-weight: 600;
 }
 .cost-preview strong { font-weight: 800; }
+.cost-preview--warning { color: var(--amber-fg); }
