@@ -3730,6 +3730,19 @@ code {
 }
 .btn-switch-job:active { background: var(--surface-sunk); }
 
+/* Reachable but unobtrusive — plain text, no border, secondary to Switch */
+.btn-logout {
+  border: none;
+  background: none;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 0.45rem 0.5rem;
+  min-height: 40px;
+}
+.btn-logout:active { color: var(--ink-700); }
+
 /* — Tab row: full-width underline tabs, brand-green active — */
 .ws-tabs {
   display: flex;
