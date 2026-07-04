@@ -75,10 +75,29 @@ export async function pilotLogin(passcode: string): Promise<void> {
   if (!res.ok) throw new ApiError(`POST /api/auth/pilot-login → ${res.status}`, res.status)
 }
 
-// ── Email/password auth (mock mode) ─────────────────────────────────────────
-// Mirrors per-account job ownership without a real backend: Mike is the seeded
-// pilot account and owns MOCK_JOBS; anyone who signs up fresh in mock mode
-// starts with no jobs (see the `mockSession` check in getJobs below).
+// ── Email/password auth ──────────────────────────────────────────────────────
+// Error bodies are `{ code, message }` (see backend AUTH_STATUS_MAP). Known
+// codes get fixed, tested frontend copy; anything else falls back to the
+// backend's own message (e.g. field-validation text), then a generic string.
+const AUTH_ERROR_COPY: Record<string, string> = {
+  INVALID_CREDENTIALS: 'Invalid email or password',
+  EMAIL_IN_USE: 'That email is already registered',
+  RESET_TOKEN_INVALID: 'This reset link is no longer valid',
+}
+
+async function authErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { code?: string; message?: string }
+    if (body.code && AUTH_ERROR_COPY[body.code]) return AUTH_ERROR_COPY[body.code]
+    return body.message || fallback
+  } catch {
+    return fallback
+  }
+}
+
+// Mock mode mirrors per-account job ownership without a real backend: Mike is
+// the seeded pilot account and owns MOCK_JOBS; anyone who signs up fresh in
+// mock mode starts with no jobs (see the `mockSession` check in getJobs below).
 const MOCK_MIKE_EMAIL = 'mike@thejobbook.test'
 const MOCK_MIKE_USER: AuthUser = { id: 'user-mock-mike', email: MOCK_MIKE_EMAIL, name: 'Mike', role: 'PILOT' }
 const MOCK_RESET_TOKEN = 'mock-reset-token'
@@ -87,13 +106,13 @@ const mockAccounts = new Map<string, { password: string; user: AuthUser }>([
 ])
 let mockSession: AuthUser | null = null
 
-// POST /api/auth/signup
+// POST /api/auth/signup — 201 on success.
 export async function signup(email: string, password: string, name?: string): Promise<AuthUser> {
   const normalized = email.trim().toLowerCase()
   if (USE_MOCK) {
     await delay(300)
-    if (mockAccounts.has(normalized)) throw new ApiError('That email is already registered', 409)
-    const user: AuthUser = { id: `user-mock-${Date.now()}`, email: normalized, name: name?.trim() || normalized, role: 'PILOT' }
+    if (mockAccounts.has(normalized)) throw new ApiError(AUTH_ERROR_COPY.EMAIL_IN_USE, 409)
+    const user: AuthUser = { id: `user-mock-${Date.now()}`, email: normalized, name: name?.trim() || 'Builder', role: 'PILOT' }
     mockAccounts.set(normalized, { password, user })
     mockSession = user
     return user
@@ -103,7 +122,7 @@ export async function signup(email: string, password: string, name?: string): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: normalized, password, name }),
   })
-  if (!res.ok) throw new ApiError(`POST /api/auth/signup → ${res.status}`, res.status)
+  if (!res.ok) throw new ApiError(await authErrorMessage(res, 'Could not create account — check details and try again'), res.status)
   return ((await res.json()) as { user: AuthUser }).user
 }
 
@@ -113,7 +132,7 @@ export async function login(email: string, password: string): Promise<AuthUser> 
   if (USE_MOCK) {
     await delay(300)
     const account = mockAccounts.get(normalized)
-    if (!account || account.password !== password) throw new ApiError('Invalid email or password', 401)
+    if (!account || account.password !== password) throw new ApiError(AUTH_ERROR_COPY.INVALID_CREDENTIALS, 401)
     mockSession = account.user
     return account.user
   }
@@ -122,12 +141,11 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: normalized, password }),
   })
-  if (res.status === 401) throw new ApiError('Invalid email or password', 401)
-  if (!res.ok) throw new ApiError(`POST /api/auth/login → ${res.status}`, res.status)
+  if (!res.ok) throw new ApiError(await authErrorMessage(res, AUTH_ERROR_COPY.INVALID_CREDENTIALS), res.status)
   return ((await res.json()) as { user: AuthUser }).user
 }
 
-// POST /api/auth/logout
+// POST /api/auth/logout — clears jobbook_session (and any legacy pilot_session).
 export async function logout(): Promise<void> {
   if (USE_MOCK) {
     await delay(150)
@@ -138,7 +156,7 @@ export async function logout(): Promise<void> {
   if (!res.ok) throw new ApiError(`POST /api/auth/logout → ${res.status}`, res.status)
 }
 
-// GET /api/auth/me — 401 when unauthenticated.
+// GET /api/auth/me — 401 when unauthenticated (or the session's user no longer exists).
 export async function getCurrentUser(): Promise<AuthUser> {
   if (USE_MOCK) {
     await delay(150)
@@ -151,8 +169,8 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return ((await res.json()) as { user: AuthUser }).user
 }
 
-// POST /api/auth/password-reset/request — always resolves; must never reveal
-// whether an account exists for the given email.
+// POST /api/auth/password-reset/request — backend always returns { ok: true },
+// even on internal failure, so it never reveals whether the email exists.
 export async function requestPasswordReset(email: string): Promise<void> {
   const normalized = email.trim().toLowerCase()
   if (USE_MOCK) {
@@ -167,21 +185,24 @@ export async function requestPasswordReset(email: string): Promise<void> {
   })
 }
 
-// POST /api/auth/password-reset/confirm
-export async function confirmPasswordReset(token: string, password: string): Promise<void> {
+// POST /api/auth/password-reset/confirm — success sets the session cookie and
+// returns the now-logged-in user; callers should treat it exactly like login.
+export async function confirmPasswordReset(token: string, password: string): Promise<AuthUser> {
   if (USE_MOCK) {
     await delay(300)
-    if (token !== MOCK_RESET_TOKEN) throw new ApiError('This reset link is no longer valid', 400)
-    const account = mockAccounts.get(MOCK_MIKE_EMAIL)
-    if (account) account.password = password
-    return
+    if (token !== MOCK_RESET_TOKEN) throw new ApiError(AUTH_ERROR_COPY.RESET_TOKEN_INVALID, 400)
+    const account = mockAccounts.get(MOCK_MIKE_EMAIL)!
+    account.password = password
+    mockSession = account.user
+    return account.user
   }
   const res = await apiFetch('/api/auth/password-reset/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, password }),
   })
-  if (!res.ok) throw new ApiError(`POST /api/auth/password-reset/confirm → ${res.status}`, res.status)
+  if (!res.ok) throw new ApiError(await authErrorMessage(res, AUTH_ERROR_COPY.RESET_TOKEN_INVALID), res.status)
+  return ((await res.json()) as { user: AuthUser }).user
 }
 
 export async function getCurrentJob(): Promise<Job> {

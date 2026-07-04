@@ -195,9 +195,10 @@ describe('AuthScreen — reset confirm', () => {
     expect(screen.getByRole('form', { name: /choose new password/i })).toBeInTheDocument()
   })
 
-  it('confirms a new password and returns to login with a success message', async () => {
+  it('confirms a new password and logs straight in — the backend sets the session on a successful reset', async () => {
     setLocationSearch('?reset_token=mock-reset-token')
-    mockConfirmPasswordReset.mockResolvedValue(undefined)
+    const RESET_USER: AuthUser = { id: 'user-mike', email: 'mike@thejobbook.test', name: 'Mike', role: 'PILOT' }
+    mockConfirmPasswordReset.mockResolvedValue(RESET_USER)
     const user = userEvent.setup()
     render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)
 
@@ -205,8 +206,7 @@ describe('AuthScreen — reset confirm', () => {
     await user.click(screen.getByRole('button', { name: /save new password/i }))
 
     await waitFor(() => expect(mockConfirmPasswordReset).toHaveBeenCalledWith('mock-reset-token', 'a-new-strong-password'))
-    expect(screen.getByRole('form', { name: /^log in$/i })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent(/password updated/i)
+    expect(mockOnAuthSuccess).toHaveBeenCalledWith(RESET_USER)
   })
 
   it('shows a specific error for an invalid or expired reset link', async () => {
