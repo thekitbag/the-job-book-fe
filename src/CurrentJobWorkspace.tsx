@@ -208,10 +208,12 @@ export default function CurrentJobWorkspace({
   job,
   onOpenReviewQueue,
   onSwitchJob,
+  onLogout = () => {},
 }: {
   job: Job
   onOpenReviewQueue: () => void
   onSwitchJob: () => void
+  onLogout?: () => void
 }) {
   const [tab, setTab] = useState<Tab>('overview')
   // clientNoteId of the note just recorded — drives the capture confirmation.
@@ -387,6 +389,7 @@ export default function CurrentJobWorkspace({
         <div className="ws-header-actions">
           {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
           <button className="btn-switch-job" onClick={onSwitchJob}>Switch ›</button>
+          <button className="btn-logout" onClick={onLogout}>Log out</button>
         </div>
       </header>
 

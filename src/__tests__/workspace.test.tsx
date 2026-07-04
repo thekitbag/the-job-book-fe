@@ -54,7 +54,7 @@ const EMPTY_QUEUE: ReviewQueue = { jobId: JOB.id, generatedAt: '', sections: [],
 
 const noop = () => {}
 function renderWorkspace(props: Partial<React.ComponentProps<typeof CurrentJobWorkspace>> = {}) {
-  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={noop} onSwitchJob={noop} {...props} />)
+  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={noop} onSwitchJob={noop} onLogout={noop} {...props} />)
 }
 
 async function getRecorderMock() {
