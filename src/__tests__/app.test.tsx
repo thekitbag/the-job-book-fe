@@ -175,6 +175,18 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
   })
 
+  it('creating the first job from zero jobs enters the workspace immediately', async () => {
+    mockGetJobs.mockResolvedValue([])
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-add-job/i }))
+
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    expect(screen.getByText('New Job')).toBeInTheDocument()
+    expect(screen.queryByTestId('job-picker-screen')).not.toBeInTheDocument()
+  })
+
   it('switching job updates the workspace to the new job', async () => {
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
