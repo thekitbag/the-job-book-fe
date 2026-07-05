@@ -228,9 +228,15 @@ describe('Workspace — Spend tab', () => {
 
   // Regression: uncategorised spend must be driven by budgetSummary.uncategorized.rows
   // (authoritative, includes labour), not re-derived from ordered_materials alone.
-  it('shows uncategorised labour alongside bought items, and the hero total includes both', async () => {
+  // Also proves active categories with empty rows do not swallow/hide the
+  // uncategorised detail — the bug this test protects failed silently: the hero
+  // total was right, but none of the contributing rows were visible anywhere.
+  it('shows uncategorised mixed material/labour spend even when active categories have no rows', async () => {
+    const CAT_MATERIALS: BudgetCategory = { id: 'c-materials', jobId: 'job-mem-001', name: 'materials', budgetAmount: null, budgetCurrency: null, sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' }
+    const CAT_TIMBER: BudgetCategory = { id: 'c-timber', jobId: 'job-mem-001', name: 'timber', budgetAmount: null, budgetCurrency: null, sortOrder: 1, isArchived: false, createdAt: '', updatedAt: '' }
+
     const HARDCORE = orderedItem({ id: 'mem-hardcore2', summary: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP', budgetCategoryId: null })
-    const ELECTRICS = orderedItem({ id: 'lab-electrics', memoryType: 'labour', summary: 'electrics', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', totalCostAmount: '280', costCurrency: 'GBP', budgetCategoryId: null })
+    const ELECTRICS = orderedItem({ id: 'lab-electrics', memoryType: 'labour', summary: 'electrics', labourTask: 'electrics', labourPerson: 'Tom', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', totalCostAmount: '280', costCurrency: 'GBP', budgetCategoryId: null })
     const ROOF = orderedItem({ id: 'lab-roof', memoryType: 'labour', summary: 'roof', labourTask: 'roof', totalCostAmount: '600', costCurrency: 'GBP', budgetCategoryId: null })
 
     mockGetMemoryView.mockResolvedValue({
@@ -251,7 +257,7 @@ describe('Workspace — Spend tab', () => {
           knownSpendAmount: '880', knownSpendCurrency: 'GBP', knownSpendLabel: '£880 known spend',
           includedMemoryItemIds: ['lab-electrics', 'lab-roof'],
           rows: [
-            { memoryItemId: 'lab-electrics', itemLabel: 'electrics', labourHours: '8', labourPerson: null, labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' },
+            { memoryItemId: 'lab-electrics', itemLabel: 'electrics', labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' },
             { memoryItemId: 'lab-roof', itemLabel: 'roof', labourHours: null, labourPerson: null, labourTask: 'roof', lineTotalAmount: '600', lineTotalCurrency: 'GBP', lineTotalLabel: '£600 total' },
           ],
           excludedRows: [],
@@ -260,12 +266,16 @@ describe('Workspace — Spend tab', () => {
       },
     })
     mockGetBudgetSummary.mockResolvedValue({
-      jobId: JOB.id, generatedAt: '', categories: [],
+      jobId: JOB.id, generatedAt: '',
+      categories: [
+        { category: CAT_MATERIALS, knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false, rows: [] },
+        { category: CAT_TIMBER, knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false, rows: [] },
+      ],
       uncategorized: {
         knownSpendAmount: '920', knownSpendCurrency: 'GBP', knownSpendLabel: '£920 known spend',
         rows: [
           { memoryItemId: 'mem-hardcore2', memoryType: 'ordered_material', itemLabel: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total' },
-          { memoryItemId: 'lab-electrics', memoryType: 'labour', itemLabel: 'electrics', materialName: null, quantity: null, unit: null, labourHours: '8', labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' },
+          { memoryItemId: 'lab-electrics', memoryType: 'labour', itemLabel: 'electrics', materialName: null, quantity: null, unit: null, labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' },
           { memoryItemId: 'lab-roof', memoryType: 'labour', itemLabel: 'roof', materialName: null, quantity: null, unit: null, labourTask: 'roof', lineTotalAmount: '600', lineTotalCurrency: 'GBP', lineTotalLabel: '£600 total' },
         ],
       },
@@ -275,13 +285,25 @@ describe('Workspace — Spend tab', () => {
     renderWorkspace()
     openTab('Spend')
 
+    // Hero shows the authoritative known-spend total.
     const hero = await spendHero()
     expect(within(hero).getByText(/£920/)).toBeTruthy()
 
-    const section = await screen.findByRole('region', { name: /uncategorised spend/i })
+    // The empty-rows categories render (and don't error/hide anything) —
+    // they just don't swallow the uncategorised spend below.
+    expect(await screen.findByRole('region', { name: /budget category materials/i })).toBeTruthy()
+    expect(screen.getByRole('region', { name: /budget category timber/i })).toBeTruthy()
+
+    // Uncategorised spend section is visible under its own (non bought-only) name
+    // — the exact, anchored match fails if it's still "Bought · uncategorised" —
+    // and shows all three contributing rows with their line totals.
+    const section = screen.getByRole('region', { name: /^uncategorised spend$/i })
     expect(within(section).getByText(/hardcore/)).toBeTruthy()
+    expect(within(section).getByText('£40')).toBeTruthy()
     expect(within(section).getByText(/electrics/)).toBeTruthy()
+    expect(within(section).getByText('£280')).toBeTruthy()
     expect(within(section).getByText(/roof/)).toBeTruthy()
+    expect(within(section).getByText('£600')).toBeTruthy()
   })
 })
 
