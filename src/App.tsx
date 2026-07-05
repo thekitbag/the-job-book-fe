@@ -124,6 +124,7 @@ export default function App() {
     const updated = [job, ...jobs]
     setJobs(updated)
     localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(updated))
+    setAppState('ready')
     handleSelectJob(job)
   }
 

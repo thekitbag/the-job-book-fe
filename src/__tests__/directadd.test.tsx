@@ -118,6 +118,17 @@ describe('Direct add — entry points', () => {
 
 describe('Direct add — submit contracts', () => {
   it('spend saves as ordered_material with a GBP cost and refetches budget', async () => {
+    // Uncategorised display now comes from budgetSummary.uncategorized.rows, so
+    // the refetch after save must carry the new item's row (matching what the
+    // real backend would return) — the static EMPTY_BUDGET default only covers
+    // the initial, pre-save load.
+    mockGetBudgetSummary.mockResolvedValueOnce(EMPTY_BUDGET).mockResolvedValue({
+      ...EMPTY_BUDGET,
+      uncategorized: {
+        knownSpendAmount: '120', knownSpendCurrency: 'GBP', knownSpendLabel: '£120 known spend',
+        rows: [{ memoryItemId: 'mem-manual-1', memoryType: 'ordered_material', itemLabel: 'decking', materialName: 'decking', quantity: null, unit: null, lineTotalAmount: '120', lineTotalCurrency: 'GBP', lineTotalLabel: '£120 total' }],
+      },
+    })
     renderWorkspace()
     await openTab('Spend')
     fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))

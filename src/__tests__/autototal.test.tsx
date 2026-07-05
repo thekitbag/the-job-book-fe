@@ -134,9 +134,16 @@ describe('Auto-total — Direct Add Spend', () => {
 describe('Auto-total — Fix Memory', () => {
   it('recalculates the preview on quantity change and omits totalCostAmount on save', async () => {
     mockGetMemoryView.mockResolvedValue(OSB_VIEW)
+    mockGetBudgetSummary.mockResolvedValue({
+      ...EMPTY_BUDGET,
+      uncategorized: {
+        knownSpendAmount: '100', knownSpendCurrency: 'GBP', knownSpendLabel: '£100 known spend',
+        rows: [{ memoryItemId: 'osb', memoryType: 'ordered_material', itemLabel: 'OSB', materialName: 'OSB', quantity: '5', unit: 'sheets', lineTotalAmount: '100', lineTotalCurrency: 'GBP', lineTotalLabel: '£100 total' }],
+      },
+    })
     renderWorkspace()
     fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
-    const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
+    const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
     fireEvent.click(within(counted).getByRole('button', { name: /fix memory/i }))
 
     const editForm = screen.getByRole('form', { name: /edit memory/i })
