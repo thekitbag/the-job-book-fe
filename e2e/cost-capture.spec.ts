@@ -15,7 +15,7 @@ async function openBought(page: Page) {
 
 const heroRegion = (page: Page) => page.getByRole('region', { name: /^known spend$/i })
 const notCounted = (page: Page) => page.getByRole('region', { name: /not counted yet/i })
-const uncategorised = (page: Page) => page.getByRole('region', { name: /uncategorised bought/i })
+const uncategorised = (page: Page) => page.getByRole('region', { name: /uncategorised spend/i })
 
 // Total known cost = bought £1240 + rated/total labour £880 = £2120, of the
 // £7500 budget (timber 4000 + cladding 2000 + labour 1500).

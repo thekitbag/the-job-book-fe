@@ -67,7 +67,7 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await page.waitForTimeout(800)
 
     await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2120/)).toBeVisible()
-    const hardcore = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'hardcore' })
+    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
     await expect(hardcore.getByText('£5 each')).toBeVisible()
   })
 })

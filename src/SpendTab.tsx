@@ -201,7 +201,7 @@ function KnownSpendHero({ total, totals }: { total: TotalKnownCost; totals: Budg
 export default function SpendTab({ mem }: { mem: JobMemory }) {
   const {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
-    sectionItems, includedIds, exclusionReason, isUncategorised, cardProps,
+    sectionItems, includedIds, exclusionReason, cardProps,
     notCountedItems, resolveCostBasis, addPrice,
     budgetCategories, expandedCats, toggleCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
@@ -214,8 +214,13 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const labourItems = sectionItems('labour')
   const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0
 
-  const uncatBought = orderedItems.filter(isUncategorised)
-  const uncatCounted = uncatBought.filter(i => includedIds.has(i.id))
+  // Uncategorised spend is driven by the authoritative budget-summary rows
+  // (not re-derived from ordered_materials alone), so labour contributes too —
+  // join back to the full memory-view item for the MemoryCard.
+  const allItemsById = new Map([...orderedItems, ...labourItems].map(i => [i.id, i] as const))
+  const uncatItems = (budgetSummary?.uncategorized.rows ?? [])
+    .map(r => allItemsById.get(r.memoryItemId))
+    .filter((i): i is MemoryViewItem => !!i)
 
   function renderCategoryCard(cs: BudgetCategorySummary) {
     const c = cs.category
@@ -333,11 +338,11 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
           : <button type="button" className="btn-add-category" onClick={() => setAddingCategory(true)}>+ Add budget category</button>}
       </section>
 
-      {uncatCounted.length > 0 && (
-        <section aria-label="Uncategorised bought">
-          <p className="mem-section-label">Bought · uncategorised</p>
+      {uncatItems.length > 0 && (
+        <section aria-label="Uncategorised spend">
+          <p className="mem-section-label">Uncategorised spend</p>
           <p className="mem-section-note">Counted in Known spend — give each a category to track it.</p>
-          {uncatCounted.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} />)}
+          {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} />)}
         </section>
       )}
         </>

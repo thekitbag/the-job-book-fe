@@ -280,12 +280,6 @@ export function useJobMemory(job: Job) {
     ]),
     [ordered, labourSummary],
   )
-  const activeCatIds = useMemo(() => new Set(budgetCategories.map(c => c.id)), [budgetCategories])
-  const isUncategorised = useCallback(
-    (i: MemoryViewItem) => !i.budgetCategoryId || !activeCatIds.has(i.budgetCategoryId),
-    [activeCatIds],
-  )
-
   const hasMemory = data ? data.sections.some(s => s.items.length > 0) : false
 
   // Cost-basis attention: ordered items excluded from known spend for
@@ -366,7 +360,7 @@ export function useJobMemory(job: Job) {
     addMemoryItem,
     budgetSummary, budgetCategories,
     ordered, labourSummary, totalKnownCost,
-    sectionItems, includedIds, exclusionReason, isUncategorised, hasMemory,
+    sectionItems, includedIds, exclusionReason, hasMemory,
     costCheckItems, notCountedItems, resolveCostBasis, addPrice,
     // budget CRUD state + handlers
     expandedCats, toggleCat,
