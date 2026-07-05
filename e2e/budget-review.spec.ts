@@ -63,7 +63,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     // single job-level Known spend (bought £1240 + labour £880 = £2120)
     await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2120/)).toBeVisible()
     await expect(page.getByRole('region', { name: /budget category cladding/i }).getByText('£1200 known spend')).toBeVisible()
-    await expect(page.getByRole('region', { name: /uncategorised bought/i }).getByText('hardcore')).toBeVisible()
+    await expect(page.getByRole('region', { name: /uncategorised spend/i }).getByText('hardcore')).toBeVisible()
   })
 
   test('there is no separate Budget destination — one spend model', async ({ page }) => {

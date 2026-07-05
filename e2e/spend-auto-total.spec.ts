@@ -34,7 +34,7 @@ test.describe('Auto-total unit cost', () => {
     await form.getByRole('button', { name: 'Save' }).click()
 
     // saved item shows unit cost + derived total from the refetched mock
-    const osb = page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'OSB' })
+    const osb = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'OSB' })
     await expect(osb.getByText('£20 each')).toBeVisible()
     await expect(osb.getByText('£100')).toBeVisible()
 
@@ -47,7 +47,7 @@ test.describe('Auto-total unit cost', () => {
     await page.waitForTimeout(700)
 
     await expect(
-      page.getByRole('region', { name: /uncategorised bought/i }).locator('.mem-card', { hasText: 'OSB' }).getByText('£120'),
+      page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'OSB' }).getByText('£120'),
     ).toBeVisible()
   })
 

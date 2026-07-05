@@ -106,7 +106,10 @@ function budgetSummary(): BudgetSummaryResponse {
       { category: CAT_CLAD, knownSpendAmount: '1200', knownSpendCurrency: 'GBP', knownSpendLabel: '£1200 known spend', budgetAmount: '2000', budgetCurrency: 'GBP', budgetLabel: '£2000 budget', remainingAmount: '800', remainingLabel: '£800 remaining', overBudget: false, rows: [] },
       { category: CAT_ELEC, knownSpendAmount: '200', knownSpendCurrency: 'GBP', knownSpendLabel: '£200 known spend', budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false, rows: [] },
     ],
-    uncategorized: { knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend', rows: [] },
+    uncategorized: {
+      knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend',
+      rows: [{ memoryItemId: 'mem-hardcore', memoryType: 'ordered_material', itemLabel: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total' }],
+    },
     totals: { budgetAmount: '2000', budgetCurrency: 'GBP', knownSpendAmount: '1440', knownSpendCurrency: 'GBP', remainingAmount: '560', remainingLabel: '£560 remaining', overBudget: false },
   }
 }
@@ -215,12 +218,70 @@ describe('Workspace — Spend tab', () => {
   it('lists uncategorised counted spend and not-counted bought items separately', async () => {
     renderWorkspace()
     openTab('Spend')
-    const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
+    const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
     expect(within(counted).getByText(/hardcore/)).toBeTruthy()
     // no-price items live in the unified "Not counted yet" area
     const notCounted = screen.getByRole('region', { name: /not counted yet/i })
     expect(within(notCounted).getByText(/timber/)).toBeTruthy()
     expect(within(notCounted).getByText(/No price yet/i)).toBeTruthy()
+  })
+
+  // Regression: uncategorised spend must be driven by budgetSummary.uncategorized.rows
+  // (authoritative, includes labour), not re-derived from ordered_materials alone.
+  it('shows uncategorised labour alongside bought items, and the hero total includes both', async () => {
+    const HARDCORE = orderedItem({ id: 'mem-hardcore2', summary: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP', budgetCategoryId: null })
+    const ELECTRICS = orderedItem({ id: 'lab-electrics', memoryType: 'labour', summary: 'electrics', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', totalCostAmount: '280', costCurrency: 'GBP', budgetCategoryId: null })
+    const ROOF = orderedItem({ id: 'lab-roof', memoryType: 'labour', summary: 'roof', labourTask: 'roof', totalCostAmount: '600', costCurrency: 'GBP', budgetCategoryId: null })
+
+    mockGetMemoryView.mockResolvedValue({
+      job: JOB, generatedAt: '',
+      sections: [
+        { key: 'ordered_materials', label: 'Ordered materials', items: [HARDCORE] },
+        { key: 'labour', label: 'Labour', items: [ELECTRICS, ROOF] },
+        { key: 'used_materials', label: 'Used materials', items: [] },
+        { key: 'leftovers', label: 'Leftovers', items: [] },
+        { key: 'supplier_delivery_notes', label: 'Supplier delivery notes', items: [] },
+        { key: 'customer_changes', label: 'Customer changes', items: [] },
+        { key: 'watch_outs', label: 'Watch outs', items: [] },
+      ],
+      stillToCheck: { count: 0, items: [] },
+      costSummary: {
+        orderedMaterials: { knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend', includedMemoryItemIds: ['mem-hardcore2'], missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], rows: [{ key: 'hardcore|bags', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total', memoryItemIds: ['mem-hardcore2'] }], excludedRows: [] },
+        labour: {
+          knownSpendAmount: '880', knownSpendCurrency: 'GBP', knownSpendLabel: '£880 known spend',
+          includedMemoryItemIds: ['lab-electrics', 'lab-roof'],
+          rows: [
+            { memoryItemId: 'lab-electrics', itemLabel: 'electrics', labourHours: '8', labourPerson: null, labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' },
+            { memoryItemId: 'lab-roof', itemLabel: 'roof', labourHours: null, labourPerson: null, labourTask: 'roof', lineTotalAmount: '600', lineTotalCurrency: 'GBP', lineTotalLabel: '£600 total' },
+          ],
+          excludedRows: [],
+        },
+        totalKnownCost: { knownSpendAmount: '920', knownSpendCurrency: 'GBP', knownSpendLabel: '£920 known spend', includedMemoryItemIds: ['mem-hardcore2', 'lab-electrics', 'lab-roof'] },
+      },
+    })
+    mockGetBudgetSummary.mockResolvedValue({
+      jobId: JOB.id, generatedAt: '', categories: [],
+      uncategorized: {
+        knownSpendAmount: '920', knownSpendCurrency: 'GBP', knownSpendLabel: '£920 known spend',
+        rows: [
+          { memoryItemId: 'mem-hardcore2', memoryType: 'ordered_material', itemLabel: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total' },
+          { memoryItemId: 'lab-electrics', memoryType: 'labour', itemLabel: 'electrics', materialName: null, quantity: null, unit: null, labourHours: '8', labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' },
+          { memoryItemId: 'lab-roof', memoryType: 'labour', itemLabel: 'roof', materialName: null, quantity: null, unit: null, labourTask: 'roof', lineTotalAmount: '600', lineTotalCurrency: 'GBP', lineTotalLabel: '£600 total' },
+        ],
+      },
+      totals: { budgetAmount: null, budgetCurrency: null, knownSpendAmount: '920', knownSpendCurrency: 'GBP', remainingAmount: null, remainingLabel: null, overBudget: false },
+    })
+
+    renderWorkspace()
+    openTab('Spend')
+
+    const hero = await spendHero()
+    expect(within(hero).getByText(/£920/)).toBeTruthy()
+
+    const section = await screen.findByRole('region', { name: /uncategorised spend/i })
+    expect(within(section).getByText(/hardcore/)).toBeTruthy()
+    expect(within(section).getByText(/electrics/)).toBeTruthy()
+    expect(within(section).getByText(/roof/)).toBeTruthy()
   })
 })
 
@@ -294,7 +355,7 @@ describe('Workspace — assign / fix / verify', () => {
     mockAssignMemoryItemCategory.mockResolvedValue(orderedItem({ id: 'mem-hardcore', budgetCategoryId: 'c1' }))
     renderWorkspace()
     openTab('Spend')
-    const counted = await screen.findByRole('region', { name: /uncategorised bought/i })
+    const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
     fireEvent.change(within(counted).getByLabelText(/budget category for hardcore/i), { target: { value: 'c1' } })
     await waitFor(() => expect(mockAssignMemoryItemCategory).toHaveBeenCalledWith('job-mem-001', 'mem-hardcore', 'c1'))
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
