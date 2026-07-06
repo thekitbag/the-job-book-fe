@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import App from '../App'
-import { getJobs, ApiError } from '../api'
+import { getJobs, logout, onUnauthorized, ApiError } from '../api'
 
 vi.mock('../db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../db')>()
@@ -14,7 +14,8 @@ vi.mock('../api', async (importOriginal) => {
     getJobs: vi.fn(),
     getCurrentJob: vi.fn(),
     createJob: vi.fn(),
-    pilotLogin: vi.fn(),
+    logout: vi.fn(() => Promise.resolve()),
+    onUnauthorized: vi.fn(),
     uploadNote: vi.fn(),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getNoteTranscript: vi.fn(),
@@ -28,11 +29,12 @@ vi.mock('../api', async (importOriginal) => {
 })
 
 vi.mock('../CurrentJobWorkspace', () => ({
-  default: ({ job, onOpenReviewQueue, onSwitchJob }: { job: { id: string; title: string }; onOpenReviewQueue: () => void; onSwitchJob: () => void }) => (
+  default: ({ job, onOpenReviewQueue, onSwitchJob, onLogout }: { job: { id: string; title: string }; onOpenReviewQueue: () => void; onSwitchJob: () => void; onLogout: () => void }) => (
     <div data-testid="workspace-screen" data-job-id={job.id}>
       {job.title}
       <button onClick={onOpenReviewQueue}>mock-open-queue</button>
       <button onClick={onSwitchJob}>mock-switch-job</button>
+      <button onClick={onLogout}>mock-logout</button>
     </div>
   ),
 }))
@@ -52,15 +54,17 @@ vi.mock('../JobPickerScreen', () => ({
   ),
 }))
 
-vi.mock('../PasscodeScreen', () => ({
-  default: ({ onLoginSuccess }: { onLoginSuccess: () => void }) => (
-    <div data-testid="passcode-screen">
-      <button onClick={onLoginSuccess}>mock-login</button>
+vi.mock('../AuthScreen', () => ({
+  default: ({ onAuthSuccess }: { onAuthSuccess: (user: { id: string; email: string; name: string }) => void }) => (
+    <div data-testid="auth-screen">
+      <button onClick={() => onAuthSuccess({ id: 'user-mike', email: 'mike@thejobbook.test', name: 'Mike' })}>mock-login</button>
     </div>
   ),
 }))
 
 const mockGetJobs = vi.mocked(getJobs)
+const mockLogout = vi.mocked(logout)
+const mockOnUnauthorized = vi.mocked(onUnauthorized)
 
 const JOB_A = {
   id: 'job-001',
@@ -119,27 +123,36 @@ describe('App', () => {
     expect(parsed[0].id).toBe(JOB_A.id)
   })
 
-  it('shows passcode screen when getJobs returns 401', async () => {
+  it('shows auth screen when getJobs returns 401', async () => {
     mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('passcode-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+  })
+
+  it('shows no protected screen — workspace, review queue, or job picker — when unauthenticated', async () => {
+    mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('review-queue-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('job-picker-screen')).not.toBeInTheDocument()
   })
 
   it('does not use cached jobs for a 401 — user must re-authenticate', async () => {
     localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify([JOB_A]))
     mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('passcode-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
-  it('reloads jobs after successful login via passcode screen', async () => {
+  it('reloads jobs after successful login via auth screen', async () => {
     mockGetJobs
       .mockRejectedValueOnce(new ApiError('Unauthorized', 401))
       .mockResolvedValue([JOB_A])
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('passcode-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'mock-login' }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(mockGetJobs).toHaveBeenCalledTimes(2)
@@ -243,5 +256,71 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-open-queue/i }))
     await waitFor(() => expect(screen.getByTestId('review-queue-screen')).toBeInTheDocument())
+  })
+
+  it('logout calls the backend, clears cached job data, and shows the auth screen', async () => {
+    localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify([JOB_A]))
+    localStorage.setItem(SELECTED_ID_KEY, JOB_A.id)
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-logout/i }))
+
+    await waitFor(() => expect(mockLogout).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    expect(localStorage.getItem(CACHED_JOBS_KEY)).toBeNull()
+    expect(localStorage.getItem(SELECTED_ID_KEY)).toBeNull()
+  })
+
+  it('still clears local state and shows the auth screen if the backend logout call fails', async () => {
+    mockLogout.mockRejectedValueOnce(new Error('network error'))
+    localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify([JOB_A]))
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-logout/i }))
+
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(localStorage.getItem(CACHED_JOBS_KEY)).toBeNull()
+  })
+
+  it('registers a global 401 handler that clears cached job data and shows the auth screen', async () => {
+    localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify([JOB_A]))
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+
+    expect(mockOnUnauthorized).toHaveBeenCalled()
+    const registeredHandler = mockOnUnauthorized.mock.calls[mockOnUnauthorized.mock.calls.length - 1][0]!
+
+    // Simulate a 401 surfacing from some other in-app data load (memory view,
+    // budget summary, etc.) — not just the initial getJobs call.
+    registeredHandler()
+
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    expect(localStorage.getItem(CACHED_JOBS_KEY)).toBeNull()
+  })
+
+  it('shows the auth screen for a reset-token URL even with a valid session — an old tab may still be logged in', async () => {
+    const originalLocation = window.location.href
+    window.history.pushState({}, '', '/?reset_token=some-token')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    window.history.pushState({}, '', originalLocation)
+  })
+
+  it('proceeds to the workspace once the reset-token auth screen reports success', async () => {
+    const originalLocation = window.location.href
+    window.history.pushState({}, '', '/?reset_token=some-token')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'mock-login' }))
+
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('auth-screen')).not.toBeInTheDocument()
+    window.history.pushState({}, '', originalLocation)
   })
 })

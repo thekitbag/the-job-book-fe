@@ -1,4 +1,4 @@
-import type { AlreadyRememberedItem, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, CreateMemoryItemRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
+import type { AlreadyRememberedItem, AuthUser, BudgetCategory, BudgetSummaryResponse, CandidateFact, ConfidenceLabel, CreateBudgetCategoryRequest, CreateMemoryItemRequest, ExtractionStatus, FactType, InspectionData, Job, JobType, LocalNote, MemoryItemEdit, MemoryType, MemoryViewItem, MemoryViewResponse, MemoryViewSection, PatchBudgetCategoryRequest, QueueDecision, QueueDecisionResponse, QueueItem, ReviewDecision, ReviewDecisionResponse, ReviewDraftSection, ReviewQueue, TranscriptStatus } from './types'
 import { deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveLabourSummary, deriveTotalKnownCost, MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER, suggestBudgetCategory } from './memoryScan'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
@@ -12,9 +12,19 @@ export class ApiError extends Error {
   }
 }
 
+// Any apiFetch 401 notifies this listener, regardless of which endpoint expired
+// — the app registers one on mount so a session lapsing mid-use clears stale
+// job data everywhere, not just on the initial load.
+let unauthorizedListener: (() => void) | null = null
+export function onUnauthorized(listener: (() => void) | null): void {
+  unauthorizedListener = listener
+}
+
 // All real-mode API calls go through apiFetch so credentials are always included.
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' })
+  const res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' })
+  if (res.status === 401) unauthorizedListener?.()
+  return res
 }
 
 export interface UploadNoteResponse {
@@ -49,20 +59,139 @@ function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
 }
 
-// POST /api/auth/pilot-login — exchange passcode for a session cookie.
-export async function pilotLogin(passcode: string): Promise<void> {
+// ── Email/password auth ──────────────────────────────────────────────────────
+// Error bodies are `{ code, message }` (see backend AUTH_STATUS_MAP). Known
+// codes get fixed, tested frontend copy; anything else falls back to the
+// backend's own message (e.g. field-validation text), then a generic string.
+const AUTH_ERROR_COPY: Record<string, string> = {
+  INVALID_CREDENTIALS: 'Invalid email or password',
+  EMAIL_IN_USE: 'That email is already registered',
+  RESET_TOKEN_INVALID: 'This reset link is no longer valid',
+}
+
+async function authErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { code?: string; message?: string }
+    if (body.code && AUTH_ERROR_COPY[body.code]) return AUTH_ERROR_COPY[body.code]
+    return body.message || fallback
+  } catch {
+    return fallback
+  }
+}
+
+// Mock mode mirrors per-account job ownership without a real backend: Mike is
+// the seeded pilot account and owns MOCK_JOBS; anyone who signs up fresh in
+// mock mode starts with no jobs (see the `mockSession` check in getJobs below).
+//
+// Mock mode starts already signed in as Mike — every existing mock-mode e2e
+// spec across the app (spend, direct-add, review queue, etc.) relies on
+// landing straight on the workspace with no login step. A spec that wants a
+// genuinely unauthenticated start should call logout() first.
+const MOCK_MIKE_EMAIL = 'mike@thejobbook.test'
+const MOCK_MIKE_USER: AuthUser = { id: 'user-mock-mike', email: MOCK_MIKE_EMAIL, name: 'Mike', role: 'PILOT' }
+const MOCK_RESET_TOKEN = 'mock-reset-token'
+const mockAccounts = new Map<string, { password: string; user: AuthUser }>([
+  [MOCK_MIKE_EMAIL, { password: 'demo', user: MOCK_MIKE_USER }],
+])
+let mockSession: AuthUser | null = MOCK_MIKE_USER
+
+// POST /api/auth/signup — 201 on success.
+export async function signup(email: string, password: string, name?: string): Promise<AuthUser> {
+  const normalized = email.trim().toLowerCase()
   if (USE_MOCK) {
     await delay(300)
-    if (passcode !== 'demo') throw new ApiError('Wrong passcode', 401)
-    return
+    if (mockAccounts.has(normalized)) throw new ApiError(AUTH_ERROR_COPY.EMAIL_IN_USE, 409)
+    const user: AuthUser = { id: `user-mock-${Date.now()}`, email: normalized, name: name?.trim() || 'Builder', role: 'PILOT' }
+    mockAccounts.set(normalized, { password, user })
+    mockSession = user
+    return user
   }
-  const res = await apiFetch('/api/auth/pilot-login', {
+  const res = await apiFetch('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ passcode }),
+    body: JSON.stringify({ email: normalized, password, name }),
   })
-  if (res.status === 401) throw new ApiError('Wrong passcode', 401)
-  if (!res.ok) throw new ApiError(`POST /api/auth/pilot-login → ${res.status}`, res.status)
+  if (!res.ok) throw new ApiError(await authErrorMessage(res, 'Could not create account — check details and try again'), res.status)
+  return ((await res.json()) as { user: AuthUser }).user
+}
+
+// POST /api/auth/login
+export async function login(email: string, password: string): Promise<AuthUser> {
+  const normalized = email.trim().toLowerCase()
+  if (USE_MOCK) {
+    await delay(300)
+    const account = mockAccounts.get(normalized)
+    if (!account || account.password !== password) throw new ApiError(AUTH_ERROR_COPY.INVALID_CREDENTIALS, 401)
+    mockSession = account.user
+    return account.user
+  }
+  const res = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: normalized, password }),
+  })
+  if (!res.ok) throw new ApiError(await authErrorMessage(res, AUTH_ERROR_COPY.INVALID_CREDENTIALS), res.status)
+  return ((await res.json()) as { user: AuthUser }).user
+}
+
+// POST /api/auth/logout — clears jobbook_session (and any legacy pilot_session).
+export async function logout(): Promise<void> {
+  if (USE_MOCK) {
+    await delay(150)
+    mockSession = null
+    return
+  }
+  const res = await apiFetch('/api/auth/logout', { method: 'POST' })
+  if (!res.ok) throw new ApiError(`POST /api/auth/logout → ${res.status}`, res.status)
+}
+
+// GET /api/auth/me — 401 when unauthenticated (or the session's user no longer exists).
+export async function getCurrentUser(): Promise<AuthUser> {
+  if (USE_MOCK) {
+    await delay(150)
+    if (!mockSession) throw new ApiError('Unauthorized', 401)
+    return mockSession
+  }
+  const res = await apiFetch('/api/auth/me')
+  if (res.status === 401) throw new ApiError('Unauthorized', 401)
+  if (!res.ok) throw new ApiError(`GET /api/auth/me → ${res.status}`, res.status)
+  return ((await res.json()) as { user: AuthUser }).user
+}
+
+// POST /api/auth/password-reset/request — backend always returns { ok: true },
+// even on internal failure, so it never reveals whether the email exists.
+export async function requestPasswordReset(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase()
+  if (USE_MOCK) {
+    await delay(300)
+    if (import.meta.env.DEV) console.info(`[mock] password reset requested for ${normalized} — token: ${MOCK_RESET_TOKEN}`)
+    return
+  }
+  await apiFetch('/api/auth/password-reset/request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: normalized }),
+  })
+}
+
+// POST /api/auth/password-reset/confirm — success sets the session cookie and
+// returns the now-logged-in user; callers should treat it exactly like login.
+export async function confirmPasswordReset(token: string, password: string): Promise<AuthUser> {
+  if (USE_MOCK) {
+    await delay(300)
+    if (token !== MOCK_RESET_TOKEN) throw new ApiError(AUTH_ERROR_COPY.RESET_TOKEN_INVALID, 400)
+    const account = mockAccounts.get(MOCK_MIKE_EMAIL)!
+    account.password = password
+    mockSession = account.user
+    return account.user
+  }
+  const res = await apiFetch('/api/auth/password-reset/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  })
+  if (!res.ok) throw new ApiError(await authErrorMessage(res, AUTH_ERROR_COPY.RESET_TOKEN_INVALID), res.status)
+  return ((await res.json()) as { user: AuthUser }).user
 }
 
 export async function getCurrentJob(): Promise<Job> {
@@ -79,6 +208,8 @@ export async function getCurrentJob(): Promise<Job> {
 export async function getJobs(): Promise<Job[]> {
   if (USE_MOCK) {
     await delay(300)
+    // A signed-up mock account other than seeded Mike starts with no jobs.
+    if (mockSession && mockSession.email !== MOCK_MIKE_EMAIL) return []
     return MOCK_JOBS
   }
   const res = await apiFetch('/api/jobs')

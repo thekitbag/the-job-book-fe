@@ -1,3 +1,12 @@
+// Authenticated account — replaces the single shared pilot passcode identity.
+// Backend always includes `role` (defaults to PILOT).
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  role: 'PILOT' | 'INTERNAL'
+}
+
 export type LocalNoteState =
   | 'saved_local'
   | 'uploading'

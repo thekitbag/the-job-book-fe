@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getJobs, ApiError } from './api'
+import { getJobs, logout, onUnauthorized, ApiError } from './api'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
-import PasscodeScreen from './PasscodeScreen'
+import AuthScreen from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import JobPickerScreen from './JobPickerScreen'
 import type { Job } from './types'
@@ -22,6 +22,13 @@ function loadSelectedJobId(): string | null {
   return localStorage.getItem(SELECTED_JOB_ID_KEY)
 }
 
+// Never leave another account's job data visible/cached after logout or a
+// session lapsing mid-use (401 from any core data load).
+function clearLocalJobData() {
+  localStorage.removeItem(CACHED_JOBS_KEY)
+  localStorage.removeItem(SELECTED_JOB_ID_KEY)
+}
+
 function pickJob(jobs: Job[], storedId: string | null): Job | null {
   if (storedId) {
     const match = jobs.find(j => j.id === storedId)
@@ -34,6 +41,10 @@ type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
 type AppView = 'workspace' | 'reviewQueue' | 'jobPicker'
 
 export default function App() {
+  // A password-reset link must work even for a browser that still has a valid
+  // session (an old tab left open, a stale cookie, etc.) — always defer to
+  // AuthScreen's reset-confirm flow when the URL carries a reset token.
+  const [hasResetToken, setHasResetToken] = useState(() => new URLSearchParams(window.location.search).has('reset_token'))
   const [appState, setAppState] = useState<AppState>('loading')
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
@@ -50,6 +61,19 @@ export default function App() {
       window.removeEventListener('online', setOn)
       window.removeEventListener('offline', setOff)
     }
+  }, [])
+
+  // A 401 from any in-app data load (not just the initial jobs fetch) means
+  // the session has lapsed — drop straight back to the auth screen with no
+  // stale job data left visible.
+  useEffect(() => {
+    onUnauthorized(() => {
+      clearLocalJobData()
+      setJobs([])
+      setSelectedJob(null)
+      setAppState('unauthenticated')
+    })
+    return () => onUnauthorized(null)
   }, [])
 
   const loadJobs = useCallback(() => {
@@ -104,6 +128,24 @@ export default function App() {
     handleSelectJob(job)
   }
 
+  // Clear local state regardless of whether the backend call succeeds — the
+  // priority is never showing this account's data again once Mike has logged out.
+  async function handleLogout() {
+    try {
+      await logout()
+    } catch {
+      // ignored — local state is cleared unconditionally below
+    }
+    clearLocalJobData()
+    setJobs([])
+    setSelectedJob(null)
+    setAppState('unauthenticated')
+  }
+
+  if (hasResetToken) {
+    return <AuthScreen onAuthSuccess={() => { setHasResetToken(false); loadJobs() }} />
+  }
+
   if (appState === 'loading') {
     return (
       <div className="app-loading">
@@ -113,7 +155,7 @@ export default function App() {
   }
 
   if (appState === 'unauthenticated') {
-    return <PasscodeScreen onLoginSuccess={loadJobs} />
+    return <AuthScreen onAuthSuccess={() => loadJobs()} />
   }
 
   if (appState === 'error') {
@@ -171,6 +213,7 @@ export default function App() {
       job={selectedJob}
       onOpenReviewQueue={() => setView('reviewQueue')}
       onSwitchJob={() => setView('jobPicker')}
+      onLogout={handleLogout}
     />
   )
 }

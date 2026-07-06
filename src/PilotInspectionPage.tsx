@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getJobs, getInspectionData, ApiError } from './api'
-import PasscodeScreen from './PasscodeScreen'
+import { getJobs, getInspectionData, getCurrentUser, ApiError } from './api'
+import AuthScreen from './AuthScreen'
 import type {
   InspectionCandidateFact,
   InspectionData,
@@ -219,6 +219,19 @@ function InspectionView({ data }: { data: InspectionData }) {
 // ── Page root ─────────────────────────────────────────────────────────────────
 
 export default function PilotInspectionPage() {
+  // This is a founder/internal support tool gated on being logged in with an
+  // account (INTERNAL role for cross-user inspection) — check auth before
+  // ever showing the inspection-key prompt.
+  const [authChecked, setAuthChecked] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(() => setAuthenticated(true))
+      .catch(() => setAuthenticated(false))
+      .finally(() => setAuthChecked(true))
+  }, [])
+
   const [inspectionKey, setInspectionKey] = useState(
     () => sessionStorage.getItem(INSPECTION_KEY_SESSION) ?? ''
   )
@@ -308,11 +321,18 @@ export default function PilotInspectionPage() {
         )}
       </header>
 
-      {/* Passcode required (session expired or first visit without cookie) */}
-      {needsAuth && <PasscodeScreen onLoginSuccess={handleLoginSuccess} />}
+      {/* Not logged in at all on first visit */}
+      {authChecked && !authenticated && (
+        <AuthScreen onAuthSuccess={() => setAuthenticated(true)} />
+      )}
+
+      {/* Session expired mid-use (after the inspection key was already entered) */}
+      {authChecked && authenticated && needsAuth && (
+        <AuthScreen onAuthSuccess={handleLoginSuccess} />
+      )}
 
       {/* Key prompt */}
-      {!needsAuth && !inspectionKey && (
+      {authChecked && authenticated && !needsAuth && !inspectionKey && (
         <form className="insp-key-form" aria-label="Inspection key" onSubmit={submitKey}>
           <label className="insp-key-label">
             <span>Inspection key</span>
