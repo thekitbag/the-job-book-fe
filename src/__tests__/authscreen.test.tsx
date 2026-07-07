@@ -189,14 +189,30 @@ describe('AuthScreen — forgot password (request)', () => {
 describe('AuthScreen — reset confirm', () => {
   afterEach(() => setLocationSearch(''))
 
-  it('starts directly in reset-confirm mode when a reset token is present in the URL', () => {
+  it('starts directly in reset-confirm mode for the canonical ?token= param (matches the backend reset link)', () => {
+    setLocationSearch('?token=mock-reset-token')
+    render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)
+    expect(screen.getByRole('form', { name: /choose new password/i })).toBeInTheDocument()
+  })
+
+  it('still accepts ?reset_token= for backwards compatibility', () => {
     setLocationSearch('?reset_token=mock-reset-token')
     render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)
     expect(screen.getByRole('form', { name: /choose new password/i })).toBeInTheDocument()
   })
 
+  it('prefers ?token= over ?reset_token= when both are somehow present', async () => {
+    setLocationSearch('?token=canonical-token&reset_token=legacy-token')
+    mockConfirmPasswordReset.mockResolvedValue({ id: 'user-mike', email: 'mike@thejobbook.test', name: 'Mike', role: 'PILOT' })
+    const user = userEvent.setup()
+    render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)
+    await user.type(screen.getByLabelText(/^new password$/i), 'a-new-strong-password')
+    await user.click(screen.getByRole('button', { name: /save new password/i }))
+    await waitFor(() => expect(mockConfirmPasswordReset).toHaveBeenCalledWith('canonical-token', 'a-new-strong-password'))
+  })
+
   it('confirms a new password and logs straight in — the backend sets the session on a successful reset', async () => {
-    setLocationSearch('?reset_token=mock-reset-token')
+    setLocationSearch('?token=mock-reset-token')
     const RESET_USER: AuthUser = { id: 'user-mike', email: 'mike@thejobbook.test', name: 'Mike', role: 'PILOT' }
     mockConfirmPasswordReset.mockResolvedValue(RESET_USER)
     const user = userEvent.setup()
@@ -210,7 +226,7 @@ describe('AuthScreen — reset confirm', () => {
   })
 
   it('shows a specific error for an invalid or expired reset link', async () => {
-    setLocationSearch('?reset_token=stale-token')
+    setLocationSearch('?token=stale-token')
     mockConfirmPasswordReset.mockRejectedValue(new ApiError('This reset link is no longer valid', 400))
     const user = userEvent.setup()
     render(<AuthScreen onAuthSuccess={mockOnAuthSuccess} />)

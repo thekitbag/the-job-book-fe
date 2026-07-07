@@ -58,6 +58,10 @@ vi.mock('../AuthScreen', () => ({
       <button onClick={() => onAuthSuccess({ id: 'user-mike', email: 'mike@thejobbook.test', name: 'Mike' })}>mock-login</button>
     </div>
   ),
+  getResetToken: () => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('token') ?? params.get('reset_token')
+  },
 }))
 
 const mockGetJobs = vi.mocked(getJobs)
@@ -300,7 +304,16 @@ describe('App', () => {
     expect(localStorage.getItem(CACHED_JOBS_KEY)).toBeNull()
   })
 
-  it('shows the auth screen for a reset-token URL even with a valid session — an old tab may still be logged in', async () => {
+  it('shows the auth screen for a ?token= reset URL (matches the backend reset link) even with a valid session', async () => {
+    const originalLocation = window.location.href
+    window.history.pushState({}, '', '/?token=some-token')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    window.history.pushState({}, '', originalLocation)
+  })
+
+  it('still shows the auth screen for the legacy ?reset_token= param', async () => {
     const originalLocation = window.location.href
     window.history.pushState({}, '', '/?reset_token=some-token')
     render(<App />)
