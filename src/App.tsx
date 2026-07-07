@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getJobs, logout, onUnauthorized, ApiError } from './api'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
-import AuthScreen from './AuthScreen'
+import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import JobPickerScreen from './JobPickerScreen'
 import type { Job } from './types'
@@ -44,7 +44,7 @@ export default function App() {
   // A password-reset link must work even for a browser that still has a valid
   // session (an old tab left open, a stale cookie, etc.) — always defer to
   // AuthScreen's reset-confirm flow when the URL carries a reset token.
-  const [hasResetToken, setHasResetToken] = useState(() => new URLSearchParams(window.location.search).has('reset_token'))
+  const [hasResetToken, setHasResetToken] = useState(() => !!getResetToken())
   const [appState, setAppState] = useState<AppState>('loading')
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)

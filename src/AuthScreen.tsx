@@ -6,12 +6,15 @@ type Mode = 'login' | 'signup' | 'reset-request' | 'reset-confirm'
 
 const NETWORK_ERROR = 'Could not reach the server — tap to retry'
 
-function readResetToken(): string | null {
-  return new URLSearchParams(window.location.search).get('reset_token')
+// Backend reset-link URLs use `token` (see buildResetUrl); `reset_token` is
+// kept as a fallback for any link generated before this was caught.
+export function getResetToken(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('token') ?? params.get('reset_token')
 }
 
 export default function AuthScreen({ onAuthSuccess }: { onAuthSuccess: (user: AuthUser) => void }) {
-  const [resetToken] = useState(readResetToken)
+  const [resetToken] = useState(getResetToken)
   const [mode, setMode] = useState<Mode>(resetToken ? 'reset-confirm' : 'login')
 
   const [email, setEmail] = useState('')

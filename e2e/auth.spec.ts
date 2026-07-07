@@ -87,8 +87,9 @@ test.describe('Email/password auth (mock mode)', () => {
     await page.getByRole('button', { name: /send reset link/i }).click()
     await expect(page.getByRole('status')).toContainText(/if an account exists/i)
 
-    // Follow the reset link (deterministic mock token — see api.ts MOCK_RESET_TOKEN).
-    await page.goto('/?reset_token=mock-reset-token')
+    // Follow the reset link exactly as the backend sends it: ?token=... (see
+    // buildResetUrl on the backend and api.ts MOCK_RESET_TOKEN on the frontend).
+    await page.goto('/?token=mock-reset-token')
     await expect(page.getByRole('form', { name: /choose new password/i })).toBeVisible()
     await page.getByLabel(/^new password$/i).fill('a-new-strong-password')
     await page.getByRole('button', { name: /save new password/i }).click()
@@ -98,11 +99,19 @@ test.describe('Email/password auth (mock mode)', () => {
   })
 
   test('an invalid or expired reset link shows a specific, retryable error', async ({ page }) => {
-    await page.goto('/?reset_token=stale-token')
+    await page.goto('/?token=stale-token')
     await expect(page.getByRole('form', { name: /choose new password/i })).toBeVisible()
     await page.getByLabel(/^new password$/i).fill('a-new-strong-password')
     await page.getByRole('button', { name: /save new password/i }).click()
 
     await expect(page.getByRole('alert')).toContainText(/no longer valid/i)
+  })
+
+  test('the legacy ?reset_token= param still works (backwards compatibility)', async ({ page }) => {
+    await page.goto('/?reset_token=mock-reset-token')
+    await expect(page.getByRole('form', { name: /choose new password/i })).toBeVisible()
+    await page.getByLabel(/^new password$/i).fill('a-new-strong-password')
+    await page.getByRole('button', { name: /save new password/i }).click()
+    await expect(page.locator('.ws-job-title')).toHaveText('Garden Room')
   })
 })
