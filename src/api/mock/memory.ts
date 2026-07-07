@@ -1,0 +1,162 @@
+import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse } from '../../types'
+import { deriveCostSummary, deriveEachTotal, deriveLabourSummary, deriveTotalKnownCost } from '../../memoryScan'
+import { ApiError } from '../client'
+import { MOCK_JOBS } from './jobs'
+import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
+
+export function mockMemoryView(jobId: string): MemoryViewResponse {
+  const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
+  const sections = mockSectionsFor(jobId)
+  return {
+    job,
+    generatedAt: new Date().toISOString(),
+    // Deep-ish copy so callers cannot mutate the stored fixture in place.
+    sections: sections.map(s => ({ ...s, items: s.items.map(it => ({ ...it })) })),
+    stillToCheck: {
+      count: 2,
+      items: [
+        {
+          id: 'queue-item-stc-001',
+          sectionKey: 'unclear_items',
+          summary: 'Something about extra cable in the workshop',
+          kind: 'unclear_prompt',
+          timeLabel: 'Today',
+        },
+      ],
+    },
+    // Authoritative known spend, derived from current state so an edit changes it.
+    costSummary: {
+      orderedMaterials: deriveCostSummary(sections),
+      labour: deriveLabourSummary(sections),
+      totalKnownCost: deriveTotalKnownCost(sections),
+    },
+  }
+}
+
+export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryItemEdit): MemoryViewItem {
+  const sections = mockSectionsFor(jobId)
+  const existing = findMockItem(sections, memoryItemId)
+  const now = new Date().toISOString()
+  const draft: MemoryViewItem = {
+    id: memoryItemId,
+    memoryType: edit.memoryType,
+    summary: edit.summary ?? existing?.summary ?? '',
+    materialName: edit.materialName,
+    quantity: edit.quantity,
+    unit: edit.unit,
+    supplierName: edit.supplierName,
+    deliveryTiming: edit.deliveryTiming,
+    locationOrUse: edit.locationOrUse,
+    costAmount: edit.costAmount,
+    costCurrency: edit.costCurrency,
+    costQualifier: edit.costQualifier,
+    totalCostAmount: 'totalCostAmount' in edit ? (edit.totalCostAmount ?? null) : (existing?.totalCostAmount ?? null),
+    // Labour fields only meaningful for labour; cleared otherwise.
+    labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
+    labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
+    labourTask: edit.memoryType === 'labour' ? (edit.labourTask ?? null) : null,
+    // A Fix-memory save also resolves any worth-checking flags.
+    uncertaintyFlags: [],
+    // Preserve the existing category unless this edit explicitly changes it.
+    budgetCategoryId: edit.budgetCategoryId !== undefined ? edit.budgetCategoryId : (existing?.budgetCategoryId ?? null),
+    sourceCandidateFactId: existing?.sourceCandidateFactId ?? null,
+    reviewDecisionId: existing?.reviewDecisionId ?? null,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    source: existing?.source ?? null,
+  }
+  const updated: MemoryViewItem = {
+    ...draft,
+    // Present key → honour value/null (explicit set/clear). Omitted → derive
+    // fresh quantity × unit cost for an `each` line, else preserve existing.
+    totalCostAmount: 'totalCostAmount' in edit ? draft.totalCostAmount : (deriveEachTotal(draft) ?? draft.totalCostAmount),
+  }
+  // Remove from its current section, then re-home by the (possibly new) type.
+  upsertMockItem(sections, updated)
+  return { ...updated }
+}
+
+export function mockVerifyMemoryItem(jobId: string, memoryItemId: string): void {
+  const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
+  if (item) item.uncertaintyFlags = []
+}
+
+let mockManualSeq = 0
+
+// Backend guarantees a non-empty summary; mirror its derivation so the mock
+// never stores a blank note.
+function deriveManualSummary(req: CreateMemoryItemRequest): string {
+  if (req.summary && req.summary.trim()) return req.summary.trim()
+  const qtyUnit = [req.quantity, req.unit].filter(Boolean).join(' ')
+  const nameBit = [qtyUnit, req.materialName].filter(Boolean).join(' ').trim()
+  switch (req.memoryType) {
+    case 'ordered_material':
+      return nameBit ? `Bought ${nameBit}` : (req.materialName?.trim() || 'Bought item')
+    case 'used_material':
+    case 'leftover_material':
+      return nameBit ? `Used ${nameBit}` : (req.materialName?.trim() || 'Used item')
+    case 'labour': {
+      const base = [req.labourPerson?.trim(), req.labourHours ? `${req.labourHours} hours` : null].filter(Boolean).join(' — ') || 'Labour'
+      return req.labourTask?.trim() ? `${base} (${req.labourTask.trim()})` : base
+    }
+    default:
+      return req.materialName?.trim() || 'Note'
+  }
+}
+
+export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest): MemoryViewItem {
+  if (!req.memoryType) throw new ApiError('memoryType required', 400)
+  const canCategorise = req.memoryType === 'ordered_material' || req.memoryType === 'labour'
+  if (req.budgetCategoryId) {
+    if (!canCategorise) throw new ApiError('Category not allowed for this type', 400)
+    const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === req.budgetCategoryId)
+    if (!cat || cat.isArchived) throw new ApiError('Invalid category assignment', 400)
+  }
+  const sections = mockSectionsFor(jobId)
+  const now = new Date().toISOString()
+  const isLabour = req.memoryType === 'labour'
+  const hasCost = !!(req.costAmount || req.totalCostAmount)
+  const item: MemoryViewItem = {
+    id: `mem-manual-${++mockManualSeq}`,
+    memoryType: req.memoryType,
+    summary: deriveManualSummary(req),
+    materialName: req.materialName ?? null,
+    quantity: req.quantity ?? null,
+    unit: req.unit ?? null,
+    supplierName: req.supplierName ?? null,
+    deliveryTiming: req.deliveryTiming ?? null,
+    locationOrUse: req.locationOrUse ?? null,
+    costAmount: req.costAmount ?? null,
+    costCurrency: req.costCurrency ?? (hasCost ? 'GBP' : null),
+    costQualifier: req.costQualifier ?? null,
+    // Explicit total wins; otherwise derive an `each` line total (quantity × unit
+    // cost) so direct-added spend counts like the backend would.
+    totalCostAmount: req.totalCostAmount ?? deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount: req.costAmount ?? null, costQualifier: req.costQualifier ?? null }),
+    labourHours: isLabour ? (req.labourHours ?? null) : null,
+    labourPerson: isLabour ? (req.labourPerson ?? null) : null,
+    labourTask: isLabour ? (req.labourTask ?? null) : null,
+    uncertaintyFlags: [],
+    budgetCategoryId: canCategorise ? (req.budgetCategoryId ?? null) : null,
+    happenedAt: req.happenedAt ?? null,
+    isManual: true,
+    sourceCandidateFactId: null,
+    reviewDecisionId: null,
+    createdAt: now,
+    updatedAt: now,
+    source: null,
+  }
+  upsertMockItem(sections, item)
+  return { ...item }
+}
+
+export function mockAssignMemoryItemCategory(jobId: string, memoryItemId: string, budgetCategoryId: string | null): MemoryViewItem {
+  const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
+  if (!item) throw new ApiError('Memory item not found', 404)
+  if (budgetCategoryId) {
+    const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === budgetCategoryId)
+    if (!cat || cat.isArchived) throw new ApiError('Invalid category assignment', 400)
+  }
+  item.budgetCategoryId = budgetCategoryId
+  item.updatedAt = new Date().toISOString()
+  return { ...item }
+}

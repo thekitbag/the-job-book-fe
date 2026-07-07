@@ -20,8 +20,6 @@ vi.mock('../api', async (importOriginal) => {
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getNoteTranscript: vi.fn(),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
-    getReviewDraft: vi.fn(),
-    submitReviewDecision: vi.fn(),
     getReviewQueue: vi.fn(),
     submitQueueDecision: vi.fn(),
     ApiError: actual.ApiError,
