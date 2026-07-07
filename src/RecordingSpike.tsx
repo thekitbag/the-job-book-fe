@@ -8,6 +8,7 @@ interface RecordingResult {
   mimeType: string
   durationMs: number
   url: string
+  downloadName: string
 }
 
 const MAX_DURATION_MS = 3 * 60 * 1000 // 3 minutes per spec
@@ -143,7 +144,9 @@ export default function RecordingSpike() {
       const mimeType = recorder.mimeType || supportedMimeType || 'audio/webm'
       const blob = new Blob(chunksRef.current, { type: mimeType })
       const url = URL.createObjectURL(blob)
-      setResult({ blob, mimeType, durationMs, url })
+      const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'webm'
+      const downloadName = `spike-recording-${Date.now()}.${ext}`
+      setResult({ blob, mimeType, durationMs, url, downloadName })
       setRecordingState('stopped')
       stopStream()
     }
@@ -278,7 +281,7 @@ export default function RecordingSpike() {
           <a
             className="btn btn-download"
             href={result.url}
-            download={`spike-recording-${Date.now()}.${result.mimeType.split('/')[1]?.split(';')[0] ?? 'webm'}`}
+            download={result.downloadName}
           >
             Download recording
           </a>

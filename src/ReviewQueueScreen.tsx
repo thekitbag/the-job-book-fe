@@ -764,7 +764,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     } finally {
       setSubmittingId(null)
     }
-  }, [queue, job.id, editingItemId])
+  }, [queue, job.id, editingItemId, activeCategories.length])
 
   // Correct an already-remembered (trusted) item in place via the same
   // updateMemoryItem path used in Job memory. Never re-queues the item.

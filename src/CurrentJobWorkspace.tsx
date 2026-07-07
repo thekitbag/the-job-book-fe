@@ -182,7 +182,13 @@ function CaptureConfirmation({
   const spinner = title === 'Saving your note…'
 
   return (
+    // Scrim click-to-dismiss is a pointer convenience duplicating the visible
+    // Done/close button, which stays keyboard-reachable; the inner card's
+    // onClick only stops propagation. TODO(a11y follow-up): add an Escape-key
+    // handler and focus trap for this dialog.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <div className="ws-capture-scrim" role="dialog" aria-modal="true" aria-label="Recording saved" onClick={onClose}>
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div className="ws-capture-card" onClick={e => e.stopPropagation()}>
         <div className="ws-capture-icon" aria-hidden="true">
           {spinner
@@ -393,7 +399,9 @@ export default function CurrentJobWorkspace({
         </div>
       </header>
 
-      <nav className="ws-tabs" role="tablist" aria-label="Job lenses">
+      {/* div, not nav: a tablist role must not override the nav landmark's
+          implicit navigation role (jsx-a11y/no-noninteractive-element-to-interactive-role) */}
+      <div className="ws-tabs" role="tablist" aria-label="Job lenses">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -405,7 +413,7 @@ export default function CurrentJobWorkspace({
             {t.label}
           </button>
         ))}
-      </nav>
+      </div>
 
       <div className="ws-body">
         {showBanner && (
