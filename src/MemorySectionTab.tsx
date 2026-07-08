@@ -54,7 +54,7 @@ export default function MemorySectionTab({
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label={ariaLabel}>
-      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} onAdd={addMemoryItem} />}
+      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} onAdd={addMemoryItem} actionHidden={rows.length === 0} />}
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -68,7 +68,7 @@ export default function MemorySectionTab({
           <EmptyState
             title="No notes yet"
             hint="Keep short job notes here — changes, watch-outs, things to remember. Or say it with Record."
-            action={<DirectAddForm kind={directAdd.kind} variant="button" buttonLabel="+ Add manually" label={directAdd.label} onAdd={addMemoryItem} />}
+            action={<DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} onAdd={addMemoryItem} />}
           />
         ) : (
           !footer && <p className="mem-tab-empty">Nothing remembered here yet.</p>
@@ -80,7 +80,7 @@ export default function MemorySectionTab({
           return (
             <section key={s.key} className="mem-section">
               {s.add
-                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={heading} onAdd={addMemoryItem} />
+                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={heading} onAdd={addMemoryItem} actionHidden={s.items.length === 0} />
                 : <h2 className="mem-section-heading">{heading}</h2>}
               {s.items.length > 0
                 ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />)
@@ -88,7 +88,7 @@ export default function MemorySectionTab({
                   ? <EmptyState
                       title={empty?.title ?? 'Nothing logged yet'}
                       hint={empty?.hint}
-                      action={<DirectAddForm kind={s.add.kind} variant="button" buttonLabel="+ Add manually" label={s.add.label} onAdd={addMemoryItem} />}
+                      action={<DirectAddForm kind={s.add.kind} variant="button" label={s.add.label} onAdd={addMemoryItem} />}
                     />
                   : <p className="mem-section-empty">None yet.</p>}
             </section>

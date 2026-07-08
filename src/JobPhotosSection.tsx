@@ -248,12 +248,11 @@ export default function JobPhotosSection({ jobId, linkTargets }: { jobId: string
         <span className="lens-add-label">Job photos</span>
         <button
           type="button"
-          className={`btn-lens-add${open ? ' btn-lens-add--open' : ''}`}
-          aria-label={open ? 'Close add photo' : 'Add photo'}
+          className="btn-lens-add-text"
           aria-expanded={open}
           onClick={() => { setUploadError(null); setOpen(o => !o) }}
         >
-          {open ? '×' : '+'}
+          {open ? 'Close' : 'Add photo'}
         </button>
       </div>
 

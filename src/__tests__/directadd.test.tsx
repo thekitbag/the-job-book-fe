@@ -278,7 +278,7 @@ describe('Manual Add V2 — spend category context', () => {
     renderWorkspace()
     await openTab('Spend')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
-    fireEvent.click(within(card).getByRole('button', { name: '+ Add spend' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Add to timber' }))
     const sheet = screen.getByRole('dialog', { name: 'Add spend — timber' })
     const select = within(sheet).getByLabelText('Budget category') as HTMLSelectElement
     expect(select.value).toBe('cat-timber')
@@ -291,7 +291,7 @@ describe('Manual Add V2 — spend category context', () => {
     renderWorkspace()
     await openTab('Spend')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
-    fireEvent.click(within(card).getByRole('button', { name: '+ Add spend' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Add to timber' }))
     const sheet = screen.getByRole('dialog', { name: 'Add spend — timber' })
     fireEvent.change(within(sheet).getByRole('form', { name: 'Add spend' }).querySelector('input[name="materialName"]')!, { target: { value: '4x2 CLS' } })
     const viewCalls = mockGetMemoryView.mock.calls.length
@@ -312,7 +312,7 @@ describe('Manual Add V2 — spend category context', () => {
     await openTab('Spend')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
     expect(within(card).getByText(/No spend in this category yet/)).toBeInTheDocument()
-    expect(within(card).getByRole('button', { name: '+ Add spend' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Add to timber' })).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /record/i })).toBeNull()
   })
 })
@@ -338,7 +338,7 @@ describe('Manual Add V2 — empty states', () => {
     expect(within(notesPanel).getByText('No notes yet')).toBeInTheDocument()
 
     // every empty state offers manual add…
-    expect(within(notesPanel).getByRole('button', { name: '+ Add manually' })).toBeInTheDocument()
+    expect(within(notesPanel).getByRole('button', { name: 'Add note' })).toBeInTheDocument()
     // …and none of the panels contain a Record button — the ONLY voice action
     // is the single global pinned Record bar.
     for (const panel of [notesPanel]) {
@@ -351,7 +351,7 @@ describe('Manual Add V2 — empty states', () => {
     renderWorkspace()
     await openTab('Labour')
     const panel = await screen.findByRole('tabpanel', { name: 'Labour' })
-    fireEvent.click(within(panel).getByRole('button', { name: '+ Add manually' }))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add labour' }))
     const sheet = screen.getByRole('dialog', { name: 'Add labour' })
     fireEvent.change(within(sheet).getByRole('form', { name: 'Add labour' }).querySelector('input[name="labourHours"]')!, { target: { value: '6' } })
     fireEvent.click(within(sheet).getByRole('button', { name: /^Save / }))
@@ -360,5 +360,57 @@ describe('Manual Add V2 — empty states', () => {
     })))
     // the new entry appears in the daily Labour view after refetch
     expect(await within(panel).findByText('6h')).toBeInTheDocument()
+  })
+})
+
+// ── Founder feedback round: no bare "+", no drag handle, no autofocus,
+//    clear add actions in non-empty sections ─────────────────────────────────
+
+describe('Manual Add V2 — founder feedback acceptance', () => {
+  it('has no standalone plus-only add buttons anywhere', async () => {
+    renderWorkspace()
+    for (const t of ['Spend', 'Labour', 'Used', 'Notes']) {
+      await openTab(t)
+      // no round "+" chrome, and no button whose accessible name is just "+"
+      expect(document.querySelector('.btn-lens-add')).toBeNull()
+      expect(screen.queryByRole('button', { name: /^\+$/ })).toBeNull()
+    }
+  })
+
+  it('non-empty sections still offer a clear text add action', async () => {
+    // seed one item into every lens so no empty states render
+    pushCreated({ memoryType: 'ordered_material', materialName: 'hardcore' })
+    pushCreated({ memoryType: 'labour', labourHours: '4', happenedAt: '2026-07-08T12:00:00' })
+    pushCreated({ memoryType: 'used_material', materialName: 'OSB' })
+    pushCreated({ memoryType: 'leftover_material', materialName: 'sand' })
+    pushCreated({ memoryType: 'general_note', summary: 'a note' })
+    renderWorkspace()
+
+    await openTab('Spend')
+    expect(await screen.findByRole('button', { name: 'Add spend' })).toBeInTheDocument()
+    await openTab('Labour')
+    expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
+    await openTab('Used')
+    expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add leftover' })).toBeInTheDocument()
+    await openTab('Notes')
+    expect(await screen.findByRole('button', { name: 'Add note' })).toBeInTheDocument()
+  })
+
+  it('the sheet has no drag/swipe handle', async () => {
+    renderWorkspace()
+    await openTab('Spend')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
+    expect(screen.getByRole('dialog', { name: 'Add spend' })).toBeInTheDocument()
+    expect(document.querySelector('.add-sheet-handle')).toBeNull()
+  })
+
+  it('opening a sheet does not auto-focus a form field', async () => {
+    renderWorkspace()
+    await openTab('Labour')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
+    expect(screen.getByRole('dialog', { name: 'Add labour' })).toBeInTheDocument()
+    const active = document.activeElement
+    expect(['INPUT', 'TEXTAREA', 'SELECT']).not.toContain(active?.tagName)
   })
 })

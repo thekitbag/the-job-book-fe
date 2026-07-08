@@ -132,7 +132,7 @@ function DirectAddFields({
         <>
           <label className="queue-field">
             <span className="queue-field-label">Item</span>
-            <input className="queue-field-input" name="materialName" value={item} onChange={e => setItem(e.target.value)} placeholder="e.g. plasterboard" autoFocus />
+            <input className="queue-field-input" name="materialName" value={item} onChange={e => setItem(e.target.value)} placeholder="e.g. plasterboard" />
           </label>
           <div className="direct-add-row">
             <label className="queue-field">
@@ -195,7 +195,7 @@ function DirectAddFields({
           <div className="direct-add-row">
             <label className="queue-field">
               <span className="queue-field-label">Hours</span>
-              <input className="queue-field-input" name="labourHours" value={hours} inputMode="decimal" onChange={e => setHours(e.target.value)} placeholder="e.g. 8" autoFocus />
+              <input className="queue-field-input" name="labourHours" value={hours} inputMode="decimal" onChange={e => setHours(e.target.value)} placeholder="e.g. 8" />
             </label>
             <label className="queue-field">
               <span className="queue-field-label">Rate £/hr (optional)</span>
@@ -213,7 +213,7 @@ function DirectAddFields({
         <>
           <label className="queue-field">
             <span className="queue-field-label">Item</span>
-            <input className="queue-field-input" name="materialName" value={item} onChange={e => setItem(e.target.value)} placeholder="e.g. OSB" autoFocus />
+            <input className="queue-field-input" name="materialName" value={item} onChange={e => setItem(e.target.value)} placeholder="e.g. OSB" />
           </label>
           <div className="direct-add-row">
             <label className="queue-field">
@@ -236,7 +236,7 @@ function DirectAddFields({
         <>
           <label className="queue-field">
             <span className="queue-field-label">Note</span>
-            <textarea className="queue-field-input direct-add-note" name="summary" value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="What do you want to remember?" autoFocus />
+            <textarea className="queue-field-input direct-add-note" name="summary" value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="What do you want to remember?" />
           </label>
           <label className="queue-field">
             <span className="queue-field-label">Type</span>
@@ -260,9 +260,11 @@ function DirectAddFields({
 
 // Self-contained direct-add widget (Manual Add V2): a trigger that opens the
 // section-specific form in an in-context bottom sheet. Two trigger shapes:
-//  - 'header' → the quiet lens header (small-caps label + round "+");
-//  - 'button' → an inline text action ("+ Add spend" on a category card,
-//    "+ Add manually" in an empty state).
+//  - 'header' → the lens header (small-caps label + a clear text action,
+//    e.g. "Add spend" — never a bare "+", which reads as leftover chrome);
+//  - 'button' → an inline text action ("Add to Timber" on a category card,
+//    "Add labour" in an empty state).
+// All triggers carry accessible names that say what will be added.
 // Direct add stays secondary to voice + the lens summary. Owns the sheet
 // open/close and save/submitting/error lifecycle; a failed save keeps the
 // sheet open with the entered values, and closing returns to the untouched
@@ -277,6 +279,7 @@ export default function DirectAddForm({
   buttonLabel,
   title,
   initialCategoryId,
+  actionHidden = false,
 }: {
   kind: DirectAddKind
   label: string       // accessible action name, e.g. "Add spend"
@@ -284,9 +287,13 @@ export default function DirectAddForm({
   categories?: BudgetCategory[]
   onAdd: (req: CreateMemoryItemRequest) => Promise<unknown>
   variant?: 'header' | 'button'
-  buttonLabel?: string // visible text for the 'button' variant, e.g. "+ Add spend"
+  buttonLabel?: string // visible text for the 'button' variant, e.g. "Add to Timber"
   title?: string       // sheet title; defaults to label (e.g. "Add spend — Timber")
   initialCategoryId?: string // category context from the launching card
+  // Header variant only: render just the section label, no action — used when
+  // the section is empty and its EmptyState carries the (same-named) add
+  // action, so there is exactly one "Add …" button per section at a time.
+  actionHidden?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -312,15 +319,16 @@ export default function DirectAddForm({
       {variant === 'header' ? (
         <div className="lens-add-head">
           <span className="lens-add-label">{sectionLabel}</span>
-          <button
-            type="button"
-            className={`btn-lens-add${open ? ' btn-lens-add--open' : ''}`}
-            aria-label={open ? `Close ${label.toLowerCase()}` : label}
-            aria-expanded={open}
-            onClick={() => { setError(null); setOpen(o => !o) }}
-          >
-            {open ? '×' : '+'}
-          </button>
+          {!actionHidden && (
+            <button
+              type="button"
+              className="btn-lens-add-text"
+              aria-expanded={open}
+              onClick={() => { setError(null); setOpen(true) }}
+            >
+              {label}
+            </button>
+          )}
         </div>
       ) : (
         <button
@@ -329,7 +337,7 @@ export default function DirectAddForm({
           aria-expanded={open}
           onClick={() => { setError(null); setOpen(true) }}
         >
-          {buttonLabel ?? `+ ${label}`}
+          {buttonLabel ?? label}
         </button>
       )}
       {open && (

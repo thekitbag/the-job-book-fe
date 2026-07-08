@@ -26,6 +26,11 @@ test.describe('Manual Add V2', () => {
 
     const sheet = page.getByRole('dialog', { name: 'Add spend' })
     await expect(sheet).toBeVisible()
+    // no drag/swipe handle — dismissal is ×, backdrop, Escape only
+    await expect(page.locator('.add-sheet-handle')).toHaveCount(0)
+    // opening must not auto-focus a field (no surprise mobile keyboard)
+    const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? 'BODY')
+    expect(['INPUT', 'TEXTAREA', 'SELECT']).not.toContain(activeTag)
     const form = sheet.getByRole('form', { name: 'Add spend' })
     await form.locator('input[name="materialName"]').fill('composite decking')
     await form.locator('input[name="costAmount"]').fill('240')
@@ -45,7 +50,7 @@ test.describe('Manual Add V2', () => {
     // electrics is a seeded category with no spend — its empty state offers the add
     const card = page.getByRole('region', { name: /budget category electrics/i })
     await expect(card.getByText(/No spend in this category yet/)).toBeVisible()
-    await card.getByRole('button', { name: '+ Add spend' }).click()
+    await card.getByRole('button', { name: 'Add to electrics' }).click()
 
     const sheet = page.getByRole('dialog', { name: 'Add spend — electrics' })
     await expect(sheet).toBeVisible()
@@ -87,6 +92,9 @@ test.describe('Manual Add V2', () => {
       await expect(page.locator('.ws-record-bar')).toHaveCount(1)
       await expect(page.getByRole('button', { name: /record/i })).toHaveCount(1)
       await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
+      // no bare "+" buttons anywhere — every add action names what it adds
+      await expect(page.locator('.btn-lens-add')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: '+', exact: true })).toHaveCount(0)
     }
   })
 })

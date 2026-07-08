@@ -301,7 +301,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
           <DirectAddForm
             kind="spend"
             variant="button"
-            buttonLabel="+ Add spend"
+            buttonLabel={`Add to ${c.name}`}
             label="Add spend"
             title={`Add spend — ${c.name}`}
             initialCategoryId={c.id}
@@ -348,7 +348,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         </section>
       )}
 
-      <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} />
+      <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} actionHidden={!hasSpendContent} />
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -361,7 +361,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         <EmptyState
           title="Nothing spent yet"
           hint="Add what you’ve bought for this job, or say it with Record and it’ll be picked up for you."
-          action={<DirectAddForm kind="spend" variant="button" buttonLabel="+ Add manually" label="Add spend" categories={budgetCategories} onAdd={addMemoryItem} />}
+          action={<DirectAddForm kind="spend" variant="button" label="Add spend" categories={budgetCategories} onAdd={addMemoryItem} />}
         />
       ) : (
         <>

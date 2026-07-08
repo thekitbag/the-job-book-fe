@@ -39,9 +39,10 @@ export default function AddSheet({ title, onClose, onRecordInstead, children }: 
     // have × and Escape); same pattern as the capture confirmation scrim.
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div className="add-sheet-backdrop" onClick={onClose}>
+      {/* No drag handle: swipe-to-dismiss is not implemented in the browser/PWA,
+          so nothing should imply the gesture. Dismissal is ×, backdrop, Escape. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
       <div className="add-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
-        <div className="add-sheet-handle" aria-hidden="true" />
         <div className="add-sheet-head">
           <h2 className="add-sheet-title">{title}</h2>
           <button type="button" className="add-sheet-close" aria-label="Close" onClick={onClose}>×</button>
