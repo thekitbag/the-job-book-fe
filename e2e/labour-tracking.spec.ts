@@ -57,7 +57,7 @@ test.describe('Labour tab — daily view', () => {
     await form.locator('input[name="labourPerson"]').fill('Priya')
     await form.locator('input[name="labourHours"]').fill('5')
     await form.locator('input[name="labourTask"]').fill('decking')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
 
     const group = page.getByRole('region', { name: 'Labour Yesterday' })
     await expect(group.getByText('Priya')).toBeVisible()

@@ -20,11 +20,11 @@ test.describe('Direct add job detail', () => {
     await gotoApp(page)
     await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(600)
-    await page.getByRole('button', { name: 'Add spend' }).click()
+    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
     const form = page.getByRole('form', { name: 'Add spend' })
     await form.locator('input[name="materialName"]').fill('composite decking')
     await form.locator('input[name="costAmount"]').fill('240')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
     await expect(page.getByText('composite decking')).toBeVisible()
     // pinned Record still available
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
@@ -38,7 +38,7 @@ test.describe('Direct add job detail', () => {
     const form = page.getByRole('form', { name: 'Add labour' })
     await form.locator('input[name="labourPerson"]').fill('Priya')
     await form.locator('input[name="labourHours"]').fill('5')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
     await expect(page.getByText('Priya')).toBeVisible()
   })
 
@@ -50,7 +50,7 @@ test.describe('Direct add job detail', () => {
     const form = page.getByRole('form', { name: 'Add used item' })
     await form.locator('input[name="materialName"]').fill('scaffold boards')
     await form.locator('input[name="quantity"]').fill('4')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
     await expect(page.getByText('scaffold boards')).toBeVisible()
   })
 
@@ -61,7 +61,7 @@ test.describe('Direct add job detail', () => {
     await page.getByRole('button', { name: 'Add leftover' }).click()
     const form = page.getByRole('form', { name: 'Add leftover' })
     await form.locator('input[name="materialName"]').fill('spare membrane')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
     await expect(page.getByText('spare membrane')).toBeVisible()
   })
 
@@ -72,7 +72,7 @@ test.describe('Direct add job detail', () => {
     await page.getByRole('button', { name: 'Add note' }).click()
     const form = page.getByRole('form', { name: 'Add note' })
     await form.locator('textarea[name="summary"]').fill('Client wants black cladding')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
 
     const card = page.locator('.mem-card', { hasText: 'Client wants black cladding' })
     await expect(card).toBeVisible()

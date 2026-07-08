@@ -127,11 +127,13 @@ describe('CurrentJobWorkspace — shell', () => {
     expect(screen.getByRole('button', { name: /switch/i })).toBeInTheDocument()
   })
 
-  it('Record is visible from every tab', async () => {
+  it('Record is visible from every tab, and is the ONLY voice action', async () => {
     const user = userEvent.setup()
     renderWorkspace()
     for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
       await user.click(screen.getByRole('tab', { name: t }))
+      // exactly one global Record — no section-level record buttons anywhere
+      expect(screen.getAllByRole('button', { name: /record/i })).toHaveLength(1)
       expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
     }
   })

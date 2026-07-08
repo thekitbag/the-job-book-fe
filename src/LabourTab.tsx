@@ -1,4 +1,5 @@
 import DirectAddForm from './DirectAddForm'
+import EmptyState from './EmptyState'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import { friendlyDayLabel } from './memoryScan'
@@ -53,7 +54,7 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Labour">
-      <DirectAddForm kind="labour" label="Add labour" sectionLabel="Labour" onAdd={addMemoryItem} />
+      <DirectAddForm kind="labour" label="Add labour" sectionLabel="Labour" onAdd={addMemoryItem} actionHidden={days.length === 0} />
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -63,7 +64,11 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
       )}
 
       {days.length === 0 ? (
-        <p className="mem-tab-empty">No labour remembered yet.</p>
+        <EmptyState
+          title="No labour logged yet"
+          hint="Keep track of who worked, how many hours, and which day — or say it with Record."
+          action={<DirectAddForm kind="labour" variant="button" label="Add labour" onAdd={addMemoryItem} />}
+        />
       ) : (
         <>
           <section className="labour-job-total" aria-label="Labour hours">

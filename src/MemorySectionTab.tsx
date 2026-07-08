@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import MemoryCard from './MemoryCard'
 import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
+import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
 
 const SECTION_HEADINGS: Record<string, string> = {
@@ -10,6 +11,13 @@ const SECTION_HEADINGS: Record<string, string> = {
   supplier_delivery_notes: 'Supplier notes',
   customer_changes: 'Customer changes',
   watch_outs: 'Watch-outs',
+}
+
+// Plain-language empty copy per addable section (Manual Add V2). Manual add is
+// the only action offered — Record stays global.
+const SECTION_EMPTY: Record<string, { title: string; hint: string }> = {
+  used_materials: { title: 'Nothing logged yet', hint: 'Say what you used on this job, or add it yourself.' },
+  leftovers: { title: 'Nothing logged yet', hint: 'Note what’s left over so it isn’t wasted.' },
 }
 
 type SectionAdd = { kind: DirectAddKind; label: string }
@@ -46,7 +54,7 @@ export default function MemorySectionTab({
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label={ariaLabel}>
-      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} onAdd={addMemoryItem} />}
+      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} onAdd={addMemoryItem} actionHidden={rows.length === 0} />}
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -55,19 +63,34 @@ export default function MemorySectionTab({
         </div>
       )}
 
-      {rows.length === 0 && !footer ? (
-        <p className="mem-tab-empty">Nothing remembered here yet.</p>
+      {rows.length === 0 ? (
+        directAdd ? (
+          <EmptyState
+            title="No notes yet"
+            hint="Keep short job notes here — changes, watch-outs, things to remember. Or say it with Record."
+            action={<DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} onAdd={addMemoryItem} />}
+          />
+        ) : (
+          !footer && <p className="mem-tab-empty">Nothing remembered here yet.</p>
+        )
       ) : (
         rows.map(s => {
           const heading = SECTION_HEADINGS[s.key] ?? s.key
+          const empty = SECTION_EMPTY[s.key]
           return (
             <section key={s.key} className="mem-section">
               {s.add
-                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={heading} onAdd={addMemoryItem} />
+                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={heading} onAdd={addMemoryItem} actionHidden={s.items.length === 0} />
                 : <h2 className="mem-section-heading">{heading}</h2>}
               {s.items.length > 0
                 ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />)
-                : <p className="mem-section-empty">None yet.</p>}
+                : s.add
+                  ? <EmptyState
+                      title={empty?.title ?? 'Nothing logged yet'}
+                      hint={empty?.hint}
+                      action={<DirectAddForm kind={s.add.kind} variant="button" label={s.add.label} onAdd={addMemoryItem} />}
+                    />
+                  : <p className="mem-section-empty">None yet.</p>}
             </section>
           )
         })
