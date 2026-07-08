@@ -297,14 +297,23 @@ describe('Workspace — Spend tab', () => {
 
     // Uncategorised spend section is visible under its own (non bought-only) name
     // — the exact, anchored match fails if it's still "Bought · uncategorised" —
-    // and shows all three contributing rows with their line totals.
+    // and shows the bought row. Labour rows are NOT duplicated here: they render
+    // once under the Labour group (derived fallback, since budgetSummary.labour
+    // is absent on this older-shaped response).
     const section = screen.getByRole('region', { name: /^uncategorised spend$/i })
     expect(within(section).getByText(/hardcore/)).toBeTruthy()
     expect(within(section).getByText('£40')).toBeTruthy()
-    expect(within(section).getByText(/electrics/)).toBeTruthy()
-    expect(within(section).getByText('£280')).toBeTruthy()
-    expect(within(section).getByText(/roof/)).toBeTruthy()
-    expect(within(section).getByText('£600')).toBeTruthy()
+    expect(within(section).queryByText(/electrics/)).toBeNull()
+    expect(within(section).queryByText(/roof/)).toBeNull()
+
+    // Labour group carries the trusted labour cost once (280 + 600 = 880),
+    // with no manual Labour category required.
+    const labourGroup = screen.getByRole('region', { name: /^labour spend$/i })
+    expect(within(labourGroup).getByText('£880 known spend')).toBeTruthy()
+    expect(within(labourGroup).getByText(/no budget set/i)).toBeTruthy()
+    fireEvent.click(within(labourGroup).getByRole('button', { name: /show notes/i }))
+    expect(within(labourGroup).getByText('electrics')).toBeTruthy()
+    expect(within(labourGroup).getByText('roof')).toBeTruthy()
   })
 })
 
@@ -460,6 +469,14 @@ function labourItem(over: Partial<MemoryViewItem>): MemoryViewItem {
   return orderedItem({ memoryType: 'labour', ...over })
 }
 
+// Local-noon stamps for today/yesterday so day grouping is deterministic in the
+// device timezone the component groups by.
+function localNoon(daysAgo: number): string {
+  const d = new Date(Date.now() - daysAgo * 86_400_000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T12:00:00`
+}
+
 function labourView(): MemoryViewResponse {
   return {
     job: JOB, generatedAt: '',
@@ -468,8 +485,14 @@ function labourView(): MemoryViewResponse {
         orderedItem({ id: 'mem-hardcore', summary: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP' }),
       ] },
       { key: 'labour', label: 'Labour', items: [
-        labourItem({ id: 'lab-hours', summary: '6 hours fitting cladding', labourHours: '6', labourTask: 'fitting cladding' }),
-        labourItem({ id: 'lab-rated', summary: 'Tom 8h electrics', labourPerson: 'Tom', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP', totalCostAmount: '280' }),
+        // Two people extracted from ONE note, both today.
+        labourItem({ id: 'lab-mike', summary: 'Mike worked 4 hours', labourPerson: 'Mike', labourHours: '4', happenedAt: localNoon(0) }),
+        labourItem({ id: 'lab-kurt', summary: 'Kurt worked 6 hours', labourPerson: 'Kurt', labourHours: '6', happenedAt: localNoon(0) }),
+        labourItem({ id: 'lab-rated', summary: 'Tom 8h electrics', labourPerson: 'Tom', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP', totalCostAmount: '280', happenedAt: localNoon(0) }),
+        // Hours-only, no named person, yesterday.
+        labourItem({ id: 'lab-hours', summary: '6 hours fitting cladding', labourHours: '6', labourTask: 'fitting cladding', happenedAt: localNoon(1) }),
+        // Worth checking: visible, but never totalled.
+        labourItem({ id: 'lab-check', summary: 'Apprentice about 5 hours', labourPerson: 'Apprentice', labourHours: 'about 5', labourTask: 'clearing up', uncertaintyFlags: ['uncertain_hours'], happenedAt: localNoon(0) }),
       ] },
       { key: 'used_materials', label: 'Used materials', items: [] },
       { key: 'leftovers', label: 'Leftovers', items: [] },
@@ -504,16 +527,142 @@ describe('Workspace — Labour tab', () => {
     expect(within(hero).getByText(/£320/)).toBeTruthy()
   })
 
-  it('shows labour separate from bought, with hours, person, and the not-counted state', async () => {
+  it('groups labour by day with day totals and a job total', async () => {
+    renderWorkspace()
+    openTab('Labour')
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
+    // Safe hours only: today 4 + 6 + 8 = 18h, yesterday 6h → 24h job total.
+    expect(within(labour).getByText('24h job total')).toBeTruthy()
+    const today = within(labour).getByRole('region', { name: 'Labour Today' })
+    expect(within(today).getByText('18h day total')).toBeTruthy()
+    const yesterday = within(labour).getByRole('region', { name: 'Labour Yesterday' })
+    expect(within(yesterday).getByText('6h day total')).toBeTruthy()
+  })
+
+  it('renders multiple people from one note under the same day', async () => {
+    renderWorkspace()
+    openTab('Labour')
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
+    const today = within(labour).getByRole('region', { name: 'Labour Today' })
+    expect(within(today).getByText('Mike')).toBeTruthy()
+    expect(within(today).getByText('Kurt')).toBeTruthy()
+    expect(within(today).getByText('4h')).toBeTruthy()
+  })
+
+  it('shows person, hours, task; money stays secondary (rated total or No cost added)', async () => {
     renderWorkspace()
     openTab('Labour')
     const labour = await screen.findByRole('tabpanel', { name: /labour/i })
     expect(within(labour).getByText('Tom')).toBeTruthy()
     expect(within(labour).getByText('electrics')).toBeTruthy()
-    // hours-only labour is shown but flagged as not counted
-    expect(within(labour).getByText(/Hours only — no cost/i)).toBeTruthy()
-    // and it carries the hours
-    expect(within(labour).getByText('6')).toBeTruthy()
-    expect(within(labour).getByText('8')).toBeTruthy()
+    expect(within(labour).getByText('8h')).toBeTruthy()
+    // rated labour shows its trusted line total; hours-only shows No cost added
+    expect(within(labour).getByText('£280')).toBeTruthy()
+    expect(within(labour).getAllByText('No cost added').length).toBeGreaterThan(0)
+  })
+
+  it('renders an entry without a named person safely, and keeps worth-checking visible but untotalled', async () => {
+    renderWorkspace()
+    openTab('Labour')
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
+    // no named person → neutral "Labour" headline, hours still visible
+    const yesterday = within(labour).getByRole('region', { name: 'Labour Yesterday' })
+    expect(within(yesterday).getByText('Labour')).toBeTruthy()
+    expect(within(yesterday).getByText('6h')).toBeTruthy()
+    // worth-checking entry stays visible with its said-hours, excluded from totals
+    expect(within(labour).getByText('Apprentice')).toBeTruthy()
+    expect(within(labour).getByText('about 5')).toBeTruthy()
+    expect(within(labour).getByText(/worth checking — not counted in totals/i)).toBeTruthy()
+    // job total ignores it (still 24h)
+    expect(within(labour).getByText('24h job total')).toBeTruthy()
+  })
+
+  it('prefers the backend labourHoursSummary over local derivation when present', async () => {
+    const view = labourView()
+    view.labourHoursSummary = {
+      totalHours: '99', totalLabel: '99h job total',
+      days: [{ date: '2026-07-01', totalHours: '99', totalLabel: '99h day total', items: [
+        { memoryItemId: 'lab-rated', labourPerson: 'Tom', labourTask: 'electrics', labourHours: '99', hoursLabel: '99h', happenedAt: '2026-07-01T12:00:00', includedInHourTotal: true, worthChecking: false, lineTotalAmount: null, lineTotalCurrency: null, lineTotalLabel: null },
+      ] }],
+    }
+    mockGetMemoryView.mockResolvedValue(view)
+    renderWorkspace()
+    openTab('Labour')
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
+    expect(within(labour).getByText('99h job total')).toBeTruthy()
+    expect(within(labour).queryByText('24h job total')).toBeNull()
+  })
+})
+
+// ── Spend Labour group ───────────────────────────────────────────────────────
+
+describe('Workspace — Spend Labour group', () => {
+  const CAT_LABOUR: BudgetCategory = { id: 'c-labour', jobId: 'job-mem-001', name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' }
+  const LAB_RATED_ROW = { memoryItemId: 'lab-rated', memoryType: 'labour', itemLabel: 'electrics', materialName: null, quantity: null, unit: null, labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics', lineTotalAmount: '280', lineTotalCurrency: 'GBP', lineTotalLabel: '£280 total' }
+
+  function budgetWithLabourGroup(): BudgetSummaryResponse {
+    return {
+      jobId: 'job-mem-001', generatedAt: '',
+      // Backward-compatible: the labour row also appears under its category —
+      // the frontend must de-duplicate and show it only under Labour.
+      categories: [
+        { category: CAT_LABOUR, knownSpendAmount: '280', knownSpendCurrency: 'GBP', knownSpendLabel: '£280 known spend', budgetAmount: '1500', budgetCurrency: 'GBP', budgetLabel: '£1500 budget', remainingAmount: '1220', remainingLabel: '£1220 remaining', overBudget: false, rows: [LAB_RATED_ROW] },
+      ],
+      uncategorized: {
+        knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend',
+        rows: [{ memoryItemId: 'mem-hardcore', memoryType: 'ordered_material', itemLabel: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total' }],
+      },
+      totals: { budgetAmount: '1500', budgetCurrency: 'GBP', knownSpendAmount: '320', knownSpendCurrency: 'GBP', remainingAmount: '1180', remainingLabel: '£1180 remaining', overBudget: false },
+      labour: {
+        knownSpendAmount: '280', knownSpendCurrency: 'GBP', knownSpendLabel: '£280 known spend',
+        budgetCategory: CAT_LABOUR, budgetAmount: '1500', budgetCurrency: 'GBP', budgetLabel: '£1500 budget',
+        remainingAmount: '1220', remainingLabel: '£1220 remaining', overBudget: false,
+        rows: [LAB_RATED_ROW],
+      },
+    }
+  }
+
+  beforeEach(() => {
+    mockGetMemoryView.mockResolvedValue(labourView())
+    mockGetBudgetSummary.mockResolvedValue(budgetWithLabourGroup())
+  })
+
+  it('shows trusted labour once under Labour, with the existing category budget/remaining', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    expect(within(group).getByText('£280 known spend')).toBeTruthy()
+    expect(within(group).getByText('£1220 remaining')).toBeTruthy()
+    // the manual labour category card is suppressed — one Labour home, not two
+    expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
+    // the labour row renders under Labour, not under Uncategorised
+    fireEvent.click(within(group).getByRole('button', { name: /show notes/i }))
+    expect(within(group).getByText('Tom')).toBeTruthy()
+    const uncat = screen.getByRole('region', { name: /^uncategorised spend$/i })
+    expect(within(uncat).queryByText(/electrics/)).toBeNull()
+    expect(within(uncat).getByText(/hardcore/)).toBeTruthy()
+  })
+
+  it('shows the Labour group with no budget when there is no labour category', async () => {
+    const bs = budgetWithLabourGroup()
+    bs.categories = []
+    bs.labour = { ...bs.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
+    mockGetBudgetSummary.mockResolvedValue(bs)
+    renderWorkspace()
+    openTab('Spend')
+    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    expect(within(group).getByText('£280 known spend')).toBeTruthy()
+    expect(within(group).getByText(/no budget set/i)).toBeTruthy()
+  })
+
+  it('hours-only labour never appears as spend', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    fireEvent.click(within(group).getByRole('button', { name: /show notes/i }))
+    // Mike/Kurt (hours-only) are not monetary rows anywhere in Spend
+    expect(within(group).queryByText('Mike')).toBeNull()
+    const uncat = screen.getByRole('region', { name: /^uncategorised spend$/i })
+    expect(within(uncat).queryByText('Mike')).toBeNull()
   })
 })

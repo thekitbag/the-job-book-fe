@@ -203,7 +203,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, cardProps,
     notCountedItems, resolveCostBasis, addPrice,
-    budgetCategories, expandedCats, toggleCat,
+    budgetCategories, expandedCats, toggleCat, labourSpendGroup,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
     openMenuCatId, setOpenMenuCatId,
@@ -214,17 +214,33 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const labourItems = sectionItems('labour')
   const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0
 
+  // Trusted labour money lives in the Labour group (backend budgetSummary.labour
+  // or the derived fallback). Its row ids drive de-duplication: a labour spend
+  // row never also renders under a category card or Uncategorised.
+  const labourRowIds = new Set((labourSpendGroup?.rows ?? []).map(r => r.memoryItemId))
+  const showLabourGroup = !!labourSpendGroup && (labourSpendGroup.rows.length > 0 || !!labourSpendGroup.budgetCategory)
+  const LABOUR_GROUP_KEY = '__labour__'
+
   // Uncategorised spend is driven by the authoritative budget-summary rows
-  // (not re-derived from ordered_materials alone), so labour contributes too —
-  // join back to the full memory-view item for the MemoryCard.
+  // (not re-derived from ordered_materials alone) — join back to the full
+  // memory-view item for the MemoryCard. Labour rows shown under Labour are
+  // excluded here (de-dup by memoryItemId).
   const allItemsById = new Map([...orderedItems, ...labourItems].map(i => [i.id, i] as const))
   const uncatItems = (budgetSummary?.uncategorized.rows ?? [])
+    .filter(r => !labourRowIds.has(r.memoryItemId))
+    .map(r => allItemsById.get(r.memoryItemId))
+    .filter((i): i is MemoryViewItem => !!i)
+
+  const labourGroupItems = (labourSpendGroup?.rows ?? [])
     .map(r => allItemsById.get(r.memoryItemId))
     .filter((i): i is MemoryViewItem => !!i)
 
   function renderCategoryCard(cs: BudgetCategorySummary) {
     const c = cs.category
-    const notes = [...orderedItems, ...labourItems].filter(i => i.budgetCategoryId === c.id)
+    // The Labour budget category is presented by the Labour group instead of a
+    // second, duplicate category card.
+    if (showLabourGroup && labourSpendGroup?.budgetCategory?.id === c.id) return null
+    const notes = [...orderedItems, ...labourItems].filter(i => i.budgetCategoryId === c.id && !labourRowIds.has(i.id))
     const open = !!expandedCats[c.id]
     if (editingBudgetId === c.id) {
       return (
@@ -329,6 +345,68 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         <p className="mem-tab-empty">Nothing bought or labour remembered yet.</p>
       ) : (
         <>
+      {/* System Labour group: trusted labour cost shows here once, without
+          requiring a manual Labour budget category. When an active category
+          named "labour" exists, its budget/remaining render here (and its
+          normal category card is suppressed to avoid duplication). */}
+      {showLabourGroup && labourSpendGroup && (
+        labourSpendGroup.budgetCategory && editingBudgetId === labourSpendGroup.budgetCategory.id ? (
+          <div className="budget-cat budget-cat--editing">
+            <CategoryForm
+              initialName={labourSpendGroup.budgetCategory.name}
+              initialAmount={labourSpendGroup.budgetCategory.budgetAmount ?? ''}
+              submitting={savingCatId === labourSpendGroup.budgetCategory.id}
+              onSave={(name, amount) => handleEditBudget(labourSpendGroup.budgetCategory!.id, name, amount)}
+              onCancel={() => setEditingBudgetId(null)}
+            />
+          </div>
+        ) : (
+          <section className="budget-cat budget-cat--labour" aria-label="Labour spend">
+            <div className="budget-cat-head">
+              <h3 className="budget-cat-name">Labour</h3>
+              {labourSpendGroup.budgetCategory && (
+                <div className="budget-cat-menu-wrap">
+                  <button
+                    type="button"
+                    className="btn-cat-menu"
+                    aria-label="Actions for Labour"
+                    aria-haspopup="menu"
+                    aria-expanded={openMenuCatId === labourSpendGroup.budgetCategory.id}
+                    onClick={() => setOpenMenuCatId(openMenuCatId === labourSpendGroup.budgetCategory!.id ? null : labourSpendGroup.budgetCategory!.id)}
+                  >⋯</button>
+                  {openMenuCatId === labourSpendGroup.budgetCategory.id && (
+                    <div className="budget-cat-menu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => { setOpenMenuCatId(null); setEditingBudgetId(labourSpendGroup.budgetCategory!.id) }}>Edit budget</button>
+                      <button type="button" role="menuitem" className="budget-cat-menu-danger" disabled={savingCatId === labourSpendGroup.budgetCategory.id} onClick={() => {
+                        setOpenMenuCatId(null)
+                        if (window.confirm('Remove the labour budget? Labour cost still shows here.')) handleArchiveCategory(labourSpendGroup.budgetCategory!.id)
+                      }}>Remove budget</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="budget-cat-figures">
+              <div className="budget-figure"><dt>Spent</dt><dd>{labourSpendGroup.knownSpendLabel ?? 'None yet'}</dd></div>
+              {labourSpendGroup.budgetLabel
+                ? <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}><dt>{labourSpendGroup.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{labourSpendGroup.remainingLabel}</dd></div>
+                : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
+            </div>
+            {labourGroupItems.length > 0
+              ? <>
+                  <button type="button" className="notes-toggle" aria-expanded={!!expandedCats[LABOUR_GROUP_KEY]} onClick={() => toggleCat(LABOUR_GROUP_KEY)}>
+                    <span>{expandedCats[LABOUR_GROUP_KEY] ? 'Hide notes' : `Show notes (${labourGroupItems.length})`}</span>
+                    <span className="notes-toggle-chev" aria-hidden="true">{expandedCats[LABOUR_GROUP_KEY] ? '▴' : '▾'}</span>
+                  </button>
+                  {expandedCats[LABOUR_GROUP_KEY] && <div className="cat-notes">{labourGroupItems.map(item => (
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />
+                  ))}</div>}
+                </>
+              : <p className="cat-empty">No labour cost yet — hours are remembered on the Labour tab.</p>}
+          </section>
+        )
+      )}
+
       <section aria-label="Budget categories">
         <p className="mem-section-label">By category</p>
         {budgetSummary?.categories.map(renderCategoryCard)}

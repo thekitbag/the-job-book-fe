@@ -1,5 +1,5 @@
 import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse } from '../../types'
-import { deriveCostSummary, deriveEachTotal, deriveLabourSummary, deriveTotalKnownCost } from '../../memoryScan'
+import { deriveCostSummary, deriveEachTotal, deriveLabourHoursSummary, deriveLabourSummary, deriveTotalKnownCost } from '../../memoryScan'
 import { ApiError } from '../client'
 import { MOCK_JOBS } from './jobs'
 import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
@@ -30,6 +30,8 @@ export function mockMemoryView(jobId: string): MemoryViewResponse {
       labour: deriveLabourSummary(sections),
       totalKnownCost: deriveTotalKnownCost(sections),
     },
+    // Authoritative daily labour summary, derived from current state.
+    labourHoursSummary: deriveLabourHoursSummary(sections),
   }
 }
 
@@ -55,6 +57,8 @@ export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: 
     labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
     labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
     labourTask: edit.memoryType === 'labour' ? (edit.labourTask ?? null) : null,
+    // Present key → honour value/null (explicit set/clear). Omitted → preserve.
+    happenedAt: 'happenedAt' in edit ? (edit.happenedAt ?? null) : (existing?.happenedAt ?? null),
     // A Fix-memory save also resolves any worth-checking flags.
     uncertaintyFlags: [],
     // Preserve the existing category unless this edit explicitly changes it.

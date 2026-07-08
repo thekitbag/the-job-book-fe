@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
-import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatCostLabel, formatMoney, formatTotalLabel, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
+import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, friendlyDayLabel, hourlyTotalGaps, joinWithAnd, formatCostLabel, formatMoney, formatTotalLabel, localDateKey, localNoonISO, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
 import type {
   AlreadyRememberedItem,
   BudgetCategory,
@@ -63,7 +63,10 @@ function reviewHeadline(pm: ProposedMemory): string {
   return pm.summary
 }
 function reviewMeta(pm: ProposedMemory): string {
-  if (pm.memoryType === 'labour') return [pm.labourPerson, pm.locationOrUse].filter(Boolean).join(' · ')
+  if (pm.memoryType === 'labour') {
+    const day = pm.happenedAt ? friendlyDayLabel(localDateKey(pm.happenedAt)) : null
+    return [pm.labourPerson, day, pm.locationOrUse].filter(Boolean).join(' · ')
+  }
   return [pm.supplierName, pm.deliveryTiming, pm.locationOrUse].filter(Boolean).join(' · ')
 }
 function reviewCost(pm: ProposedMemory): string {
@@ -192,6 +195,8 @@ function EditForm({
   submitting: boolean
 }) {
   const [form, setForm] = useState<ProposedMemory>(initial)
+  // Labour effective day, corrected as a date-only value (saved as local noon).
+  const [happenedDate, setHappenedDate] = useState(initial.happenedAt ? localDateKey(initial.happenedAt) : '')
   const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType' | 'costQualifier'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
   // Changing type away from a category-bearing type clears any category.
@@ -229,6 +234,8 @@ function EditForm({
     if (eachRecalc) delete (corrected as Partial<ProposedMemory>).totalCostAmount
     else if (isTotalBasis) corrected.totalCostAmount = corrected.costAmount
     else delete (corrected as Partial<ProposedMemory>).totalCostAmount
+    // Labour carries the corrected effective day (local noon; null clears it).
+    if (isLabour) corrected.happenedAt = happenedDate ? localNoonISO(happenedDate) : null
     onSubmit(corrected)
   }
 
@@ -257,6 +264,10 @@ function EditForm({
       )}
       {isLabour ? (
         <>
+          <label className="queue-field">
+            <span className="queue-field-label">Day</span>
+            <input className="queue-field-input" type="date" name="happenedAt" value={happenedDate} onChange={e => setHappenedDate(e.target.value)} />
+          </label>
           <label className="queue-field">
             <span className="queue-field-label">Hours</span>
             <input className="queue-field-input" name="labourHours" value={form.labourHours ?? ''} inputMode="decimal" onChange={e => setStr('labourHours', e.target.value)} placeholder="e.g. 8" />

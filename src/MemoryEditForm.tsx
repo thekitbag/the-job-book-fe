@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatMoney } from './memoryScan'
+import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatMoney, localDateKey, localNoonISO } from './memoryScan'
 import type { BudgetCategory, CostQualifier, MemoryItemEdit, MemoryType } from './types'
 
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
@@ -45,6 +45,8 @@ export default function MemoryEditForm({
   onCancel: () => void
 }) {
   const [form, setForm] = useState<MemoryItemEdit>(initial)
+  // Labour effective day, edited as a date-only value (saved as local noon).
+  const [happenedDate, setHappenedDate] = useState(initial.happenedAt ? localDateKey(initial.happenedAt) : '')
   const setStr = (k: Exclude<keyof MemoryItemEdit, 'memoryType' | 'costQualifier'>, v: string) =>
     setForm(f => ({ ...f, [k]: v || null }))
   // Changing memory type away from a category-bearing type clears the category.
@@ -100,6 +102,10 @@ export default function MemoryEditForm({
       deliveryTiming: isLabour ? null : form.deliveryTiming,
       locationOrUse: isLabour ? null : form.locationOrUse,
     }
+    // Labour: send the (possibly cleared) effective day as local noon. Other
+    // types don't show the field — omit the key so the backend preserves it.
+    if (isLabour) payload.happenedAt = happenedDate ? localNoonISO(happenedDate) : null
+    else delete payload.happenedAt
     // `each`/`per_hour` → omit the total so the backend derives it (sending null
     // would clear it). `total` → there is one field on screen, so mirror it into
     // the explicit total. Anything else (`approx`/`unknown`/not stated) has no
@@ -156,6 +162,10 @@ export default function MemoryEditForm({
         </label>
       ) : isLabour ? (
         <>
+          <label className="queue-field">
+            <span className="queue-field-label">Day</span>
+            <input className="queue-field-input" type="date" name="happenedAt" value={happenedDate} onChange={e => setHappenedDate(e.target.value)} />
+          </label>
           <label className="queue-field">
             <span className="queue-field-label">Hours</span>
             <input className="queue-field-input" name="labourHours" value={form.labourHours ?? ''} inputMode="decimal" onChange={e => setStr('labourHours', e.target.value)} placeholder="e.g. 8" />

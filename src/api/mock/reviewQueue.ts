@@ -2,6 +2,14 @@ import type { AlreadyRememberedItem, MemoryType, MemoryViewItem, QueueDecision, 
 import { suggestBudgetCategory } from '../../memoryScan'
 import { mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
 
+// Effective labour day for today's drafts: local noon, so the date-only value
+// cannot drift a day across timezones.
+function todayLocalNoonISO(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T12:00:00`
+}
+
 const MOCK_QUEUE_ITEMS: QueueItem[] = [
   {
     id: 'queue-item-mock-001',
@@ -148,50 +156,53 @@ const MOCK_QUEUE_ITEMS: QueueItem[] = [
       },
     ],
   },
-  // Labour draft — hours only, no cost (can be remembered without a cost).
+  // Two labour drafts from ONE voice note ("Mike 4 hours, Kurt 6.") — the
+  // multiple-people case: separate review items sharing the same source note,
+  // each carrying the effective labour day (happenedAt).
   {
     id: 'queue-item-mock-005',
     kind: 'single',
     status: 'draft',
     reviewLabel: 'What I picked up today',
     timeLabel: 'Today',
-    summary: 'Spent 6 hours fitting the cladding',
+    summary: 'Mike worked 4 hours',
     proposedMemory: {
       memoryType: 'labour' as MemoryType,
-      summary: 'Spent 6 hours fitting the cladding',
+      summary: 'Mike worked 4 hours',
       materialName: null, quantity: null, unit: null, supplierName: null,
       deliveryTiming: null, locationOrUse: null,
       costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
-      labourHours: '6', labourPerson: null, labourTask: 'fitting cladding',
+      labourHours: '4', labourPerson: 'Mike', labourTask: null,
+      happenedAt: todayLocalNoonISO(),
     },
     confidenceLabel: 'high',
     uncertaintyFlags: [],
     sourceCandidateFactIds: ['mock-fact-006'],
     sourceContext: [
-      { candidateFactId: 'mock-fact-006', noteId: 'mock-note-005', transcriptId: 'mock-trans-005', capturedAt: new Date().toISOString(), transcriptText: 'Spent about six hours fitting the cladding today.' },
+      { candidateFactId: 'mock-fact-006', noteId: 'mock-note-005', transcriptId: 'mock-trans-005', capturedAt: new Date().toISOString(), transcriptText: 'Mike 4 hours, Kurt 6.' },
     ],
   },
-  // Labour draft — rated (hours × £/hour). Suggests the active 'labour' category.
   {
     id: 'queue-item-mock-006',
     kind: 'single',
     status: 'draft',
     reviewLabel: 'What I picked up today',
     timeLabel: 'Today',
-    summary: 'Tom did 8 hours on electrics at £35 an hour',
+    summary: 'Kurt worked 6 hours',
     proposedMemory: {
       memoryType: 'labour' as MemoryType,
-      summary: 'Tom did 8 hours on electrics at £35 an hour',
+      summary: 'Kurt worked 6 hours',
       materialName: null, quantity: null, unit: null, supplierName: null,
       deliveryTiming: null, locationOrUse: null,
-      costAmount: '35', costCurrency: 'GBP', costQualifier: 'per_hour', totalCostAmount: '280',
-      labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      labourHours: '6', labourPerson: 'Kurt', labourTask: null,
+      happenedAt: todayLocalNoonISO(),
     },
     confidenceLabel: 'high',
     uncertaintyFlags: [],
     sourceCandidateFactIds: ['mock-fact-007'],
     sourceContext: [
-      { candidateFactId: 'mock-fact-007', noteId: 'mock-note-006', transcriptId: 'mock-trans-006', capturedAt: new Date().toISOString(), transcriptText: 'Tom did eight hours on the electrics at thirty-five an hour.' },
+      { candidateFactId: 'mock-fact-007', noteId: 'mock-note-005', transcriptId: 'mock-trans-005', capturedAt: new Date().toISOString(), transcriptText: 'Mike 4 hours, Kurt 6.' },
     ],
   },
 ]
@@ -301,6 +312,7 @@ export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision):
       labourHours: isLabour ? (source.labourHours ?? null) : null,
       labourPerson: isLabour ? (source.labourPerson ?? null) : null,
       labourTask: isLabour ? (source.labourTask ?? null) : null,
+      happenedAt: source.happenedAt ?? null,
       uncertaintyFlags: keepFlags,
       budgetCategoryId: category,
       sourceCandidateFactId: null,

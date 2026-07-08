@@ -94,6 +94,9 @@ export interface ProposedMemory {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // Effective event day (ISO DateTime; local noon for date-only). Labour drafts
+  // carry the spoken/derived day; corrections may change it.
+  happenedAt?: string | null
   // Additive: the suggested/default category for this review item (not stored on
   // the candidate fact). null when there is no strong suggestion.
   budgetCategoryId?: string | null
@@ -149,6 +152,7 @@ export interface AlreadyRememberedItem {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  happenedAt?: string | null
   uncertaintyFlags?: string[]
   sourceUncertaintyFlags?: string[]
   // The confirmed category on this remembered item, if any.
@@ -492,6 +496,38 @@ export interface CostSummary {
   totalKnownCost?: TotalKnownCost
 }
 
+// ── Labour daily view (Labour Tracking V2) ──────────────────────────────────
+// Backend-authoritative daily labour summary on memory-view. Days are UK local
+// calendar days from happenedAt; hour totals are safe totals (strict positive
+// decimal hours, no unresolved flags) — never guesses.
+
+export interface LabourDayItem {
+  memoryItemId: string
+  labourPerson: string | null
+  labourTask: string | null
+  labourHours: string | null
+  hoursLabel: string | null
+  happenedAt: string | null
+  includedInHourTotal: boolean
+  worthChecking: boolean
+  lineTotalAmount: string | null
+  lineTotalCurrency: string | null
+  lineTotalLabel: string | null
+}
+
+export interface LabourDaySummary {
+  date: string // YYYY-MM-DD in UK local day
+  totalHours: string | null
+  totalLabel: string | null // e.g. "10h day total"
+  items: LabourDayItem[]
+}
+
+export interface LabourHoursSummary {
+  totalHours: string | null
+  totalLabel: string | null // e.g. "24h job total"
+  days: LabourDaySummary[]
+}
+
 // ── Budget categories & known spend by category ─────────────────────────────
 // Backend-authoritative. The frontend never recomputes category known spend as
 // confirmed truth — it renders the budget-summary response.
@@ -556,12 +592,33 @@ export interface BudgetSummaryTotals {
   overBudget: boolean
 }
 
+// System labour spend group (Labour Tracking V2). Present even when Mike has
+// not created a Labour budget category; rows are every safe trusted labour
+// monetary row, once. If an active category named "labour" exists it is exposed
+// as budgetCategory and its budget drives budget/remaining.
+export interface LabourSpendSummary {
+  knownSpendAmount: string | null
+  knownSpendCurrency: string | null
+  knownSpendLabel: string | null
+  budgetCategory: BudgetCategory | null
+  budgetAmount: string | null
+  budgetCurrency: string | null
+  budgetLabel: string | null
+  remainingAmount: string | null
+  remainingLabel: string | null
+  overBudget: boolean
+  rows: BudgetSpendRow[] // memoryType === 'labour'
+}
+
 export interface BudgetSummaryResponse {
   jobId: string
   generatedAt: string
   categories: BudgetCategorySummary[]
   uncategorized: UncategorizedSpendSummary
   totals: BudgetSummaryTotals
+  // Additive: absent on older backends → frontend falls back to deriving labour
+  // rows from categories/uncategorized.
+  labour?: LabourSpendSummary
 }
 
 export interface CreateBudgetCategoryRequest {
@@ -586,6 +643,8 @@ export interface MemoryViewResponse {
   stillToCheck: MemoryViewStillToCheck
   summarySections?: ScanViewSection[]
   costSummary?: CostSummary
+  // Additive: authoritative daily labour summary (Labour Tracking V2).
+  labourHoursSummary?: LabourHoursSummary
 }
 
 // ── Workspace Overview derivations (frontend-only) ────────────────────────────
@@ -658,6 +717,9 @@ export interface MemoryItemEdit {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // Effective event day. Present sets/clears the value (local-noon ISO for a
+  // date-only edit); OMIT the key to preserve the existing value.
+  happenedAt?: string | null
   // Clears (resolved) or keeps (still_unsure) memory_items.unresolvedFlags.
   // Omitted preserves existing flags (backwards compatible).
   uncertaintyResolution?: UncertaintyResolution
