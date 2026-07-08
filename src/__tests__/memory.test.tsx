@@ -181,7 +181,7 @@ describe('Workspace — shell / tabs', () => {
     mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
     renderWorkspace()
     openTab('Spend')
-    await screen.findByText(/Nothing bought or labour remembered yet/i)
+    await screen.findByText(/Nothing spent yet/i)
   })
 })
 

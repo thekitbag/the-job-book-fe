@@ -21,7 +21,7 @@ test.describe('Auto-total unit cost', () => {
     await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(600)
 
-    await page.getByRole('button', { name: 'Add spend' }).click()
+    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
     const form = page.getByRole('form', { name: 'Add spend' })
     await form.locator('input[name="materialName"]').fill('OSB')
     await form.locator('input[name="quantity"]').fill('5')
@@ -31,7 +31,7 @@ test.describe('Auto-total unit cost', () => {
 
     // live preview before save
     await expect(form.getByText(/£100 total/)).toBeVisible()
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: /^Save / }).click()
 
     // saved item shows unit cost + derived total from the refetched mock
     const osb = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'OSB' })

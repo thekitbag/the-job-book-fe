@@ -3973,3 +3973,84 @@ code {
   flex-shrink: 0; text-align: right;
 }
 .labour-entry-cost { font-size: var(--text-xs); font-weight: 700; color: var(--ink-500); }
+
+/* ── Manual Add V2: bottom sheet ── */
+.add-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(25, 28, 24, 0.45);
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.add-sheet {
+  background: var(--surface);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: 0 -8px 32px rgba(25, 28, 24, 0.25);
+  padding: 0.5rem 1.1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  animation: add-sheet-up 180ms ease-out;
+}
+@keyframes add-sheet-up {
+  from { transform: translateY(24px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-sheet { animation: none; }
+}
+.add-sheet-handle {
+  width: 40px; height: 4px; border-radius: var(--r-pill);
+  background: var(--ink-300); margin: 0.25rem auto 0.5rem;
+}
+.add-sheet-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.add-sheet-title {
+  margin: 0; font-family: var(--font-display);
+  font-size: var(--text-lg); font-weight: 800; color: var(--ink-900);
+}
+.add-sheet-close {
+  font: inherit; font-size: 1.3rem; line-height: 1;
+  background: none; border: none; cursor: pointer;
+  color: var(--ink-400); padding: 0.3rem 0.4rem;
+}
+.add-sheet-body { overflow-y: auto; }
+.add-sheet-voice {
+  margin: 0.8rem 0 0; text-align: center;
+  font-size: var(--text-sm); color: var(--ink-500);
+}
+.add-sheet-voice-link {
+  font: inherit; font-weight: 800; color: var(--green-700);
+  background: none; border: none; cursor: pointer; padding: 0;
+}
+
+/* Inline manual-add trigger (category cards, empty states) */
+.lens-add-inline { display: inline-flex; }
+.btn-add-inline {
+  font: inherit; font-size: var(--text-xs); font-weight: 800;
+  color: var(--green-700); background: none; border: none;
+  cursor: pointer; padding: 4px 0;
+}
+.budget-cat-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; margin-top: 4px;
+}
+.budget-cat-foot .notes-toggle { margin-top: 0; }
+
+/* Empty-section card: plain explanation + a manual add action, no Record */
+.empty-card {
+  margin: 0 1rem 1rem;
+  padding: 1.1rem 1rem;
+  border: 1.5px dashed var(--ink-300);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  text-align: center;
+}
+.mem-section .empty-card { margin: 0 1rem 0.5rem; }
+.empty-card-title {
+  margin: 0; font-size: var(--text-md); font-weight: 800; color: var(--ink-900);
+}
+.empty-card-hint { margin: 0.25rem 0 0; font-size: var(--text-sm); color: var(--ink-500); }
+.empty-card-action { margin-top: 0.6rem; }
+.empty-card .btn-add-inline {
+  border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 0.5rem 1rem; font-size: var(--text-sm); background: var(--surface);
+}

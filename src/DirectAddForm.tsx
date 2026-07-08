@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AddSheet from './AddSheet'
 import { deriveEachTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryType } from './types'
 
@@ -23,15 +24,21 @@ function todayISODate(): string {
 function DirectAddFields({
   kind,
   categories,
+  initialCategoryId,
   submitting,
   error,
+  saveLabel,
   onSubmit,
   onCancel,
 }: {
   kind: DirectAddKind
   categories: BudgetCategory[]
+  // Category context inherited from the launching card (Spend category add).
+  // Preselected but changeable/clearable through the normal category select.
+  initialCategoryId?: string
   submitting: boolean
   error: string | null
+  saveLabel: string
   onSubmit: (req: CreateMemoryItemRequest) => void
   onCancel: () => void
 }) {
@@ -41,7 +48,7 @@ function DirectAddFields({
   const [costAmount, setCostAmount] = useState('')
   const [costBasis, setCostBasis] = useState<'total' | 'each'>('total')
   const [supplier, setSupplier] = useState('')
-  const [categoryId, setCategoryId] = useState('')
+  const [categoryId, setCategoryId] = useState(initialCategoryId ?? '')
   const [locationOrUse, setLocationOrUse] = useState('')
   const [person, setPerson] = useState('')
   const [hours, setHours] = useState('')
@@ -242,7 +249,7 @@ function DirectAddFields({
 
       <div className="queue-edit-actions">
         <button type="submit" className="btn-queue-save" disabled={submitting || !canSave}>
-          {submitting ? 'Saving…' : 'Save'}
+          {submitting ? 'Saving…' : saveLabel}
         </button>
         <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>Cancel</button>
       </div>
@@ -251,21 +258,35 @@ function DirectAddFields({
   )
 }
 
-// Self-contained direct-add widget: a quiet section header (small label + a
-// round "+" that expands the section-specific form). Direct add stays secondary
-// to voice + the lens summary. Owns the save/submitting/error lifecycle.
+// Self-contained direct-add widget (Manual Add V2): a trigger that opens the
+// section-specific form in an in-context bottom sheet. Two trigger shapes:
+//  - 'header' → the quiet lens header (small-caps label + round "+");
+//  - 'button' → an inline text action ("+ Add spend" on a category card,
+//    "+ Add manually" in an empty state).
+// Direct add stays secondary to voice + the lens summary. Owns the sheet
+// open/close and save/submitting/error lifecycle; a failed save keeps the
+// sheet open with the entered values, and closing returns to the untouched
+// section behind it.
 export default function DirectAddForm({
   kind,
   label,
   sectionLabel,
   categories = [],
   onAdd,
+  variant = 'header',
+  buttonLabel,
+  title,
+  initialCategoryId,
 }: {
   kind: DirectAddKind
   label: string       // accessible action name, e.g. "Add spend"
-  sectionLabel: string // small-caps header text, e.g. "Spend"
+  sectionLabel?: string // small-caps header text, e.g. "Spend" (header variant)
   categories?: BudgetCategory[]
   onAdd: (req: CreateMemoryItemRequest) => Promise<unknown>
+  variant?: 'header' | 'button'
+  buttonLabel?: string // visible text for the 'button' variant, e.g. "+ Add spend"
+  title?: string       // sheet title; defaults to label (e.g. "Add spend — Timber")
+  initialCategoryId?: string // category context from the launching card
 }) {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -284,31 +305,46 @@ export default function DirectAddForm({
     }
   }
 
+  const close = () => { setOpen(false); setError(null) }
+
   return (
-    <div className="lens-add">
-      <div className="lens-add-head">
-        <span className="lens-add-label">{sectionLabel}</span>
+    <div className={variant === 'header' ? 'lens-add' : 'lens-add-inline'}>
+      {variant === 'header' ? (
+        <div className="lens-add-head">
+          <span className="lens-add-label">{sectionLabel}</span>
+          <button
+            type="button"
+            className={`btn-lens-add${open ? ' btn-lens-add--open' : ''}`}
+            aria-label={open ? `Close ${label.toLowerCase()}` : label}
+            aria-expanded={open}
+            onClick={() => { setError(null); setOpen(o => !o) }}
+          >
+            {open ? '×' : '+'}
+          </button>
+        </div>
+      ) : (
         <button
           type="button"
-          className={`btn-lens-add${open ? ' btn-lens-add--open' : ''}`}
-          aria-label={open ? `Close ${label.toLowerCase()}` : label}
+          className="btn-add-inline"
           aria-expanded={open}
-          onClick={() => { setError(null); setOpen(o => !o) }}
+          onClick={() => { setError(null); setOpen(true) }}
         >
-          {open ? '×' : '+'}
+          {buttonLabel ?? `+ ${label}`}
         </button>
-      </div>
+      )}
       {open && (
-        <div className="direct-add">
+        <AddSheet title={title ?? label} onClose={close} onRecordInstead={close}>
           <DirectAddFields
             kind={kind}
             categories={categories}
+            initialCategoryId={initialCategoryId}
             submitting={submitting}
             error={error}
+            saveLabel={label.replace(/^Add /, 'Save ')}
             onSubmit={submit}
-            onCancel={() => { setOpen(false); setError(null) }}
+            onCancel={close}
           />
-        </div>
+        </AddSheet>
       )}
     </div>
   )

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MemoryCard from './MemoryCard'
 import MemoryEditForm from './MemoryEditForm'
 import DirectAddForm from './DirectAddForm'
+import EmptyState from './EmptyState'
 import { memoryItemToEdit } from './memoryEdit'
 import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
@@ -285,17 +286,32 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             ? <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{cs.remainingLabel}</dd></div>
             : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
         </div>
-        {notes.length > 0
-          ? <>
-              <button type="button" className="notes-toggle" aria-expanded={open} onClick={() => toggleCat(c.id)}>
-                <span>{open ? 'Hide notes' : `Show notes (${notes.length})`}</span>
-                <span className="notes-toggle-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
-              </button>
-              {open && <div className="cat-notes">{notes.map(item => (
-                <MemoryCard key={item.id} item={item} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
-              ))}</div>}
-            </>
-          : <p className="cat-empty">No notes in this category yet.</p>}
+        {notes.length === 0 && (
+          <p className="cat-empty">No spend in this category yet — add it straight to {c.name}.</p>
+        )}
+        {/* Category-context add: opens the spend sheet with this category
+            preselected (changeable/clearable in the form's category select). */}
+        <div className="budget-cat-foot">
+          {notes.length > 0 && (
+            <button type="button" className="notes-toggle" aria-expanded={open} onClick={() => toggleCat(c.id)}>
+              <span>{open ? 'Hide notes' : `Show notes (${notes.length})`}</span>
+              <span className="notes-toggle-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
+            </button>
+          )}
+          <DirectAddForm
+            kind="spend"
+            variant="button"
+            buttonLabel="+ Add spend"
+            label="Add spend"
+            title={`Add spend — ${c.name}`}
+            initialCategoryId={c.id}
+            categories={budgetCategories}
+            onAdd={addMemoryItem}
+          />
+        </div>
+        {notes.length > 0 && open && <div className="cat-notes">{notes.map(item => (
+          <MemoryCard key={item.id} item={item} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+        ))}</div>}
       </section>
     )
   }
@@ -342,7 +358,11 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
       )}
 
       {!hasSpendContent ? (
-        <p className="mem-tab-empty">Nothing bought or labour remembered yet.</p>
+        <EmptyState
+          title="Nothing spent yet"
+          hint="Add what you’ve bought for this job, or say it with Record and it’ll be picked up for you."
+          action={<DirectAddForm kind="spend" variant="button" buttonLabel="+ Add manually" label="Add spend" categories={budgetCategories} onAdd={addMemoryItem} />}
+        />
       ) : (
         <>
       {/* System Labour group: trusted labour cost shows here once, without

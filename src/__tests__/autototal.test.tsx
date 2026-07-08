@@ -98,7 +98,7 @@ describe('Auto-total — Direct Add Spend', () => {
 
     expect(within(form).getByText(/£100 total/)).toBeInTheDocument()
 
-    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(form).getByRole('button', { name: /^Save / }))
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalled())
     const [, req] = mockCreateMemoryItem.mock.calls[0]
     expect(req).toMatchObject({ memoryType: 'ordered_material', costQualifier: 'each', costAmount: '20', quantity: '5', unit: 'sheets' })
