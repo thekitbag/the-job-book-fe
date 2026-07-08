@@ -195,3 +195,38 @@ describe('MemoryEditForm — labour', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'used_material', labourHours: null, labourTask: null }))
   })
 })
+
+describe('MemoryEditForm — labour day (happenedAt)', () => {
+  it('shows the existing day and saves an edited day as local noon', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', materialName: null, labourHours: '8', happenedAt: '2026-07-07T12:00:00' }))
+    const day = screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="happenedAt"]') as HTMLInputElement
+    expect(day.value).toBe('2026-07-07')
+    fireEvent.change(day, { target: { value: '2026-07-05' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ happenedAt: '2026-07-05T12:00:00' }))
+  })
+
+  it('sends null when the day is cleared, and omits happenedAt for non-labour', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', materialName: null, labourHours: '8', happenedAt: '2026-07-07T12:00:00' }))
+    const day = screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="happenedAt"]') as HTMLInputElement
+    fireEvent.change(day, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ happenedAt: null }))
+
+    onSubmit.mockClear()
+    const { onSubmit: onSubmit2 } = setup(initialEdit())
+    fireEvent.click(screen.getAllByRole('button', { name: /save memory/i })[1])
+    expect(onSubmit2.mock.calls[0][0]).not.toHaveProperty('happenedAt')
+  })
+
+  it('hides the day field when type changes away from labour and clears labour-only fields on save', () => {
+    const { onSubmit } = setup(initialEdit({ memoryType: 'labour', materialName: null, labourHours: '8', happenedAt: '2026-07-07T12:00:00' }))
+    const form = screen.getByRole('form', { name: /edit memory/i })
+    fireEvent.change(form.querySelectorAll('select')[0], { target: { value: 'used_material' } })
+    expect(form.querySelector('input[name="happenedAt"]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    const payload = onSubmit.mock.calls[0][0]
+    expect(payload.labourHours).toBeNull()
+    expect(payload).not.toHaveProperty('happenedAt')
+  })
+})

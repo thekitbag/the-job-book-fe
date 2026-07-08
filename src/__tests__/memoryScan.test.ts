@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, eachTotalGaps, friendlyDayLabel, hourlyTotalGaps, joinWithAnd, localDateKey, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -840,5 +840,129 @@ describe('costDetailRows — derived total', () => {
   it('does not derive a total when quantity is missing', () => {
     const rows = costDetailRows({ ...each, quantity: null, totalCostAmount: null })
     expect(rows.find(r => r[0] === 'Total')).toBeUndefined()
+  })
+})
+
+// ── Labour Tracking V2: daily labour summary ─────────────────────────────────
+
+describe('deriveLabourHoursSummary', () => {
+  const labour = (items: MemoryViewItem[]) => [section('labour', items)]
+
+  it('groups by local day of happenedAt, newest day first, with safe day and job totals', () => {
+    const s = deriveLabourHoursSummary(labour([
+      labourItem({ id: 'a', labourPerson: 'Mike', labourHours: '4', happenedAt: '2026-07-07T12:00:00' }),
+      labourItem({ id: 'b', labourPerson: 'Kurt', labourHours: '6', happenedAt: '2026-07-07T12:00:00' }),
+      labourItem({ id: 'c', labourPerson: 'Tom', labourHours: '8', happenedAt: '2026-07-06T12:00:00' }),
+    ]))
+    expect(s.days.map(d => d.date)).toEqual(['2026-07-07', '2026-07-06'])
+    expect(s.days[0].totalHours).toBe('10')
+    expect(s.days[0].totalLabel).toBe('10h day total')
+    expect(s.days[1].totalHours).toBe('8')
+    expect(s.totalHours).toBe('18')
+    expect(s.totalLabel).toBe('18h job total')
+  })
+
+  it('falls back to source capture / createdAt when happenedAt is missing', () => {
+    const s = deriveLabourHoursSummary(labour([
+      labourItem({ id: 'a', labourHours: '3', createdAt: '2026-07-05T09:00:00' }),
+    ]))
+    expect(s.days[0].date).toBe('2026-07-05')
+  })
+
+  it('keeps worth-checking and non-numeric hours visible but out of totals', () => {
+    const s = deriveLabourHoursSummary(labour([
+      labourItem({ id: 'a', labourHours: '4', happenedAt: '2026-07-07T12:00:00' }),
+      labourItem({ id: 'b', labourHours: 'about 5', happenedAt: '2026-07-07T12:00:00' }),
+      labourItem({ id: 'c', labourHours: '2', uncertaintyFlags: ['uncertain_hours'], happenedAt: '2026-07-07T12:00:00' }),
+    ]))
+    const day = s.days[0]
+    expect(day.items).toHaveLength(3)
+    expect(day.items.find(i => i.memoryItemId === 'b')!.includedInHourTotal).toBe(false)
+    expect(day.items.find(i => i.memoryItemId === 'c')!.worthChecking).toBe(true)
+    expect(day.totalHours).toBe('4')
+    expect(s.totalHours).toBe('4')
+  })
+
+  it('carries the trusted line total as secondary money; hours-only has none', () => {
+    const s = deriveLabourHoursSummary(labour([
+      labourItem({ id: 'rated', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP', happenedAt: '2026-07-07T12:00:00' }),
+      labourItem({ id: 'hours', labourHours: '6', happenedAt: '2026-07-07T12:00:00' }),
+    ]))
+    const items = s.days[0].items
+    expect(items.find(i => i.memoryItemId === 'rated')!.lineTotalLabel).toBe('£280')
+    expect(items.find(i => i.memoryItemId === 'hours')!.lineTotalLabel).toBeNull()
+  })
+
+  it('formats decimal hours and reports no totals when nothing is safe', () => {
+    const s = deriveLabourHoursSummary(labour([
+      labourItem({ id: 'a', labourHours: '3.5', happenedAt: '2026-07-07T12:00:00' }),
+    ]))
+    expect(s.days[0].items[0].hoursLabel).toBe('3.5h')
+    const none = deriveLabourHoursSummary(labour([labourItem({ id: 'b', labourHours: null, happenedAt: '2026-07-07T12:00:00' })]))
+    expect(none.totalHours).toBeNull()
+    expect(none.days[0].totalLabel).toBeNull()
+  })
+})
+
+describe('friendlyDayLabel / localDateKey', () => {
+  const NOW = new Date('2026-07-08T15:00:00')
+  it('labels today, yesterday, and older days', () => {
+    expect(friendlyDayLabel('2026-07-08', NOW)).toBe('Today')
+    expect(friendlyDayLabel('2026-07-07', NOW)).toBe('Yesterday')
+    expect(friendlyDayLabel('2026-07-01', NOW)).toMatch(/1 Jul/)
+    expect(friendlyDayLabel('2025-12-31', NOW)).toMatch(/2025/)
+    expect(friendlyDayLabel('', NOW)).toBe('Day not known')
+  })
+  it('localDateKey uses the local calendar day', () => {
+    expect(localDateKey('2026-07-08T12:00:00')).toBe('2026-07-08')
+    expect(localDateKey('not a date')).toBe('')
+  })
+})
+
+// ── Labour Tracking V2: Spend labour group ───────────────────────────────────
+
+describe('deriveBudgetSummary — labour system group', () => {
+  it('exposes every safe labour money row once, without requiring a category', () => {
+    const s = deriveBudgetSummary('job-1', [
+      section('labour', [
+        labourItem({ id: 'rated', labourTask: 'electrics', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' }),
+        labourItem({ id: 'total', labourTask: 'roof', totalCostAmount: '600', costCurrency: 'GBP', costQualifier: 'total' }),
+        labourItem({ id: 'hours', labourHours: '6' }),
+      ]),
+    ], [])
+    expect(s.labour).toBeDefined()
+    expect(s.labour!.rows.map(r => r.memoryItemId).sort()).toEqual(['rated', 'total'])
+    expect(s.labour!.knownSpendAmount).toBe('880')
+    expect(s.labour!.budgetCategory).toBeNull()
+    expect(s.labour!.budgetAmount).toBeNull()
+  })
+
+  it('aligns to an active category named labour (case-insensitive) for budget/remaining', () => {
+    const cats = [cat({ id: 'c-lab', name: ' Labour ', budgetAmount: '1500', budgetCurrency: 'GBP' })]
+    const s = deriveBudgetSummary('job-1', [
+      section('labour', [labourItem({ id: 'rated', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP', budgetCategoryId: 'c-lab' })]),
+    ], cats)
+    expect(s.labour!.budgetCategory?.id).toBe('c-lab')
+    expect(s.labour!.budgetAmount).toBe('1500')
+    expect(s.labour!.remainingAmount).toBe('1220')
+    expect(s.labour!.overBudget).toBe(false)
+  })
+})
+
+describe('deriveLabourSpendGroupFromBudget (older-backend fallback)', () => {
+  it('derives labour rows from category + uncategorised rows, de-duplicated by memoryItemId', () => {
+    const base = deriveBudgetSummary('job-1', [
+      section('labour', [labourItem({ id: 'rated', labourHours: '8', costAmount: '35', costQualifier: 'per_hour', costCurrency: 'GBP' })]),
+      section('ordered_materials', [item({ id: 'mat', materialName: 'timber', totalCostAmount: '40', costCurrency: 'GBP', costQualifier: 'total' })]),
+    ], [])
+    // simulate an older backend: no labour group, and the same labour row
+    // duplicated across categories/uncategorised
+    const older = { ...base, labour: undefined, categories: base.categories, uncategorized: { ...base.uncategorized, rows: [...base.uncategorized.rows, ...base.uncategorized.rows.filter(r => r.memoryType === 'labour')] } }
+    const g = deriveLabourSpendGroupFromBudget(older)
+    expect(g.rows).toHaveLength(1)
+    expect(g.rows[0].memoryItemId).toBe('rated')
+    expect(g.knownSpendAmount).toBe('280')
+    // material rows never leak into the labour group
+    expect(g.rows.every(r => r.memoryType === 'labour')).toBe(true)
   })
 })

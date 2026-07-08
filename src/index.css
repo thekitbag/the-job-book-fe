@@ -3877,3 +3877,56 @@ code {
 }
 .cost-preview strong { font-weight: 800; }
 .cost-preview--warning { color: var(--amber-fg); }
+
+/* ── Labour tab: daily labour view (Labour Tracking V2) ── */
+.labour-job-total {
+  margin: 0 1rem 0.9rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.labour-job-total-cap {
+  margin: 0; font-size: var(--text-2xs); font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-400);
+}
+.labour-job-total-value {
+  margin: 0.1rem 0 0; font-family: var(--font-display);
+  font-size: var(--text-xl); font-weight: 800; color: var(--ink-900);
+}
+.labour-day { margin: 0 1rem 1rem; }
+.labour-day-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 0.5rem; margin: 0 0.15rem 0.4rem;
+}
+.labour-day-label {
+  margin: 0; font-size: var(--text-md); font-weight: 800; color: var(--ink-900);
+}
+.labour-day-total { font-size: var(--text-xs); font-weight: 800; color: var(--ink-500); }
+.labour-entry {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green-500);
+  border-radius: var(--r-md);
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+.labour-entry--unresolved { border-left-color: var(--amber-fg, #b45309); }
+.labour-entry--editing { border-left-color: var(--green-600); }
+.labour-entry-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.labour-entry-main { min-width: 0; }
+.labour-entry-headline { margin: 0; font-size: var(--text-md); color: var(--ink-900); }
+.labour-entry-person { font-weight: 800; }
+.labour-entry-hours { margin-left: 0.5rem; font-weight: 700; color: var(--ink-700); }
+.labour-entry-task { margin: 0.1rem 0 0; font-size: var(--text-sm); color: var(--ink-500); }
+.labour-entry-check {
+  margin: 0.25rem 0 0; font-size: var(--text-xs); font-weight: 800;
+  color: var(--amber-fg, #b45309);
+}
+.labour-entry-side {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
+  flex-shrink: 0; text-align: right;
+}
+.labour-entry-cost { font-size: var(--text-xs); font-weight: 700; color: var(--ink-500); }
