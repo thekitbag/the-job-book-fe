@@ -103,7 +103,7 @@ describe('Job photos — section and upload', () => {
     openNotesTab()
     const section = await photosSection()
     expect(within(section).getByRole('button', { name: 'Add photo' })).toBeInTheDocument()
-    expect(within(section).getByText('No photos yet.')).toBeInTheDocument()
+    expect(await within(section).findByText('No photos yet.')).toBeInTheDocument()
   })
 
   it('photo-only save works: no descriptor, no link, renders after upload', async () => {
