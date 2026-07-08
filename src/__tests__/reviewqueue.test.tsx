@@ -1395,3 +1395,38 @@ describe('ReviewQueueScreen — labour', () => {
     expect(decision.corrected).not.toHaveProperty('totalCostAmount')
   })
 })
+
+// ── Labour Tracking V2: day (happenedAt) in review ───────────────────────────
+
+describe('ReviewQueueScreen — labour day correction', () => {
+  const withDay = (): ReviewQueue => ({
+    ...labourQueue(),
+    sections: [{ key: 'labour', label: 'Labour', items: [{
+      ...ITEM_LABOUR_RATED,
+      proposedMemory: { ...ITEM_LABOUR_RATED.proposedMemory, happenedAt: '2026-06-06T12:00:00' },
+    }] }],
+  })
+
+  beforeEach(() => {
+    mockGetReviewQueue.mockResolvedValue(withDay())
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-labour-rated', action: 'correct', status: 'corrected', memoryItemId: 'mem-y', sourceCandidateFactIds: [] })
+  })
+
+  it('shows the day field prefilled from happenedAt and submits a corrected day as local noon', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
+    fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
+    const day = within(rated).getByLabelText('Day') as HTMLInputElement
+    expect(day.value).toBe('2026-06-06')
+    fireEvent.change(day, { target: { value: '2026-06-05' } })
+    fireEvent.click(within(rated).getByRole('button', { name: /save correction/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.action).toBe('correct')
+    expect(decision.corrected!.happenedAt).toBe('2026-06-05T12:00:00')
+    // day/person/hours/task all remain correctable in the same form
+    expect(decision.corrected!.labourPerson).toBe('Tom')
+    expect(decision.corrected!.labourHours).toBe('8')
+    expect(decision.corrected!.labourTask).toBe('electrics')
+  })
+})

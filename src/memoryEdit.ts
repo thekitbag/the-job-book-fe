@@ -15,6 +15,10 @@ export function memoryItemToEdit(item: MemoryViewItem): MemoryItemEdit {
     costCurrency: item.costCurrency,
     costQualifier: item.costQualifier,
     totalCostAmount: item.totalCostAmount,
+    labourHours: item.labourHours ?? null,
+    labourPerson: item.labourPerson ?? null,
+    labourTask: item.labourTask ?? null,
+    happenedAt: item.happenedAt ?? null,
     budgetCategoryId: item.budgetCategoryId ?? null,
   }
 }
@@ -34,6 +38,10 @@ export function rememberedItemToEdit(item: AlreadyRememberedItem): MemoryItemEdi
     costCurrency: item.costCurrency ?? null,
     costQualifier: item.costQualifier ?? null,
     totalCostAmount: item.totalCostAmount ?? null,
+    labourHours: item.labourHours ?? null,
+    labourPerson: item.labourPerson ?? null,
+    labourTask: item.labourTask ?? null,
+    happenedAt: item.happenedAt ?? null,
     budgetCategoryId: item.budgetCategoryId ?? null,
   }
 }
@@ -57,6 +65,10 @@ export function applyEditToRemembered(
     costCurrency: updated.costCurrency,
     costQualifier: updated.costQualifier,
     totalCostAmount: updated.totalCostAmount,
+    labourHours: updated.labourHours ?? null,
+    labourPerson: updated.labourPerson ?? null,
+    labourTask: updated.labourTask ?? null,
+    happenedAt: updated.happenedAt ?? null,
     budgetCategoryId: updated.budgetCategoryId ?? null,
     uncertaintyFlags: updated.uncertaintyFlags ?? prev.uncertaintyFlags ?? [],
   }

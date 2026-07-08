@@ -229,11 +229,54 @@ function buildMockSections(): MemoryViewSection[] {
           },
         ],
       },
+      // Labour day-model cases (Labour Tracking V2), rebased so the "0 days ago"
+      // items land today and mem-labour-1 lands yesterday:
+      //  - Mike 4h + Kurt 6h: two entries from ONE note, same day → 10h day total
+      //  - mem-labour-1: hours-only, no named person, yesterday
+      //  - mem-labour-2: rated (8h × £35 = £280), assigned to the labour category
+      //  - mem-labour-3: trusted £600 total, no category → still under Labour in Spend
+      //  - mem-labour-6: worth checking → visible but excluded from hour totals
       {
         key: 'labour',
         label: 'Labour',
         items: [
-          // Hours-only labour: remembered, but no monetary cost → not counted.
+          // Two labour entries extracted from one voice note (same source).
+          {
+            id: 'mem-labour-4',
+            memoryType: 'labour',
+            summary: 'Mike worked 4 hours',
+            materialName: null, quantity: null, unit: null, supplierName: null,
+            deliveryTiming: null, locationOrUse: null,
+            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+            labourHours: '4', labourPerson: 'Mike', labourTask: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-l4', reviewDecisionId: 'decision-l4',
+            createdAt: '2026-06-13T11:30:00.000Z', updatedAt: '2026-06-13T11:30:00.000Z',
+            source: {
+              candidateFactId: 'fact-l4', noteId: 'note-l4', transcriptId: 'trans-l4',
+              capturedAt: '2026-06-13T11:25:00.000Z',
+              transcriptText: 'Mike 4 hours, Kurt 6.',
+            },
+          },
+          {
+            id: 'mem-labour-5',
+            memoryType: 'labour',
+            summary: 'Kurt worked 6 hours',
+            materialName: null, quantity: null, unit: null, supplierName: null,
+            deliveryTiming: null, locationOrUse: null,
+            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+            labourHours: '6', labourPerson: 'Kurt', labourTask: null,
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-l5', reviewDecisionId: 'decision-l5',
+            createdAt: '2026-06-13T11:29:00.000Z', updatedAt: '2026-06-13T11:29:00.000Z',
+            source: {
+              candidateFactId: 'fact-l5', noteId: 'note-l4', transcriptId: 'trans-l4',
+              capturedAt: '2026-06-13T11:25:00.000Z',
+              transcriptText: 'Mike 4 hours, Kurt 6.',
+            },
+          },
+          // Hours-only labour with no named person: remembered, no money → not
+          // counted in Spend. Rebased to YESTERDAY.
           {
             id: 'mem-labour-1',
             memoryType: 'labour',
@@ -265,7 +308,8 @@ function buildMockSections(): MemoryViewSection[] {
             createdAt: '2026-06-13T11:15:00.000Z', updatedAt: '2026-06-13T11:15:00.000Z',
             source: null,
           },
-          // Explicit labour total → safe £600.
+          // Explicit labour total → safe £600, deliberately NO category: must
+          // still show once under Labour in Spend.
           {
             id: 'mem-labour-3',
             memoryType: 'labour',
@@ -277,6 +321,21 @@ function buildMockSections(): MemoryViewSection[] {
             uncertaintyFlags: [],
             sourceCandidateFactId: 'fact-l3', reviewDecisionId: 'decision-l3',
             createdAt: '2026-06-13T11:20:00.000Z', updatedAt: '2026-06-13T11:20:00.000Z',
+            source: null,
+          },
+          // Worth-checking labour: non-numeric hours + unresolved flag → visible
+          // in the daily view but excluded from hour totals and Spend.
+          {
+            id: 'mem-labour-6',
+            memoryType: 'labour',
+            summary: 'Apprentice did about 5 hours clearing up',
+            materialName: null, quantity: null, unit: null, supplierName: null,
+            deliveryTiming: null, locationOrUse: null,
+            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+            labourHours: 'about 5', labourPerson: 'Apprentice', labourTask: 'clearing up',
+            uncertaintyFlags: ['uncertain_hours'],
+            sourceCandidateFactId: 'fact-l6', reviewDecisionId: 'decision-l6',
+            createdAt: '2026-06-13T11:08:00.000Z', updatedAt: '2026-06-13T11:08:00.000Z',
             source: null,
           },
         ],
@@ -379,22 +438,36 @@ function buildMockSections(): MemoryViewSection[] {
 let mockMemoryByJob: Map<string, MemoryViewSection[]> | null = null
 
 // Rebase the fixture's fixed dates onto the current day so the workspace
-// Overview renders meaningfully: labour is dated today (so "Labour today" has
-// hours), everything else is spread over the last week (so "Latest on this job"
-// shows varied ages). Cost amounts/qualifiers/flags are untouched, so the
-// known-spend cases the fixture encodes still hold.
+// Overview and the daily Labour view render meaningfully: labour is dated today
+// (except mem-labour-1, which pins the "Yesterday" day group), everything else
+// is spread over the last week. Labour items also get a local-noon happenedAt
+// for their rebased day — the effective labour day the daily view groups on.
+// Cost amounts/qualifiers/flags are untouched, so the known-spend cases the
+// fixture encodes still hold.
+const YESTERDAY_LABOUR_IDS = new Set(['mem-labour-1'])
+
+function localNoonISOFor(msSinceEpoch: number): string {
+  const d = new Date(msSinceEpoch)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T12:00:00`
+}
+
 function rebaseMockDates(sections: MemoryViewSection[]): void {
   const dayMs = 86_400_000
   const now = Date.now()
   let nonLabourIdx = 0
   for (const s of sections) {
     for (const item of s.items) {
-      const daysAgo = item.memoryType === 'labour' ? 0 : (nonLabourIdx++ % 7)
+      const daysAgo = item.memoryType === 'labour'
+        ? (YESTERDAY_LABOUR_IDS.has(item.id) ? 1 : 0)
+        : (nonLabourIdx++ % 7)
       // Small per-item offset keeps same-day items in a stable newest-first order.
-      const iso = new Date(now - daysAgo * dayMs - item.id.length * 60_000).toISOString()
+      const ms = now - daysAgo * dayMs - item.id.length * 60_000
+      const iso = new Date(ms).toISOString()
       item.createdAt = iso
       item.updatedAt = iso
       if (item.source) item.source = { ...item.source, capturedAt: iso }
+      if (item.memoryType === 'labour') item.happenedAt = localNoonISOFor(ms)
     }
   }
 }

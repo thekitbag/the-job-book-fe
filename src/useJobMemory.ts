@@ -13,6 +13,8 @@ import type { MemoryCardProps } from './MemoryCard'
 import { memoryItemToEdit } from './memoryEdit'
 import {
   deriveCostSummary,
+  deriveLabourHoursSummary,
+  deriveLabourSpendGroupFromBudget,
   deriveLabourSummary,
   deriveTotalKnownCost,
   hasCostLikeAmount,
@@ -26,6 +28,8 @@ import type {
   CreateMemoryItemRequest,
   Job,
   LabourCostSummary,
+  LabourHoursSummary,
+  LabourSpendSummary,
   MemoryItemEdit,
   MemoryViewItem,
   MemoryViewResponse,
@@ -114,7 +118,7 @@ export function useJobMemory(job: Job) {
     try {
       const fresh = await getMemoryView(requestedJobId)
       if (currentJobIdRef.current !== requestedJobId) return
-      setData(prev => (prev ? { ...prev, costSummary: fresh.costSummary } : fresh))
+      setData(prev => (prev ? { ...prev, costSummary: fresh.costSummary, labourHoursSummary: fresh.labourHoursSummary } : fresh))
     } catch {
       if (currentJobIdRef.current !== requestedJobId) return
       setRefreshError(true)
@@ -263,6 +267,18 @@ export function useJobMemory(job: Job) {
     () => (data ? (data.costSummary?.totalKnownCost ?? deriveTotalKnownCost(data.sections)) : null),
     [data],
   )
+  // Daily labour view: backend labourHoursSummary preferred; local fallback for
+  // an older API without it.
+  const labourHours = useMemo<LabourHoursSummary | null>(
+    () => (data ? (data.labourHoursSummary ?? deriveLabourHoursSummary(data.sections)) : null),
+    [data],
+  )
+  // Spend Labour group: backend budgetSummary.labour preferred; fallback derives
+  // labour rows from category/uncategorised rows (deduped by memoryItemId).
+  const labourSpendGroup = useMemo<LabourSpendSummary | null>(
+    () => (budgetSummary ? (budgetSummary.labour ?? deriveLabourSpendGroupFromBudget(budgetSummary)) : null),
+    [budgetSummary],
+  )
 
   const sectionItems = useCallback(
     (key: string) => data?.sections.find(s => s.key === key)?.items ?? [],
@@ -359,7 +375,7 @@ export function useJobMemory(job: Job) {
     data, loadState, errorMsg, reload, refreshError, refreshSummary, refetch,
     addMemoryItem,
     budgetSummary, budgetCategories,
-    ordered, labourSummary, totalKnownCost,
+    ordered, labourSummary, totalKnownCost, labourHours, labourSpendGroup,
     sectionItems, includedIds, exclusionReason, hasMemory,
     costCheckItems, notCountedItems, resolveCostBasis, addPrice,
     // budget CRUD state + handlers

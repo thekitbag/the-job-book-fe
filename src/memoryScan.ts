@@ -1,4 +1,4 @@
-import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, LabourCostSummary, LabourExcludedRow, LabourExclusionReason, LabourSpendRow, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -409,7 +409,7 @@ export function deriveBudgetSummary(
   const totalSpend = categorySummaries.reduce((n, c) => n + sumRows(c.rows), 0) + uncatSpend
   const totalRemaining = anyBudget ? totalBudget - totalSpend : null
 
-  return {
+  const response: BudgetSummaryResponse = {
     jobId,
     generatedAt: new Date().toISOString(),
     categories: categorySummaries,
@@ -429,6 +429,12 @@ export function deriveBudgetSummary(
       overBudget: anyBudget && totalSpend > totalBudget,
     },
   }
+  // System labour group (additive, like the backend): every safe labour money
+  // row once, aligned to an active "labour" category when one exists. Labour
+  // rows stay in categories/uncategorized for older clients; the new frontend
+  // de-duplicates on display.
+  response.labour = deriveLabourSpendGroupFromBudget(response)
+  return response
 }
 
 // Labour money summary, mirroring the backend additive costSummary.labour shape.
@@ -489,6 +495,140 @@ export function deriveTotalKnownCost(sections: MemoryViewSection[]): TotalKnownC
     knownSpendCurrency: has ? currency : null,
     knownSpendLabel: has ? `${formatMoney(total, currency)} known spend` : null,
     includedMemoryItemIds: ids,
+  }
+}
+
+// ── Labour daily summary (Labour Tracking V2) ───────────────────────────────
+// Frontend fallback mirroring the backend memory-view.labourHoursSummary rules,
+// used by the mock API and for older backends without the summary. The live UI
+// prefers the backend response.
+
+// Local-noon ISO for a date-only value — avoids timezone day drift when the
+// backend stores/echoes the timestamp.
+export function localNoonISO(dateOnly: string): string {
+  return `${dateOnly}T12:00:00`
+}
+
+// YYYY-MM-DD local calendar day for an ISO timestamp ('' when unparseable).
+export function localDateKey(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+// Builder-facing day heading: Today / Yesterday / "Mon 6 Jul" (with the year
+// only when it isn't this year).
+export function friendlyDayLabel(dateKey: string, now: Date = new Date()): string {
+  if (!dateKey) return 'Day not known'
+  const today = localDateKey(now.toISOString())
+  if (dateKey === today) return 'Today'
+  const yesterday = localDateKey(new Date(now.getTime() - 86_400_000).toISOString())
+  if (dateKey === yesterday) return 'Yesterday'
+  const d = new Date(`${dateKey}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return 'Day not known'
+  const sameYear = d.getFullYear() === now.getFullYear()
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
+}
+
+// "4" → "4h", "3.5" → "3.5h"; non-numeric hours shown as said (never totalled).
+function hoursShort(hours: string): string {
+  return DECIMAL.test(hours) ? `${Math.round(parseFloat(hours) * 100) / 100}h` : hours
+}
+
+/**
+ * Group labour memory items into UK-local calendar days with safe hour totals.
+ * Included in totals only when hours are a strict positive decimal and the item
+ * has no unresolved flags; excluded items stay visible as worth checking.
+ */
+export function deriveLabourHoursSummary(sections: MemoryViewSection[]): LabourHoursSummary {
+  const labour = sections.find(s => s.key === 'labour')?.items ?? []
+  const byDay = new Map<string, LabourDayItem[]>()
+
+  for (const item of labour) {
+    const effective = item.happenedAt ?? item.source?.capturedAt ?? item.createdAt
+    const worthChecking = (item.uncertaintyFlags ?? []).length > 0
+    const included = !worthChecking && POS_DECIMAL(item.labourHours)
+    const line = safeLabourCost(item)
+    const dayItem: LabourDayItem = {
+      memoryItemId: item.id,
+      labourPerson: item.labourPerson ?? null,
+      labourTask: item.labourTask ?? null,
+      labourHours: item.labourHours ?? null,
+      hoursLabel: item.labourHours ? hoursShort(item.labourHours) : null,
+      happenedAt: item.happenedAt ?? null,
+      includedInHourTotal: included,
+      worthChecking,
+      lineTotalAmount: line ? String(Math.round(line.amount * 100) / 100) : null,
+      lineTotalCurrency: line ? line.currency : null,
+      lineTotalLabel: line ? formatMoney(line.amount, line.currency) : null,
+    }
+    const key = localDateKey(effective)
+    const list = byDay.get(key) ?? []
+    list.push(dayItem)
+    byDay.set(key, list)
+  }
+
+  // Days newest first ('' — unparseable date — sorts last); items keep the
+  // section's existing newest-first order.
+  const days: LabourDaySummary[] = [...byDay.entries()]
+    .sort(([a], [b]) => (b || '\0').localeCompare(a || '\0'))
+    .map(([date, items]) => {
+      const total = items.reduce((n, it) => n + (it.includedInHourTotal ? parseFloat(it.labourHours!) : 0), 0)
+      const has = items.some(it => it.includedInHourTotal)
+      const rounded = Math.round(total * 100) / 100
+      return {
+        date,
+        totalHours: has ? String(rounded) : null,
+        totalLabel: has ? `${rounded}h day total` : null,
+        items,
+      }
+    })
+
+  const jobTotal = days.reduce((n, d) => n + (d.totalHours ? parseFloat(d.totalHours) : 0), 0)
+  const hasJobTotal = days.some(d => d.totalHours !== null)
+  const jobRounded = Math.round(jobTotal * 100) / 100
+  return {
+    totalHours: hasJobTotal ? String(jobRounded) : null,
+    totalLabel: hasJobTotal ? `${jobRounded}h job total` : null,
+    days,
+  }
+}
+
+// ── Labour spend group fallback (Spend tab) ─────────────────────────────────
+// Prefer budgetSummary.labour from the backend. For older responses, derive the
+// group from existing category/uncategorised rows: every labour monetary row,
+// de-duplicated by memoryItemId, with budget/remaining from an active category
+// named "labour" when one exists.
+export function deriveLabourSpendGroupFromBudget(bs: BudgetSummaryResponse): LabourSpendSummary {
+  const currency = 'GBP'
+  const seen = new Set<string>()
+  const rows: BudgetSpendRow[] = []
+  const allRows = [...bs.categories.flatMap(c => c.rows), ...bs.uncategorized.rows]
+  for (const row of allRows) {
+    if (row.memoryType !== 'labour' || seen.has(row.memoryItemId)) continue
+    seen.add(row.memoryItemId)
+    rows.push(row)
+  }
+  const spend = rows.reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
+  const has = rows.length > 0
+
+  const labourCat = bs.categories.find(c => c.category.name.trim().toLowerCase() === 'labour') ?? null
+  const budget = labourCat?.category.budgetAmount && DECIMAL.test(labourCat.category.budgetAmount)
+    ? parseFloat(labourCat.category.budgetAmount) : null
+  const remaining = budget !== null ? budget - spend : null
+  return {
+    knownSpendAmount: has ? String(Math.round(spend * 100) / 100) : null,
+    knownSpendCurrency: has ? currency : null,
+    knownSpendLabel: has ? `${formatMoney(spend, currency)} known spend` : null,
+    budgetCategory: labourCat?.category ?? null,
+    budgetAmount: budget !== null ? String(budget) : null,
+    budgetCurrency: budget !== null ? currency : null,
+    budgetLabel: budget !== null ? `${formatMoney(budget, currency)} budget` : null,
+    remainingAmount: remaining !== null ? String(Math.round(remaining * 100) / 100) : null,
+    remainingLabel: remaining !== null ? `${formatMoney(Math.abs(remaining), currency)} ${remaining < 0 ? 'over budget' : 'remaining'}` : null,
+    overBudget: budget !== null && spend > budget,
+    rows,
   }
 }
 
