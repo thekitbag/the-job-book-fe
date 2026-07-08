@@ -726,3 +726,59 @@ export interface MemoryItemEdit {
   // Assign/clear the item's budget category. Omitted leaves it unchanged.
   budgetCategoryId?: string | null
 }
+
+// ── Job photos ────────────────────────────────────────────────────────────────
+// A job photo is supporting job context — not a memory item, spend item, or
+// extraction source. Receipt photos are evidence only: uploading one never
+// creates candidate facts, memory items, review decisions, or spend changes.
+
+export interface JobPhotoLinkedNote {
+  id: string
+  capturedAt: string
+}
+
+export interface JobPhotoLinkedMemoryItem {
+  id: string
+  memoryType: string
+  summary: string
+}
+
+export interface JobPhoto {
+  id: string
+  jobId: string
+  descriptor: string | null
+  mimeType: string
+  sizeBytes: number
+  uploadedAt: string
+  createdAt: string
+  updatedAt: string
+  linkedNoteId: string | null
+  linkedMemoryItemId: string | null
+  linkedNote: JobPhotoLinkedNote | null
+  linkedMemoryItem: JobPhotoLinkedMemoryItem | null
+  // Authenticated backend route (e.g. /api/jobs/:jobId/photos/:photoId/file).
+  // Never a public object-storage URL.
+  imageUrl: string
+}
+
+export interface JobPhotosResponse {
+  jobId: string
+  photos: JobPhoto[]
+}
+
+// Multipart upload fields for POST /api/jobs/:jobId/photos. At most one link
+// target; descriptor is trimmed, blank → null, max 120 chars.
+export interface UploadJobPhotoRequest {
+  file: File
+  descriptor?: string | null
+  linkedNoteId?: string | null
+  linkedMemoryItemId?: string | null
+}
+
+// PATCH /api/jobs/:jobId/photos/:photoId — omitted fields preserve existing
+// values; null clears. At most one link target set after patch.
+export interface PatchJobPhotoRequest {
+  descriptor?: string | null
+  linkedNoteId?: string | null
+  linkedMemoryItemId?: string | null
+}

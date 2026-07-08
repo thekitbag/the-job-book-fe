@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import MemoryCard from './MemoryCard'
 import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
 import type { JobMemory } from './useJobMemory'
@@ -25,12 +26,16 @@ export default function MemorySectionTab({
   ariaLabel,
   directAdd,
   sectionAdds,
+  footer,
 }: {
   mem: JobMemory
   sectionKeys: string[]
   ariaLabel: string
   directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
   sectionAdds?: Partial<Record<string, SectionAdd>>
+  // Extra job-context content rendered at the end of the lens (e.g. Job photos
+  // on the Notes tab). Rendered regardless of whether sections have items.
+  footer?: ReactNode
 }) {
   const { sectionItems, cardProps, addMemoryItem, refreshError, refetch } = mem
   // A section is visible if it has items OR its own add action (so you can add
@@ -50,7 +55,7 @@ export default function MemorySectionTab({
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && !footer ? (
         <p className="mem-tab-empty">Nothing remembered here yet.</p>
       ) : (
         rows.map(s => {
@@ -67,6 +72,7 @@ export default function MemorySectionTab({
           )
         })
       )}
+      {footer}
     </div>
   )
 }
