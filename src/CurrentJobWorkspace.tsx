@@ -10,6 +10,7 @@ import { deriveLabourToday, deriveLatestActivity, formatMoney } from './memorySc
 import SpendTab from './SpendTab'
 import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
+import JobPhotosSection, { type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration } from './SourceHistory'
 import type { CandidateFact, Job, LabourTodaySummary, LatestActivityItem, LocalNote, TotalKnownCost } from './types'
 
@@ -342,6 +343,13 @@ export default function CurrentJobWorkspace({
     [mem.data],
   )
 
+  // Photo link targets: trusted memory items only — review-queue drafts are
+  // never offered as link targets (v1 rule).
+  const photoLinkTargets = useMemo<PhotoLinkTarget[]>(
+    () => (mem.data?.sections ?? []).flatMap(s => s.items.map(i => ({ id: i.id, label: i.summary }))),
+    [mem.data],
+  )
+
   const hasUrgent = queueLoadState === 'ready' && draftCount > 0
   const thingsCopy = draftCount === 1 ? '1 thing to check' : `${draftCount} things to check`
 
@@ -473,7 +481,13 @@ export default function CurrentJobWorkspace({
           />,
         )}
         {tab === 'notes' && renderMemoryTab(
-          <MemorySectionTab mem={mem} sectionKeys={NOTES_SECTION_KEYS} ariaLabel="Notes" directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }} />,
+          <MemorySectionTab
+            mem={mem}
+            sectionKeys={NOTES_SECTION_KEYS}
+            ariaLabel="Notes"
+            directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }}
+            footer={<JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} />}
+          />,
         )}
       </div>
 

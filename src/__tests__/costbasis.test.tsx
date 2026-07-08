@@ -14,6 +14,7 @@ vi.mock('../api', async (importOriginal) => {
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-cb-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
   }
 })
 vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))

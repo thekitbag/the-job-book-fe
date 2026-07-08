@@ -3877,3 +3877,44 @@ code {
 }
 .cost-preview strong { font-weight: 800; }
 .cost-preview--warning { color: var(--amber-fg); }
+
+/* ── Job photos (Notes tab): job-context photo cards ── */
+.job-photos { margin: 0 0 1rem; }
+.photo-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  margin: 0 1rem 0.6rem;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.photo-card-img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  background: var(--surface-sunk);
+}
+.photo-card-fallback {
+  padding: 1.4rem 1rem;
+  background: var(--surface-sunk);
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: center;
+}
+.photo-card-body { padding: 0.65rem 0.9rem 0.75rem; }
+.photo-card-descriptor {
+  margin: 0; font-size: var(--text-md); font-weight: 700; color: var(--ink-900);
+}
+.photo-card-meta { margin: 0.15rem 0 0.35rem; font-size: var(--text-xs); color: var(--ink-500); }
+.photo-card-link { font-weight: 700; }
+.photo-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  margin: 0.2rem 0;
+}
+.photo-file-input { padding: 0.45rem; }
