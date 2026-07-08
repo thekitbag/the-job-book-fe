@@ -34,7 +34,7 @@ test.describe('Job photos', () => {
     await gotoApp(page)
     const section = await openPhotos(page)
     await expect(section.getByText('Jewson receipt')).toBeVisible()
-    await expect(section.getByText(/Linked to: Ordered 12 sheets of plasterboard/)).toBeVisible()
+    await expect(section.getByText(/Linked to: 12 sheets plasterboard/)).toBeVisible()
     // receipt photo is evidence only — no processed-spend copy anywhere
     await expect(page.getByText(/added to spend/i)).toHaveCount(0)
   })
@@ -71,12 +71,12 @@ test.describe('Job photos', () => {
     const form = section.getByRole('form', { name: 'Add photo' })
     await form.locator('input[type="file"]').setInputFiles({ name: 'timber.png', mimeType: 'image/png', buffer: PNG })
     await form.locator('input[name="descriptor"]').fill('Timber delivery')
-    await form.getByLabel('Link photo to').selectOption({ label: 'Ordered 6 lengths of timber' })
+    await form.getByLabel('Link photo to').selectOption({ label: '6 lengths timber' })
     await form.getByRole('button', { name: 'Save photo' }).click()
     await page.waitForTimeout(900)
 
     await expect(section.getByText('Timber delivery')).toBeVisible()
-    await expect(section.getByText(/Linked to: Ordered 6 lengths of timber/)).toBeVisible()
+    await expect(section.getByText(/Linked to: 6 lengths timber/)).toBeVisible()
   })
 
   test('a failed upload keeps the form open and recoverable', async ({ page }) => {
@@ -104,9 +104,9 @@ test.describe('Job photos', () => {
     await expect(receipt.getByText('Jewson receipt')).toBeVisible()
     await receipt.getByRole('button', { name: 'Edit details' }).click()
     const form = receipt.getByRole('form', { name: 'Edit photo details' })
-    await form.getByLabel('Link photo to').selectOption({ label: 'Ordered 8 bags of hardcore from Jewson at £5 each' })
+    await form.getByLabel('Link photo to').selectOption({ label: '8 bags hardcore' })
     await form.getByRole('button', { name: 'Save details' }).click()
     await page.waitForTimeout(600)
-    await expect(receipt.getByText(/Linked to: Ordered 8 bags of hardcore/)).toBeVisible()
+    await expect(receipt.getByText(/Linked to: 8 bags hardcore/)).toBeVisible()
   })
 })

@@ -186,7 +186,7 @@ describe('Job photos — section and upload', () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Save photo' }))
 
     await waitFor(() => expect(mockUploadJobPhoto).toHaveBeenCalledWith(JOB.id, expect.objectContaining({ linkedMemoryItemId: 'mem-plasterboard' })))
-    expect(await within(section).findByText(/Linked to: 12 sheets of plasterboard/)).toBeInTheDocument()
+    expect(await within(section).findByText(/Linked to: 12 sheets plasterboard/)).toBeInTheDocument()
   })
 
   it('a failed upload keeps the form open with values and shows a retryable error', async () => {
@@ -250,7 +250,7 @@ describe('Job photos — section and upload', () => {
       descriptor: 'Back wall', linkedMemoryItemId: 'mem-plasterboard', linkedNoteId: null,
     }))
     expect(await within(section).findByText('Back wall')).toBeInTheDocument()
-    expect(within(section).getByText(/Linked to: 12 sheets of plasterboard/)).toBeInTheDocument()
+    expect(within(section).getByText(/Linked to: 12 sheets plasterboard/)).toBeInTheDocument()
   })
 
   it('shows a safe fallback when the image cannot be loaded', async () => {
@@ -261,5 +261,73 @@ describe('Job photos — section and upload', () => {
     const img = await within(section).findByAltText('Job photo')
     fireEvent.error(img)
     expect(within(section).getByText('Photo uploaded')).toBeInTheDocument()
+  })
+})
+
+describe('Job photos — corrected items use current trusted labels', () => {
+  // The item was corrected after extraction: the stored summary (original
+  // source text) says OSB, but the current trusted fields say fire-rated
+  // plasterboard. Picker and saved card must both show the corrected identity.
+  const CORRECTED = {
+    id: 'mem-corrected', memoryType: 'ordered_material', summary: 'Ordered a load of OSB boards',
+    materialName: 'fire-rated plasterboard', quantity: '10', unit: 'sheets', supplierName: null, deliveryTiming: null,
+    locationOrUse: null, costAmount: null, costCurrency: 'GBP', costQualifier: null, totalCostAmount: null,
+    uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+    createdAt: '2026-07-01T09:00:00Z', updatedAt: '2026-07-02T09:00:00Z', source: null,
+  }
+
+  beforeEach(() => {
+    const view = memoryView()
+    view.sections[0].items.push(CORRECTED)
+    mockGetMemoryView.mockResolvedValue(view)
+  })
+
+  it('the picker shows the corrected identity, not the original source text', async () => {
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add photo' }))
+    const select = within(section).getByLabelText('Link photo to')
+    const labels = Array.from(select.querySelectorAll('option')).map(o => o.textContent)
+    expect(labels).toContain('10 sheets fire-rated plasterboard')
+    expect(labels.join('|')).not.toMatch(/OSB/)
+  })
+
+  it('the saved card label uses the current trusted fields even when the backend echoes stale text', async () => {
+    // backend echoes the stale original summary on the linked photo
+    mockGetJobPhotos.mockResolvedValue({
+      jobId: JOB.id,
+      photos: [photo({
+        id: 'photo-3',
+        linkedMemoryItemId: 'mem-corrected',
+        linkedMemoryItem: { id: 'mem-corrected', memoryType: 'ordered_material', summary: 'Ordered a load of OSB boards' },
+      })],
+    })
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    expect(await within(section).findByText(/Linked to: 10 sheets fire-rated plasterboard/)).toBeInTheDocument()
+    expect(within(section).queryByText(/OSB/)).toBeNull()
+  })
+
+  it('labour link targets use person/hours/task, not the source summary', async () => {
+    const view = memoryView()
+    view.sections.push({ key: 'labour', label: 'Labour', items: [{
+      id: 'mem-lab', memoryType: 'labour', summary: 'Someone did some hours',
+      materialName: null, quantity: null, unit: null, supplierName: null, deliveryTiming: null,
+      locationOrUse: null, costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
+      uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
+      createdAt: '2026-07-01T09:00:00Z', updatedAt: '2026-07-01T09:00:00Z', source: null,
+    }] })
+    mockGetMemoryView.mockResolvedValue(view)
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add photo' }))
+    const select = within(section).getByLabelText('Link photo to')
+    const labels = Array.from(select.querySelectorAll('option')).map(o => o.textContent)
+    expect(labels).toContain('Tom · 8h · electrics')
+    expect(labels.join('|')).not.toMatch(/Someone did some hours/)
   })
 })

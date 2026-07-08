@@ -10,7 +10,7 @@ import { deriveLabourToday, deriveLatestActivity, formatMoney } from './memorySc
 import SpendTab from './SpendTab'
 import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
-import JobPhotosSection, { type PhotoLinkTarget } from './JobPhotosSection'
+import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration } from './SourceHistory'
 import type { CandidateFact, Job, LabourTodaySummary, LatestActivityItem, LocalNote, TotalKnownCost } from './types'
 
@@ -344,9 +344,10 @@ export default function CurrentJobWorkspace({
   )
 
   // Photo link targets: trusted memory items only — review-queue drafts are
-  // never offered as link targets (v1 rule).
+  // never offered as link targets (v1 rule). Labels are the items' CURRENT
+  // display identity (post-correction), not original extraction text.
   const photoLinkTargets = useMemo<PhotoLinkTarget[]>(
-    () => (mem.data?.sections ?? []).flatMap(s => s.items.map(i => ({ id: i.id, label: i.summary }))),
+    () => (mem.data?.sections ?? []).flatMap(s => s.items.map(i => ({ id: i.id, label: photoLinkTargetLabel(i) }))),
     [mem.data],
   )
 

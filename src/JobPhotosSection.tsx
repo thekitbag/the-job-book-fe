@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getJobPhotos, patchJobPhoto, uploadJobPhoto } from './api'
-import type { JobPhoto, PatchJobPhotoRequest } from './types'
+import type { JobPhoto, MemoryViewItem, PatchJobPhotoRequest } from './types'
 
 // Photos are supporting job context (never a gallery destination, never spend):
 // this section lives on the Notes tab. Photo-only save works — no recording,
@@ -11,6 +11,26 @@ import type { JobPhoto, PatchJobPhotoRequest } from './types'
 export interface PhotoLinkTarget {
   id: string
   label: string
+}
+
+// Current-truth label for a link target, matching the display identity the
+// memory/spend rows use. Always derived from the trusted memory-view item's
+// CURRENT fields — never from original extraction/source text, so a corrected
+// item shows its corrected identity in the picker and on saved photo cards.
+export function photoLinkTargetLabel(item: MemoryViewItem): string {
+  if (item.memoryType === 'labour') {
+    const bits = [
+      item.labourPerson,
+      item.labourHours ? `${item.labourHours}h` : null,
+      item.labourTask,
+    ].filter(Boolean)
+    return bits.length > 0 ? bits.join(' · ') : item.summary
+  }
+  if (item.memoryType === 'ordered_material' || item.memoryType === 'used_material' || item.memoryType === 'leftover_material') {
+    const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
+    return [qty, item.materialName].filter(Boolean).join(' ') || item.summary
+  }
+  return item.summary
 }
 
 // Relative day copy for a photo timestamp (photos are recent, phone-first).
@@ -24,8 +44,16 @@ function photoDayLabel(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
-function linkLabel(photo: JobPhoto): string | null {
-  if (photo.linkedMemoryItem) return `Linked to: ${photo.linkedMemoryItem.summary}`
+// Saved-card link label. Prefers the CURRENT trusted item label (same one the
+// picker shows) over the backend-echoed summary, which may predate a
+// correction; the echoed summary is only a fallback when the item is no
+// longer in the loaded memory view.
+function linkLabel(photo: JobPhoto, linkTargets: PhotoLinkTarget[]): string | null {
+  if (photo.linkedMemoryItemId || photo.linkedMemoryItem) {
+    const current = linkTargets.find(t => t.id === (photo.linkedMemoryItemId ?? photo.linkedMemoryItem?.id))
+    const label = current?.label ?? photo.linkedMemoryItem?.summary
+    return label ? `Linked to: ${label}` : null
+  }
   if (photo.linkedNote) return `Linked to note from ${photoDayLabel(photo.linkedNote.capturedAt)}`
   return null
 }
@@ -109,7 +137,7 @@ function PhotoCard({ photo, linkTargets, onSave }: {
     }
   }
 
-  const link = linkLabel(photo)
+  const link = linkLabel(photo, linkTargets)
   return (
     <div className="photo-card">
       {imgFailed
