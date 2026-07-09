@@ -50,6 +50,14 @@ function userLabel(u: SupportUser | AuthUser): string {
   return ('name' in u && u.name) ? u.name : u.email
 }
 
+// A 401/403 from any support API is a NO-ACCESS state (session expired or
+// role revoked mid-use), never a retryable data error: the page re-runs its
+// auth gate, which lands on the auth screen (401) or Not authorised (403) with
+// all support data unmounted.
+function isNoAccess(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 403)
+}
+
 function Retry({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="mem-error" role="alert">
@@ -61,7 +69,7 @@ function Retry({ message, onRetry }: { message: string; onRetry: () => void }) {
 
 // ── User + job pickers ───────────────────────────────────────────────────────
 
-function SupportUserList({ onSelect }: { onSelect: (user: SupportUser) => void }) {
+function SupportUserList({ onSelect, onNoAccess }: { onSelect: (user: SupportUser) => void; onNoAccess: () => void }) {
   const [users, setUsers] = useState<SupportUser[] | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -69,8 +77,8 @@ function SupportUserList({ onSelect }: { onSelect: (user: SupportUser) => void }
     setFailed(false)
     getSupportUsers()
       .then(r => setUsers(r.users))
-      .catch(() => setFailed(true))
-  }, [])
+      .catch((err: unknown) => { if (isNoAccess(err)) onNoAccess(); else setFailed(true) })
+  }, [onNoAccess])
   useEffect(() => { load() }, [load])
 
   if (failed) return <Retry message="Could not load users." onRetry={load} />
@@ -96,10 +104,11 @@ function SupportUserList({ onSelect }: { onSelect: (user: SupportUser) => void }
   )
 }
 
-function SupportJobList({ user, onInspect, onViewAs }: {
+function SupportJobList({ user, onInspect, onViewAs, onNoAccess }: {
   user: SupportUser
   onInspect: (job: SupportJob) => void
   onViewAs: (job: SupportJob) => void
+  onNoAccess: () => void
 }) {
   const [resp, setResp] = useState<SupportUserJobsResponse | null>(null)
   const [failed, setFailed] = useState(false)
@@ -108,8 +117,8 @@ function SupportJobList({ user, onInspect, onViewAs }: {
     setFailed(false)
     getSupportUserJobs(user.id)
       .then(setResp)
-      .catch(() => setFailed(true))
-  }, [user.id])
+      .catch((err: unknown) => { if (isNoAccess(err)) onNoAccess(); else setFailed(true) })
+  }, [user.id, onNoAccess])
   useEffect(() => { load() }, [load])
 
   if (failed) return <Retry message={`Could not load jobs for ${userLabel(user)}.`} onRetry={load} />
@@ -139,7 +148,7 @@ function SupportJobList({ user, onInspect, onViewAs }: {
 // ── Inspection (rough but useful): did they say it → hear it → extract it →
 //    review it → remember it? ────────────────────────────────────────────────
 
-function SupportInspection({ job, onBack }: { job: SupportJob; onBack: () => void }) {
+function SupportInspection({ job, onBack, onNoAccess }: { job: SupportJob; onBack: () => void; onNoAccess: () => void }) {
   const [data, setData] = useState<InspectionData | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -147,8 +156,8 @@ function SupportInspection({ job, onBack }: { job: SupportJob; onBack: () => voi
     setFailed(false)
     getSupportJobInspection(job.id)
       .then(setData)
-      .catch(() => setFailed(true))
-  }, [job.id])
+      .catch((err: unknown) => { if (isNoAccess(err)) onNoAccess(); else setFailed(true) })
+  }, [job.id, onNoAccess])
   useEffect(() => { load() }, [load])
 
   if (failed) return <><BackRow onBack={onBack} /><Retry message="Could not load inspection." onRetry={load} /></>
@@ -289,7 +298,7 @@ const VIEW_AS_TABS: { key: ViewAsTab; label: string }[] = [
   { key: 'review', label: 'To check' },
 ]
 
-function SupportViewAs({ user, job, onExit }: { user: SupportUser; job: SupportJob; onExit: () => void }) {
+function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; job: SupportJob; onExit: () => void; onNoAccess: () => void }) {
   const [tab, setTab] = useState<ViewAsTab>('spend')
   const [memory, setMemory] = useState<MemoryViewResponse | null>(null)
   const [budget, setBudget] = useState<BudgetSummaryResponse | null>(null)
@@ -308,12 +317,12 @@ function SupportViewAs({ user, job, onExit }: { user: SupportUser; job: SupportJ
       .then(([mv, bs, rq, ph]) => {
         setMemory(mv); setBudget(bs); setQueue(rq); setPhotos(ph.photos)
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         // never leave stale target-user data visible behind an error
         setMemory(null); setBudget(null); setQueue(null); setPhotos(null)
-        setFailed(true)
+        if (isNoAccess(err)) onNoAccess(); else setFailed(true)
       })
-  }, [job.id])
+  }, [job.id, onNoAccess])
   useEffect(() => { load() }, [load])
 
   const sections = memory?.sections ?? []
@@ -466,7 +475,7 @@ function SupportViewAs({ user, job, onExit }: { user: SupportUser; job: SupportJ
               <section className="job-photos" aria-label="Job photos">
                 <p className="mem-section-label">Job photos</p>
                 {(photos ?? []).length === 0 && <p className="mem-section-empty">No photos.</p>}
-                {(photos ?? []).map(photo => <ReadOnlyPhotoCard key={photo.id} jobId={job.id} photo={photo} />)}
+                {(photos ?? []).map(photo => <ReadOnlyPhotoCard key={photo.id} photo={photo} />)}
               </section>
             </div>
           )}
@@ -499,19 +508,11 @@ function SupportViewAs({ user, job, onExit }: { user: SupportUser; job: SupportJ
   )
 }
 
-// Support-mode photo bytes come from the SUPPORT file route. The backend's
-// support photos response currently echoes the normal-user imageUrl
-// (/api/jobs/...), which correctly 403s for an internal user who doesn't own
-// the job — so a relative imageUrl is rewritten to the documented support
-// route and resolved against the API base. Absolute/data URLs pass through.
-function supportPhotoSrc(jobId: string, photo: JobPhoto): string {
-  if (!photo.imageUrl.startsWith('/')) return photo.imageUrl
-  return resolveApiUrl(`/api/internal/support/jobs/${jobId}/photos/${photo.id}/file`)
-}
-
-// Read-only photo card: authenticated image (resolved against the API base),
-// descriptor, day, link label — no upload or edit controls.
-function ReadOnlyPhotoCard({ jobId, photo }: { jobId: string; photo: JobPhoto }) {
+// Read-only photo card: the backend's support photos response returns the
+// support-authenticated file route in imageUrl (BE PR #38), used directly and
+// resolved against the API base for split-origin deployments. No upload or
+// edit controls.
+function ReadOnlyPhotoCard({ photo }: { photo: JobPhoto }) {
   const [imgFailed, setImgFailed] = useState(false)
   const link = photo.linkedMemoryItem ? `Linked to: ${photo.linkedMemoryItem.summary}` : null
   return (
@@ -520,7 +521,7 @@ function ReadOnlyPhotoCard({ jobId, photo }: { jobId: string; photo: JobPhoto })
         ? <div className="photo-card-fallback">Photo uploaded</div>
         : <img
             className="photo-card-img"
-            src={supportPhotoSrc(jobId, photo)}
+            src={resolveApiUrl(photo.imageUrl)}
             alt={photo.descriptor ?? 'Job photo'}
             loading="lazy"
             onError={() => setImgFailed(true)}
@@ -563,6 +564,15 @@ export default function SupportModePage() {
   }, [])
   useEffect(() => { checkAuth() }, [checkAuth])
 
+  // A support API answering 401/403 mid-use (session expired, role revoked)
+  // drops every support view immediately and re-runs the auth gate — landing
+  // on the auth screen (401) or Not authorised (403), never a retry state
+  // with target-user data still mounted.
+  const handleNoAccess = useCallback(() => {
+    setView({ kind: 'users' })
+    checkAuth()
+  }, [checkAuth])
+
   if (authState === 'checking') return <p className="mem-loading">Loading…</p>
   if (authState === 'unauthenticated') return <AuthScreen onAuthSuccess={checkAuth} />
   if (authState === 'forbidden') {
@@ -589,7 +599,7 @@ export default function SupportModePage() {
         </header>
       )}
 
-      {view.kind === 'users' && <SupportUserList onSelect={user => setView({ kind: 'jobs', user })} />}
+      {view.kind === 'users' && <SupportUserList onSelect={user => setView({ kind: 'jobs', user })} onNoAccess={handleNoAccess} />}
 
       {view.kind === 'jobs' && (
         <>
@@ -599,16 +609,17 @@ export default function SupportModePage() {
             user={view.user}
             onInspect={job => setView({ kind: 'inspect', user: view.user, job })}
             onViewAs={job => setView({ kind: 'viewas', user: view.user, job })}
+            onNoAccess={handleNoAccess}
           />
         </>
       )}
 
       {view.kind === 'inspect' && (
-        <SupportInspection job={view.job} onBack={() => exitToJobs(view.user)} />
+        <SupportInspection job={view.job} onBack={() => exitToJobs(view.user)} onNoAccess={handleNoAccess} />
       )}
 
       {view.kind === 'viewas' && (
-        <SupportViewAs user={view.user} job={view.job} onExit={() => exitToJobs(view.user)} />
+        <SupportViewAs user={view.user} job={view.job} onExit={() => exitToJobs(view.user)} onNoAccess={handleNoAccess} />
       )}
     </div>
   )

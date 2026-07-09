@@ -239,3 +239,55 @@ describe('Support mode — read-only view-as', () => {
     expect(await screen.findByText('Tom')).toBeInTheDocument()
   })
 })
+
+// ── Tech-lead acceptance: no support data before/without access; 401 AND 403
+//    from support APIs both resolve to no-access states ───────────────────────
+
+describe('Support mode — no-access guarantees', () => {
+  it('renders nothing but a loading state while the auth gate resolves (no flash of support data)', async () => {
+    // hold getCurrentUser pending: whatever renders now is what an
+    // unauthenticated visitor could ever see before the gate resolves
+    let resolveAuth!: (u: AuthUser) => void
+    mockGetCurrentUser.mockReturnValue(new Promise(r => { resolveAuth = r }))
+    render(<SupportModePage />)
+    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.queryByText(/mike@test/)).toBeNull()
+    expect(screen.queryByRole('list')).toBeNull()
+    expect(mockGetSupportUsers).not.toHaveBeenCalled()
+    // resolving as INTERNAL is the only path that mounts support data
+    resolveAuth(INTERNAL)
+    expect(await screen.findByRole('button', { name: /Mike/ })).toBeInTheDocument()
+  })
+
+  it('a 401 from a support API mid-use clears support data and returns to the auth screen', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce(INTERNAL)
+    render(<SupportModePage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Mike/ }))
+    await screen.findByText('Garden Room')
+    // session expires: the next support call 401s, and so does the re-check
+    mockGetSupportJobInspection.mockRejectedValueOnce(new api.ApiError('Unauthorized', 401))
+    mockGetCurrentUser.mockRejectedValue(new api.ApiError('Unauthorized', 401))
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }))
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument()
+    expect(screen.queryByText('Garden Room')).toBeNull()
+    expect(screen.queryByText(/Try again/)).toBeNull()
+  })
+
+  it('a 403 from a support API mid-use clears support data and shows Not authorised', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce(INTERNAL)
+    render(<SupportModePage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Mike/ }))
+    await screen.findByText('Garden Room')
+    // role revoked: the next support call 403s; the re-check sees a PILOT
+    mockGetSupportMemoryView.mockRejectedValue(new api.ApiError('Forbidden', 403))
+    mockGetSupportBudgetSummary.mockRejectedValue(new api.ApiError('Forbidden', 403))
+    mockGetSupportReviewQueue.mockRejectedValue(new api.ApiError('Forbidden', 403))
+    mockGetSupportPhotos.mockRejectedValue(new api.ApiError('Forbidden', 403))
+    mockGetCurrentUser.mockResolvedValue(PILOT)
+    fireEvent.click(screen.getByRole('button', { name: 'View as user' }))
+    expect(await screen.findByText('Not authorised.')).toBeInTheDocument()
+    expect(screen.queryByText(/Support mode:/)).toBeNull()
+    expect(screen.queryByText('Tom')).toBeNull()
+    expect(screen.queryByText(/Try again/)).toBeNull()
+  })
+})
