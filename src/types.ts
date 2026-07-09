@@ -782,3 +782,45 @@ export interface PatchJobPhotoRequest {
   linkedNoteId?: string | null
   linkedMemoryItemId?: string | null
 }
+
+// ── Founder Support Mode (internal, read-only) ───────────────────────────────
+// Deliberate /api/internal/support/... READ endpoints gated on role INTERNAL.
+// Support mode never swaps the session user and has no write routes; normal
+// APIs stay owner-scoped to the signed-in user.
+
+export interface SupportUser {
+  id: string
+  email: string
+  name: string | null
+  role: 'PILOT' | 'INTERNAL'
+  createdAt: string
+  updatedAt: string
+  jobCount: number
+  lastActivityAt: string | null
+}
+
+export interface SupportUsersResponse {
+  users: SupportUser[]
+}
+
+export interface SupportJob {
+  id: string
+  ownerUserId: string
+  title: string
+  jobType: string | null
+  status: string
+  roughLocationOrLabel: string | null
+  createdAt: string
+  updatedAt: string
+  counts?: {
+    notes: number
+    memoryItems: number
+    reviewItems: number
+    photos: number
+  }
+}
+
+export interface SupportUserJobsResponse {
+  user: SupportUser
+  jobs: SupportJob[]
+}

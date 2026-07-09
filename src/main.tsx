@@ -6,11 +6,16 @@ import '@fontsource-variable/bricolage-grotesque'
 import './index.css'
 import App from './App'
 import PilotInspectionPage from './PilotInspectionPage'
+import SupportModePage from './SupportModePage'
 
+// /internal/support is the active founder support tool (role INTERNAL only).
+// The legacy inspection-key page stays reachable as a compatibility layer but
+// is no longer the primary support UX.
 const isInspectionRoute = window.location.pathname === '/internal/pilot-inspection'
+const isSupportRoute = window.location.pathname === '/internal/support'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isInspectionRoute ? <PilotInspectionPage /> : <App />}
+    {isSupportRoute ? <SupportModePage /> : isInspectionRoute ? <PilotInspectionPage /> : <App />}
   </StrictMode>,
 )
