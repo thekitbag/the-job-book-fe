@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import type { Job, JobPhoto, MemoryViewResponse } from '../types'
@@ -329,5 +329,66 @@ describe('Job photos — corrected items use current trusted labels', () => {
     const labels = Array.from(select.querySelectorAll('option')).map(o => o.textContent)
     expect(labels).toContain('Tom · 8h · electrics')
     expect(labels.join('|')).not.toMatch(/Someone did some hours/)
+  })
+})
+
+// ── Prod regression: relative imageUrl must resolve against VITE_API_BASE ────
+// In prod the API lives on its own origin (api.thejobbook.app); the backend
+// returns a relative imageUrl, and using it directly as <img src> loaded from
+// the FRONTEND origin → 404 → permanent "Photo uploaded" fallback.
+
+describe('Job photos — imageUrl resolves against VITE_API_BASE', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('resolveApiUrl handles edge shapes directly', () => {
+    vi.stubEnv('VITE_API_BASE', 'https://api.example.test')
+    expect(api.resolveApiUrl('/api/jobs/j1/photos/p1/file')).toBe('https://api.example.test/api/jobs/j1/photos/p1/file')
+    // protocol-relative and non-path URLs pass through
+    expect(api.resolveApiUrl('//cdn.example/x.jpg')).toBe('//cdn.example/x.jpg')
+    expect(api.resolveApiUrl('blob:abc-123')).toBe('blob:abc-123')
+    expect(api.resolveApiUrl('')).toBe('')
+  })
+
+  it('prefixes a relative imageUrl with the API base for the img src', async () => {
+    vi.stubEnv('VITE_API_BASE', 'https://api.example.test')
+    mockGetJobPhotos.mockResolvedValue({
+      jobId: JOB.id,
+      photos: [photo({ id: 'p1', imageUrl: '/api/jobs/j1/photos/p1/file' })],
+    })
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    const img = await within(section).findByAltText('Job photo')
+    expect(img.getAttribute('src')).toBe('https://api.example.test/api/jobs/j1/photos/p1/file')
+  })
+
+  it('leaves the src unchanged when VITE_API_BASE is empty (dev proxy / mock)', async () => {
+    vi.stubEnv('VITE_API_BASE', '')
+    mockGetJobPhotos.mockResolvedValue({
+      jobId: JOB.id,
+      photos: [photo({ id: 'p1', imageUrl: '/api/jobs/j1/photos/p1/file' })],
+    })
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    const img = await within(section).findByAltText('Job photo')
+    expect(img.getAttribute('src')).toBe('/api/jobs/j1/photos/p1/file')
+  })
+
+  it('passes absolute and data URLs through untouched', async () => {
+    vi.stubEnv('VITE_API_BASE', 'https://api.example.test')
+    mockGetJobPhotos.mockResolvedValue({
+      jobId: JOB.id,
+      photos: [
+        photo({ id: 'p-abs', imageUrl: 'https://elsewhere.example/x.jpg' }),
+        photo({ id: 'p-data', descriptor: 'inline', imageUrl: 'data:image/png;base64,AAAA' }),
+      ],
+    })
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    const abs = await within(section).findByAltText('Job photo')
+    expect(abs.getAttribute('src')).toBe('https://elsewhere.example/x.jpg')
+    expect(within(section).getByAltText('inline').getAttribute('src')).toBe('data:image/png;base64,AAAA')
   })
 })

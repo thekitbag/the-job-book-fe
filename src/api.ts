@@ -2,7 +2,7 @@
 // './api'; implementations live in domain modules under src/api/ (production
 // fetch code) and src/api/mock/ (mock backend fixtures + state).
 
-export { ApiError, onUnauthorized } from './api/client'
+export { ApiError, onUnauthorized, resolveApiUrl } from './api/client'
 export { signup, login, logout, getCurrentUser, requestPasswordReset, confirmPasswordReset } from './api/auth'
 export { getCurrentJob, getJobs, createJob } from './api/jobs'
 export { getJobNoteStatuses, getDraftFacts, getNoteTranscript, uploadNote } from './api/notes'
