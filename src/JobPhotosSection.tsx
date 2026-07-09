@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getJobPhotos, patchJobPhoto, uploadJobPhoto } from './api'
+import { getJobPhotos, patchJobPhoto, resolveApiUrl, uploadJobPhoto } from './api'
 import type { JobPhoto, MemoryViewItem, PatchJobPhotoRequest } from './types'
 
 // Photos are supporting job context (never a gallery destination, never spend):
@@ -144,7 +144,10 @@ function PhotoCard({ photo, linkTargets, onSave }: {
         ? <div className="photo-card-fallback">Photo uploaded</div>
         : <img
             className="photo-card-img"
-            src={photo.imageUrl}
+            // Resolve against VITE_API_BASE: the backend returns a relative
+            // route, which would otherwise load from the frontend origin (and
+            // 404 into the fallback) when the API is a separate host in prod.
+            src={resolveApiUrl(photo.imageUrl)}
             alt={photo.descriptor ?? 'Job photo'}
             loading="lazy"
             onError={() => setImgFailed(true)}
