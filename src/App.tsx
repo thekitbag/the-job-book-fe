@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getJobs, logout, onUnauthorized, ApiError } from './api'
+import { getCurrentUser, getJobs, logout, onUnauthorized, ApiError } from './api'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import JobPickerScreen from './JobPickerScreen'
-import type { Job } from './types'
+import type { AuthUser, Job } from './types'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
 const CACHED_JOBS_KEY = 'job-book-cached-jobs'
@@ -51,6 +51,9 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('workspace')
   const [online, setOnline] = useState(navigator.onLine)
+  // Current account (for role-gated UI like the internal Support entry).
+  // Best-effort: the app works without it; only INTERNAL extras depend on it.
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
 
   useEffect(() => {
     const setOn = () => setOnline(true)
@@ -114,6 +117,13 @@ export default function App() {
 
   useEffect(() => { loadJobs() }, [loadJobs])
 
+  // Role lookup for gated UI. Refreshes alongside auth transitions; a failure
+  // just means no internal extras are shown.
+  useEffect(() => {
+    if (appState !== 'ready' && appState !== 'noJobs') return
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null))
+  }, [appState])
+
   function handleSelectJob(job: Job) {
     setSelectedJob(job)
     localStorage.setItem(SELECTED_JOB_ID_KEY, job.id)
@@ -170,6 +180,14 @@ export default function App() {
 
   if (appState === 'noJobs') {
     return (
+      <>
+        {/* Internal accounts often have no jobs of their own — keep the
+            Support entry reachable from the first-job screen too. */}
+        {currentUser?.role === 'INTERNAL' && (
+          <div className="support-entry-bar">
+            <a className="btn-support-entry" href="/internal/support">Founder support ›</a>
+          </div>
+        )}
       <JobPickerScreen
         jobs={[]}
         selectedJobId={null}
@@ -180,6 +198,7 @@ export default function App() {
         title="Add first job"
         hideBack={true}
       />
+      </>
     )
   }
 
@@ -214,6 +233,7 @@ export default function App() {
       onOpenReviewQueue={() => setView('reviewQueue')}
       onSwitchJob={() => setView('jobPicker')}
       onLogout={handleLogout}
+      user={currentUser}
     />
   )
 }

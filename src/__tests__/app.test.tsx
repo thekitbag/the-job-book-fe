@@ -15,6 +15,7 @@ vi.mock('../api', async (importOriginal) => {
     getCurrentJob: vi.fn(),
     createJob: vi.fn(),
     logout: vi.fn(() => Promise.resolve()),
+    getCurrentUser: vi.fn(() => Promise.resolve({ id: 'u1', email: 'mike@test', name: 'Mike', role: 'PILOT' })),
     onUnauthorized: vi.fn(),
     uploadNote: vi.fn(),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),

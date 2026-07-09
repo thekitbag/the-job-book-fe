@@ -12,4 +12,8 @@ export { getMemoryView, updateMemoryItem, verifyMemoryItem, createMemoryItem, as
 export { getBudgetCategories, createBudgetCategory, patchBudgetCategory, getBudgetSummary } from './api/budget'
 export { getInspectionData } from './api/inspection'
 export { getJobPhotos, uploadJobPhoto, patchJobPhoto } from './api/photos'
+export {
+  getSupportUsers, getSupportUserJobs, getSupportJobInspection,
+  getSupportMemoryView, getSupportBudgetSummary, getSupportReviewQueue, getSupportPhotos,
+} from './api/support'
 export { _resetMockMemoryForTesting } from './api/mock/state'

@@ -12,7 +12,7 @@ import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration } from './SourceHistory'
-import type { CandidateFact, Job, LabourTodaySummary, LatestActivityItem, LocalNote, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, Job, LabourTodaySummary, LatestActivityItem, LocalNote, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -216,11 +216,15 @@ export default function CurrentJobWorkspace({
   onOpenReviewQueue,
   onSwitchJob,
   onLogout = () => {},
+  user = null,
 }: {
   job: Job
   onOpenReviewQueue: () => void
   onSwitchJob: () => void
   onLogout?: () => void
+  // Current account, when known — drives role-gated UI only. Normal builders
+  // never see the internal Support entry.
+  user?: AuthUser | null
 }) {
   const [tab, setTab] = useState<Tab>('overview')
   // clientNoteId of the note just recorded — drives the capture confirmation.
@@ -403,6 +407,7 @@ export default function CurrentJobWorkspace({
         </div>
         <div className="ws-header-actions">
           {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
+          {user?.role === 'INTERNAL' && <a className="btn-support-entry" href="/internal/support">Support</a>}
           <button className="btn-switch-job" onClick={onSwitchJob}>Switch ›</button>
           <button className="btn-logout" onClick={onLogout}>Log out</button>
         </div>
