@@ -1,5 +1,6 @@
 import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
+import LabourBudgetControl from './LabourBudgetControl'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import { friendlyDayLabel } from './memoryScan'
@@ -49,7 +50,7 @@ function LabourEntry({ entry, mem }: { entry: LabourDayItem; mem: JobMemory }) {
 }
 
 export default function LabourTab({ mem }: { mem: JobMemory }) {
-  const { labourHours, labourSpendGroup, addMemoryItem, refreshError, refetch } = mem
+  const { labourHours, labourSpendGroup, addMemoryItem, refreshError, refetch, budgetError, handleSetLabourBudget } = mem
   const days = labourHours?.days ?? []
 
   return (
@@ -79,7 +80,7 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
           {/* Labour money context from budgetSummary.labour: cost so far, and
               budget/remaining when a Labour budget exists. Trusted labour cost
               counts in Spend either way — no Labour budget is required. */}
-          {labourSpendGroup && (labourSpendGroup.rows.length > 0 || labourSpendGroup.budgetCategory) && (
+          {labourSpendGroup && (
             <section className="labour-money" aria-label="Labour cost">
               <div className="budget-cat-figures">
                 <div className="budget-figure"><dt>Labour cost</dt><dd>{labourSpendGroup.knownSpendLabel ?? 'None yet'}</dd></div>
@@ -98,6 +99,11 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
                   ? 'Labour cost rolls into Spend.'
                   : 'Counted in Spend — no Labour budget needed for labour cost to count.'}
               </p>
+              <LabourBudgetControl
+                budgetCategory={labourSpendGroup.budgetCategory}
+                onSave={handleSetLabourBudget}
+                error={budgetError || undefined}
+              />
             </section>
           )}
 

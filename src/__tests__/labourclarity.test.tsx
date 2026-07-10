@@ -15,6 +15,8 @@ vi.mock('../api', async (importOriginal) => {
     createMemoryItem: vi.fn(),
     updateMemoryItem: vi.fn(),
     patchJob: vi.fn(),
+    createBudgetCategory: vi.fn(),
+    patchBudgetCategory: vi.fn(),
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-lc-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
@@ -232,5 +234,61 @@ describe('Saved voice notes show date and time', () => {
       <SourceHistory notes={[note]} online facts={[]} factsLoadFailed={false} onRetry={vi.fn()} onRefresh={vi.fn()} open onToggle={vi.fn()} />,
     )
     expect(screen.getByText('Saved 8 Jul, 08:41')).toBeInTheDocument()
+  })
+})
+
+// ── One user-facing Labour concept: set/edit the Labour budget without Mike
+//    knowing whether a manual Labour category exists ─────────────────────────
+
+describe('Labour budget — one concept, set/edit from Labour', () => {
+  const mockCreateCategory = vi.mocked(api.createBudgetCategory)
+  const mockPatchCategory = vi.mocked(api.patchBudgetCategory)
+
+  it('with no Labour category, Set Labour budget creates a category named Labour on save', async () => {
+    const noCat = budgetSummary()
+    noCat.categories = [noCat.categories[1]] // timber only
+    noCat.labour = { ...noCat.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
+    const withCat = budgetSummary()
+    mockGetBudgetSummary.mockResolvedValueOnce(noCat).mockResolvedValue(withCat)
+    mockCreateCategory.mockResolvedValue(CAT_LABOUR)
+
+    renderWorkspace()
+    openTab('Labour')
+    const money = await screen.findByRole('region', { name: 'Labour cost' })
+    fireEvent.click(within(money).getByRole('button', { name: 'Set Labour budget' }))
+    fireEvent.change(within(money).getByLabelText('Labour budget (£)'), { target: { value: '1500' } })
+    fireEvent.click(within(money).getByRole('button', { name: 'Save budget' }))
+
+    await waitFor(() => expect(mockCreateCategory).toHaveBeenCalledWith(JOB.id, { name: 'Labour', budgetAmount: '1500' }))
+    // the refetched authoritative summary now shows the Labour budget
+    expect(await within(money).findByText('£1500 budget')).toBeInTheDocument()
+    expect(within(money).getByText('£1220 remaining')).toBeInTheDocument()
+  })
+
+  it('with a Labour category, Edit Labour budget patches the existing category', async () => {
+    mockPatchCategory.mockResolvedValue({ ...CAT_LABOUR, budgetAmount: '2000' })
+    renderWorkspace()
+    openTab('Labour')
+    const money = await screen.findByRole('region', { name: 'Labour cost' })
+    fireEvent.click(within(money).getByRole('button', { name: 'Edit Labour budget' }))
+    const input = within(money).getByLabelText('Labour budget (£)') as HTMLInputElement
+    expect(input.value).toBe('1500') // prefilled from the existing category
+    fireEvent.change(input, { target: { value: '2000' } })
+    fireEvent.click(within(money).getByRole('button', { name: 'Save budget' }))
+    await waitFor(() => expect(mockPatchCategory).toHaveBeenCalledWith(JOB.id, 'c-lab', { name: 'labour', budgetAmount: '2000' }))
+    expect(mockCreateCategory).not.toHaveBeenCalled()
+  })
+
+  it('the Spend Labour group offers Set Labour budget when no category exists — never a second bucket', async () => {
+    const noCat = budgetSummary()
+    noCat.categories = [noCat.categories[1]]
+    noCat.labour = { ...noCat.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
+    mockGetBudgetSummary.mockResolvedValue(noCat)
+    renderWorkspace()
+    openTab('Spend')
+    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    expect(within(group).getByRole('button', { name: 'Set Labour budget' })).toBeInTheDocument()
+    // exactly one Labour bucket on the page
+    expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
   })
 })

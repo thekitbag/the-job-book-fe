@@ -3,6 +3,7 @@ import MemoryCard from './MemoryCard'
 import MemoryEditForm from './MemoryEditForm'
 import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
+import LabourBudgetControl from './LabourBudgetControl'
 import { memoryItemToEdit } from './memoryEdit'
 import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
@@ -204,7 +205,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, cardProps,
     notCountedItems, resolveCostBasis, addPrice,
-    budgetCategories, expandedCats, toggleCat, labourSpendGroup,
+    budgetCategories, expandedCats, toggleCat, labourSpendGroup, handleSetLabourBudget,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
     openMenuCatId, setOpenMenuCatId,
@@ -441,6 +442,12 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
               : <p className="cat-empty">No labour cost yet — hours are remembered on the Labour tab.</p>}
             {/* Labour is managed from Labour — deliberately no Add action here. */}
             <p className="labour-group-guide">Add labour from the Labour tab so we can track hours, people, and tasks properly.</p>
+            {/* One Labour concept: with no Labour category yet, setting a budget
+                here creates the underlying "Labour" category on save; with one,
+                the ⋯ menu above edits it like any category. */}
+            {!labourSpendGroup.budgetCategory && (
+              <LabourBudgetControl budgetCategory={null} onSave={handleSetLabourBudget} error={budgetError || undefined} />
+            )}
 
             {/* Historical (non-labour) spend already assigned to the Labour
                 category: visible, counted once through normal spend rules, and
