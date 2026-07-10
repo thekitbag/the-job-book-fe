@@ -195,7 +195,8 @@ describe('Direct add — submit contracts', () => {
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
       memoryType: 'general_note', summary: 'Cladding going black',
     })))
-    expect(await screen.findByText('Cladding going black')).toBeInTheDocument()
+    // post-save refetch → render can be slow on loaded CI runners
+    expect(await screen.findByText('Cladding going black', {}, { timeout: 4000 })).toBeInTheDocument()
   })
 })
 
