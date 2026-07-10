@@ -11,7 +11,9 @@ export function formatDuration(ms: number): string {
 export function formatSavedStamp(iso: string, now: Date = new Date()): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  // Pinned to en-GB (pilot locale) so the stamp is 24h and deterministic
+  // across environments (CI runners default to en-US 12h).
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
   if (sameDay) return `today, ${time}`
   const date = d.toLocaleDateString('en-GB', {
