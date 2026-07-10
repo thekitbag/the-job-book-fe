@@ -79,7 +79,7 @@ test.describe('Support mode — founder flow', () => {
     await page.getByRole('tab', { name: 'Labour' }).click()
     await expect(page.getByText('24h job total')).toBeVisible()
     await page.getByRole('tab', { name: 'Spend' }).click()
-    await expect(page.getByText(/£2120/)).toBeVisible()
+    await expect(page.getByText(/£2270/)).toBeVisible()
 
     // exit returns to the support surface with no target data left
     await page.getByRole('button', { name: 'Exit' }).click()

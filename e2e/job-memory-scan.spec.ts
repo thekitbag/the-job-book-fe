@@ -33,7 +33,7 @@ test.describe('Job memory lens tabs', () => {
   test('opens the Spend tab with a single Known spend figure', async ({ page }) => {
     await openSpend(page)
     await expect(page.getByRole('tab', { name: 'Spend' })).toBeVisible()
-    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2120/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2270/)).toBeVisible()
   })
 
   test('Used tab lists used + leftover, flagging worth-checking', async ({ page }) => {

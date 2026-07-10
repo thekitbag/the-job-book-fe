@@ -46,7 +46,7 @@ test.describe('Job photos', () => {
     await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(800)
     const hero = page.getByRole('region', { name: /^known spend$/i })
-    await expect(hero.getByText(/£2120/)).toBeVisible()
+    await expect(hero.getByText(/£2270/)).toBeVisible()
 
     const section = await openPhotos(page)
     await section.getByRole('button', { name: 'Add photo' }).click()
@@ -61,7 +61,7 @@ test.describe('Job photos', () => {
     // receipt/photo upload must not change known spend
     await page.getByRole('tab', { name: 'Spend' }).click()
     await page.waitForTimeout(800)
-    await expect(hero.getByText(/£2120/)).toBeVisible()
+    await expect(hero.getByText(/£2270/)).toBeVisible()
   })
 
   test('upload with descriptor and memory-item link renders both', async ({ page }) => {

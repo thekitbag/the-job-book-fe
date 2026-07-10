@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
+import { formatSavedStamp } from './SourceHistory'
 import { costDetailRows, labourExclusionCopy, spendExclusionCopy } from './memoryScan'
 import type { BudgetCategory, MemoryItemEdit, MemoryViewItem } from './types'
 
@@ -14,10 +15,6 @@ const MATERIAL_TYPE_LABEL: Record<string, string> = {
   used_material: 'Used',
   leftover_material: 'Left over',
   labour: 'Labour',
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 function StructuredFields({ item }: { item: MemoryViewItem }) {
@@ -67,7 +64,7 @@ function SourceContext({ item }: { item: MemoryViewItem }) {
       {open && (
         <div className="mem-source-body">
           <p className="mem-source-label">This came from your note</p>
-          <p className="mem-source-time">{formatTime(item.source.capturedAt)}</p>
+          <p className="mem-source-time">Saved {formatSavedStamp(item.source.capturedAt)}</p>
           {item.source.transcriptText && (
             <>
               <p className="mem-source-label">What the system heard</p>

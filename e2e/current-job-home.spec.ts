@@ -55,8 +55,8 @@ test.describe('Current job workspace', () => {
 
   test('Overview known spend uses total known cost (bought + labour)', async ({ page }) => {
     await page.waitForTimeout(700)
-    // £2120 = bought + trusted labour, the job-level total known cost.
-    await expect(page.locator('.ws-card--spend')).toContainText('£2120')
+    // £2270 = bought + trusted labour, the job-level total known cost.
+    await expect(page.locator('.ws-card--spend')).toContainText('£2270')
   })
 
   test('latest activity sits below the summary cards', async ({ page }) => {

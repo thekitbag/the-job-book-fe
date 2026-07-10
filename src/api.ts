@@ -4,7 +4,7 @@
 
 export { ApiError, onUnauthorized, resolveApiUrl } from './api/client'
 export { signup, login, logout, getCurrentUser, requestPasswordReset, confirmPasswordReset } from './api/auth'
-export { getCurrentJob, getJobs, createJob } from './api/jobs'
+export { getCurrentJob, getJobs, createJob, patchJob } from './api/jobs'
 export { getJobNoteStatuses, getDraftFacts, getNoteTranscript, uploadNote } from './api/notes'
 export type { UploadNoteResponse, NoteListRow, TranscriptResponse } from './api/notes'
 export { getReviewQueue, submitQueueDecision } from './api/reviewQueue'

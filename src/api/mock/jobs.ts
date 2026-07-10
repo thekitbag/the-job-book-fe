@@ -1,4 +1,5 @@
 import type { Job, JobType } from '../../types'
+import { ApiError } from '../client'
 import { delay } from './util'
 import { getMockSession, MOCK_MIKE_EMAIL } from './auth'
 
@@ -49,4 +50,19 @@ export async function mockCreateJob(title: string, jobType?: JobType): Promise<J
   }
   MOCK_JOBS.unshift(newJob)
   return newJob
+}
+
+// Owner-scoped title edit, mirroring backend validation (trim, non-blank, ≤80).
+export async function mockPatchJob(jobId: string, req: { title?: string }): Promise<Job> {
+  await delay(300)
+  const job = MOCK_JOBS.find(j => j.id === jobId)
+  if (!job) throw new ApiError('Job not found', 404)
+  if (req.title !== undefined) {
+    const title = req.title.trim()
+    if (!title) throw new ApiError('Title is required', 400)
+    if (title.length > 80) throw new ApiError('Title too long', 400)
+    job.title = title
+  }
+  job.updatedAt = new Date().toISOString()
+  return { ...job }
 }
