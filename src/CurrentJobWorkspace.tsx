@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getDraftFacts, getReviewQueue } from './api'
+import { getDraftFacts, getReviewQueue, patchJob } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
@@ -217,6 +217,7 @@ export default function CurrentJobWorkspace({
   onSwitchJob,
   onLogout = () => {},
   user = null,
+  onJobUpdated = () => {},
 }: {
   job: Job
   onOpenReviewQueue: () => void
@@ -225,6 +226,9 @@ export default function CurrentJobWorkspace({
   // Current account, when known — drives role-gated UI only. Normal builders
   // never see the internal Support entry.
   user?: AuthUser | null
+  // Called with the updated Job after a successful edit (title rename) so the
+  // app can refresh the job list and offline cache.
+  onJobUpdated?: (job: Job) => void
 }) {
   const [tab, setTab] = useState<Tab>('overview')
   // clientNoteId of the note just recorded — drives the capture confirmation.
@@ -237,6 +241,28 @@ export default function CurrentJobWorkspace({
   // Open by default so a freshly recorded note confirms capture without hunting,
   // but it stays below the job summary — secondary, not a primary card.
   const [showSourceHistory, setShowSourceHistory] = useState(true)
+  // Job title rename (PATCH /api/jobs/:jobId). Failure keeps the old title.
+  const [renaming, setRenaming] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
+  const [titleError, setTitleError] = useState<string | null>(null)
+
+  const startRename = () => { setTitleDraft(job.title); setTitleError(null); setRenaming(true) }
+  const saveTitle = async () => {
+    const title = titleDraft.trim()
+    if (!title || title.length > 80 || savingTitle) return
+    setSavingTitle(true)
+    setTitleError(null)
+    try {
+      const updated = await patchJob(job.id, { title })
+      onJobUpdated(updated)
+      setRenaming(false)
+    } catch {
+      setTitleError('Could not rename — try again')
+    } finally {
+      setSavingTitle(false)
+    }
+  }
   const { showBanner, isIosSafari, triggerInstall, dismiss: dismissInstall } = usePwaInstall()
 
   const [facts, setFacts] = useState<CandidateFact[]>([])
@@ -399,10 +425,37 @@ export default function CurrentJobWorkspace({
 
       <header className="ws-header">
         <div className="ws-header-titles">
-          <h1 className="ws-job-title">{job.title}</h1>
-          {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
-          {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
-            <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
+          {renaming ? (
+            <form className="ws-rename-form" aria-label="Rename job" onSubmit={e => { e.preventDefault(); void saveTitle() }}>
+              <input
+                className="ws-rename-input"
+                name="jobTitle"
+                aria-label="Job title"
+                value={titleDraft}
+                maxLength={80}
+                onChange={e => setTitleDraft(e.target.value)}
+              />
+              <div className="ws-rename-actions">
+                <button type="submit" className="btn-queue-save" disabled={savingTitle || titleDraft.trim() === ''}>
+                  {savingTitle ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" className="btn-queue-cancel" onClick={() => { setRenaming(false); setTitleError(null) }} disabled={savingTitle}>
+                  Cancel
+                </button>
+              </div>
+              {titleError && <p className="queue-item-error" role="alert">{titleError}</p>}
+            </form>
+          ) : (
+            <>
+              <div className="ws-job-title-row">
+                <h1 className="ws-job-title">{job.title}</h1>
+                <button type="button" className="btn-rename-job" onClick={startRename}>Rename</button>
+              </div>
+              {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
+              {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
+                <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
+              )}
+            </>
           )}
         </div>
         <div className="ws-header-actions">

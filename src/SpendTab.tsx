@@ -3,6 +3,7 @@ import MemoryCard from './MemoryCard'
 import MemoryEditForm from './MemoryEditForm'
 import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
+import LabourBudgetControl from './LabourBudgetControl'
 import { memoryItemToEdit } from './memoryEdit'
 import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
@@ -204,7 +205,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
     totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, cardProps,
     notCountedItems, resolveCostBasis, addPrice,
-    budgetCategories, expandedCats, toggleCat, labourSpendGroup,
+    budgetCategories, expandedCats, toggleCat, labourSpendGroup, handleSetLabourBudget,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
     openMenuCatId, setOpenMenuCatId,
@@ -235,6 +236,20 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
   const labourGroupItems = (labourSpendGroup?.rows ?? [])
     .map(r => allItemsById.get(r.memoryItemId))
     .filter((i): i is MemoryViewItem => !!i)
+
+  // Labour is managed from Labour: generic spend adds never offer a category
+  // named "labour" as an ordinary spend target (existing assignments and Fix
+  // memory are untouched — this only shapes the ADD paths).
+  const spendAddCategories = budgetCategories.filter(c => c.name.trim().toLowerCase() !== 'labour')
+
+  // Historical rule: don't hide, don't double-count. Ordinary (non-labour)
+  // spend already assigned to the Labour category stays visible for fixing —
+  // it renders under the Labour group as clearly historical spend, with no
+  // fresh add action for the category.
+  const labourCategoryId = labourSpendGroup?.budgetCategory?.id ?? null
+  const historicalLabourCategoryItems = labourCategoryId
+    ? [...orderedItems].filter(i => i.budgetCategoryId === labourCategoryId && i.memoryType !== 'labour')
+    : []
 
   function renderCategoryCard(cs: BudgetCategorySummary) {
     const c = cs.category
@@ -282,9 +297,10 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         </div>
         <div className="budget-cat-figures">
           <div className="budget-figure"><dt>Spent</dt><dd>{cs.knownSpendLabel ?? 'None yet'}</dd></div>
-          {cs.budgetLabel
-            ? <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{cs.remainingLabel}</dd></div>
-            : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
+          <div className="budget-figure"><dt>Budget</dt><dd>{cs.budgetLabel ?? 'No budget set'}</dd></div>
+          {cs.budgetLabel && (
+            <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{cs.remainingLabel}</dd></div>
+          )}
         </div>
         {notes.length === 0 && (
           <p className="cat-empty">No spend in this category yet — add it straight to {c.name}.</p>
@@ -305,7 +321,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             label="Add spend"
             title={`Add spend — ${c.name}`}
             initialCategoryId={c.id}
-            categories={budgetCategories}
+            categories={spendAddCategories}
             onAdd={addMemoryItem}
           />
         </div>
@@ -348,7 +364,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         </section>
       )}
 
-      <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={budgetCategories} onAdd={addMemoryItem} actionHidden={!hasSpendContent} />
+      <DirectAddForm kind="spend" label="Add spend" sectionLabel="Spend" categories={spendAddCategories} onAdd={addMemoryItem} actionHidden={!hasSpendContent} />
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -361,7 +377,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         <EmptyState
           title="Nothing spent yet"
           hint="Add what you’ve bought for this job, or say it with Record and it’ll be picked up for you."
-          action={<DirectAddForm kind="spend" variant="button" label="Add spend" categories={budgetCategories} onAdd={addMemoryItem} />}
+          action={<DirectAddForm kind="spend" variant="button" label="Add spend" categories={spendAddCategories} onAdd={addMemoryItem} />}
         />
       ) : (
         <>
@@ -408,9 +424,10 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             </div>
             <div className="budget-cat-figures">
               <div className="budget-figure"><dt>Spent</dt><dd>{labourSpendGroup.knownSpendLabel ?? 'None yet'}</dd></div>
-              {labourSpendGroup.budgetLabel
-                ? <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}><dt>{labourSpendGroup.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{labourSpendGroup.remainingLabel}</dd></div>
-                : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
+              <div className="budget-figure"><dt>Budget</dt><dd>{labourSpendGroup.budgetLabel ?? 'No budget set'}</dd></div>
+              {labourSpendGroup.budgetLabel && (
+                <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}><dt>{labourSpendGroup.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{labourSpendGroup.remainingLabel}</dd></div>
+              )}
             </div>
             {labourGroupItems.length > 0
               ? <>
@@ -423,6 +440,29 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
                   ))}</div>}
                 </>
               : <p className="cat-empty">No labour cost yet — hours are remembered on the Labour tab.</p>}
+            {/* Labour is managed from Labour — deliberately no Add action here. */}
+            <p className="labour-group-guide">Add labour from the Labour tab so we can track hours, people, and tasks properly.</p>
+            {/* One Labour concept: with no Labour category yet, setting a budget
+                here creates the underlying "Labour" category on save; with one,
+                the ⋯ menu above edits it like any category. */}
+            {!labourSpendGroup.budgetCategory && (
+              <LabourBudgetControl budgetCategory={null} onSave={handleSetLabourBudget} error={budgetError || undefined} />
+            )}
+
+            {/* Historical (non-labour) spend already assigned to the Labour
+                category: visible, counted once through normal spend rules, and
+                fixable — but never a fresh add target. */}
+            {historicalLabourCategoryItems.length > 0 && (
+              <div className="labour-historical" role="group" aria-label="Existing spend in the Labour category">
+                <p className="labour-historical-title">Existing spend in this category</p>
+                <p className="mem-section-note labour-historical-note">Already counted in Known spend. Use Fix memory to move or correct it.</p>
+                <div className="cat-notes">
+                  {historicalLabourCategoryItems.map(item => (
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )
       )}

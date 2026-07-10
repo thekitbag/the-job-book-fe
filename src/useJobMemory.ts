@@ -248,6 +248,23 @@ export function useJobMemory(job: Job) {
     finally { setSavingCatId(null) }
   }, [job.id, loadBudget])
 
+  // One user-facing Labour concept: setting a Labour budget when no Labour
+  // category exists creates a normal active category named "Labour" through
+  // the existing budget-category API; editing when one exists patches it. The
+  // persisted anchor is always the JobBudgetCategory row named Labour.
+  const handleSetLabourBudget = useCallback(async (amount: string, existing: BudgetCategory | null): Promise<boolean> => {
+    setBudgetError('')
+    try {
+      if (existing) await patchBudgetCategory(job.id, existing.id, { name: existing.name, budgetAmount: amount.trim() || null })
+      else await createBudgetCategory(job.id, { name: 'Labour', budgetAmount: amount.trim() || null })
+      await loadBudget()
+      return true
+    } catch {
+      setBudgetError('Could not save the Labour budget — try again')
+      return false
+    }
+  }, [job.id, loadBudget])
+
   const toggleCat = useCallback((categoryId: string) => {
     setExpandedCats(p => ({ ...p, [categoryId]: !p[categoryId] }))
   }, [])
@@ -383,7 +400,7 @@ export function useJobMemory(job: Job) {
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
     openMenuCatId, setOpenMenuCatId,
-    handleAddCategory, handleEditBudget, handleArchiveCategory,
+    handleAddCategory, handleEditBudget, handleArchiveCategory, handleSetLabourBudget,
     // card helper
     cardProps,
   }

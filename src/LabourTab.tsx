@@ -1,5 +1,6 @@
 import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
+import LabourBudgetControl from './LabourBudgetControl'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import { friendlyDayLabel } from './memoryScan'
@@ -49,7 +50,7 @@ function LabourEntry({ entry, mem }: { entry: LabourDayItem; mem: JobMemory }) {
 }
 
 export default function LabourTab({ mem }: { mem: JobMemory }) {
-  const { labourHours, addMemoryItem, refreshError, refetch } = mem
+  const { labourHours, labourSpendGroup, addMemoryItem, refreshError, refetch, budgetError, handleSetLabourBudget } = mem
   const days = labourHours?.days ?? []
 
   return (
@@ -75,6 +76,36 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
             <p className="labour-job-total-cap">Labour hours</p>
             <p className="labour-job-total-value">{labourHours?.totalLabel ?? 'No hours yet'}</p>
           </section>
+
+          {/* Labour money context from budgetSummary.labour: cost so far, and
+              budget/remaining when a Labour budget exists. Trusted labour cost
+              counts in Spend either way — no Labour budget is required. */}
+          {labourSpendGroup && (
+            <section className="labour-money" aria-label="Labour cost">
+              <div className="budget-cat-figures">
+                <div className="budget-figure"><dt>Labour cost</dt><dd>{labourSpendGroup.knownSpendLabel ?? 'None yet'}</dd></div>
+                {labourSpendGroup.budgetLabel && (
+                  <div className="budget-figure"><dt>Budget</dt><dd>{labourSpendGroup.budgetLabel}</dd></div>
+                )}
+                {labourSpendGroup.remainingLabel && (
+                  <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}>
+                    <dt>{labourSpendGroup.overBudget ? 'Over budget' : 'Remaining'}</dt>
+                    <dd>{labourSpendGroup.remainingLabel}</dd>
+                  </div>
+                )}
+              </div>
+              <p className="mem-section-note labour-money-note">
+                {labourSpendGroup.budgetLabel
+                  ? 'Labour cost rolls into Spend.'
+                  : 'Counted in Spend — no Labour budget needed for labour cost to count.'}
+              </p>
+              <LabourBudgetControl
+                budgetCategory={labourSpendGroup.budgetCategory}
+                onSave={handleSetLabourBudget}
+                error={budgetError || undefined}
+              />
+            </section>
+          )}
 
           {days.map(day => (
             <section key={day.date || 'day-not-known'} className="labour-day" aria-label={`Labour ${friendlyDayLabel(day.date)}`}>

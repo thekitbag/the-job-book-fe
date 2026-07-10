@@ -124,6 +124,17 @@ export default function App() {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null))
   }, [appState])
 
+  // A job edit (title rename) must update everywhere the job is shown or
+  // cached: the workspace header, the job list, and the offline cache.
+  function handleJobUpdated(updated: Job) {
+    setSelectedJob(prev => (prev && prev.id === updated.id ? updated : prev))
+    setJobs(prev => {
+      const next = prev.map(j => (j.id === updated.id ? updated : j))
+      localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+
   function handleSelectJob(job: Job) {
     setSelectedJob(job)
     localStorage.setItem(SELECTED_JOB_ID_KEY, job.id)
@@ -234,6 +245,7 @@ export default function App() {
       onSwitchJob={() => setView('jobPicker')}
       onLogout={handleLogout}
       user={currentUser}
+      onJobUpdated={handleJobUpdated}
     />
   )
 }

@@ -155,6 +155,31 @@ function buildMockSections(): MemoryViewSection[] {
             updatedAt: '2026-06-13T09:43:00.000Z',
             source: null,
           },
+          // Historical/misclassified spend: an ordinary bought row assigned to
+          // the user-created Labour category (assignment seeded below). It must
+          // stay visible in Spend, count once via normal spend rules, and never
+          // appear in the system Labour group (memoryType is not labour).
+          {
+            id: 'mem-view-015',
+            memoryType: 'ordered_material',
+            summary: 'Paid agency invoice for extra labourers, £150',
+            materialName: 'agency invoice',
+            quantity: null,
+            unit: null,
+            supplierName: 'SiteStaff Agency',
+            deliveryTiming: null,
+            locationOrUse: null,
+            costAmount: '150',
+            costCurrency: 'GBP',
+            costQualifier: 'total' as const,
+            totalCostAmount: '150',
+            uncertaintyFlags: [],
+            sourceCandidateFactId: 'fact-015',
+            reviewDecisionId: 'decision-015',
+            createdAt: '2026-06-13T09:46:00.000Z',
+            updatedAt: '2026-06-13T09:46:00.000Z',
+            source: null,
+          },
           // Two like-for-like membrane rows with no cost → consolidate to a single
           // quantity row (10 rolls total) that carries no money, and both are
           // excluded from Known spend as "No cost remembered".
@@ -539,6 +564,8 @@ export function mockBudgetCategoriesFor(jobId: string): BudgetCategory[] {
       for (const s of sections) for (const it of s.items) {
         if (it.id === 'mem-view-004' || it.id === 'mem-view-005') it.budgetCategoryId = 'cat-cladding'
         if (it.id === 'mem-labour-2') it.budgetCategoryId = 'cat-labour'
+        // historical non-labour spend left assigned to the Labour category
+        if (it.id === 'mem-view-015') it.budgetCategoryId = 'cat-labour'
       }
     } else {
       mockBudgetByJob.set(jobId, []) // a job with no budget categories

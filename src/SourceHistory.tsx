@@ -6,8 +6,21 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+// Notes span days and jobs, so a saved stamp needs the date, not time only:
+// "today, 08:41" / "10 Jul, 08:41" / "10 Jul 2025, 08:41".
+export function formatSavedStamp(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  // Pinned to en-GB (pilot locale) so the stamp is 24h and deterministic
+  // across environments (CI runners default to en-US 12h).
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  if (sameDay) return `today, ${time}`
+  const date = d.toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'short',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  })
+  return `${date}, ${time}`
 }
 
 function NoteStateLabel({ note, online }: { note: LocalNote; online: boolean }) {
@@ -140,7 +153,7 @@ function NoteCard({
   return (
     <div className="note-card">
       <div className="note-card-meta">
-        <span className="note-time">{formatTime(note.capturedAt)}</span>
+        <span className="note-time">Saved {formatSavedStamp(note.capturedAt)}</span>
         <span className="note-duration">{formatDuration(note.durationMs)}</span>
       </div>
       <div className="note-card-status">

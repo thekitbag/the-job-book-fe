@@ -4122,3 +4122,41 @@ code {
   text-decoration: none; padding: 0.2rem 0.1rem;
 }
 .support-entry-bar { display: flex; justify-content: flex-end; padding: 0.6rem 1rem 0; }
+
+/* ── Labour entry point & budget clarity ── */
+.labour-money {
+  margin: 0 1rem 0.9rem;
+  padding: 0.75rem 1rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.labour-money .budget-cat-figures { margin-top: 0; }
+.labour-money-note { margin: 0.4rem 0 0; }
+.labour-group-guide {
+  margin: 0.6rem 0 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--ink-500);
+}
+.labour-historical { margin-top: 0.7rem; border-top: 1px solid var(--line); padding-top: 0.6rem; }
+.labour-historical-title {
+  margin: 0; font-size: var(--text-2xs); font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-400);
+}
+.labour-historical-note { margin: 0.2rem 0 0.5rem; }
+
+/* Job title rename */
+.ws-job-title-row { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
+.btn-rename-job {
+  font: inherit; font-size: var(--text-2xs); font-weight: 800; flex-shrink: 0;
+  color: var(--green-700); background: none; border: none; cursor: pointer; padding: 0.15rem 0;
+}
+.ws-rename-form { display: flex; flex-direction: column; gap: 0.4rem; }
+.ws-rename-input {
+  font: inherit; font-size: var(--text-lg); font-weight: 700;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  padding: 0.35rem 0.6rem; width: 100%;
+}
+.ws-rename-actions { display: flex; gap: 0.5rem; }
