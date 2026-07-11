@@ -373,14 +373,17 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         </div>
       )}
 
-      {!hasSpendContent ? (
+      {!hasSpendContent && (
         <EmptyState
           title="Nothing spent yet"
           hint="Add what you’ve bought for this job, or say it with Record and it’ll be picked up for you."
           action={<DirectAddForm kind="spend" variant="button" label="Add spend" categories={spendAddCategories} onAdd={addMemoryItem} />}
         />
-      ) : (
-        <>
+      )}
+
+      {/* Budget setup (Labour group + category cards) must not depend on
+          spend existing first — a job with nothing spent yet still needs a
+          way to create its first budget category. */}
       {/* System Labour group: trusted labour cost shows here once, without
           requiring a manual Labour budget category. When an active category
           named "labour" exists, its budget/remaining render here (and its
@@ -482,8 +485,6 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
           <p className="mem-section-note">Counted in Known spend — give each a category to track it.</p>
           {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} />)}
         </section>
-      )}
-        </>
       )}
     </div>
   )

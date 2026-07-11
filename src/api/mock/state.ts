@@ -1,6 +1,10 @@
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../../types'
 import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER } from '../../memoryScan'
 
+// The one pilot job that gets the rich fixture (sections + budget
+// categories). Any other job — including one freshly created — starts empty.
+const MOCK_SEED_JOB_ID = 'job-pilot-garden-room-001'
+
 // Canonical seed for the stateful mock memory-view. The bought/ordered section
 // deliberately spans the five Known-spend cases the pilot fix must distinguish:
 //  - hardcore: an included cost item (£40)
@@ -497,10 +501,15 @@ function rebaseMockDates(sections: MemoryViewSection[]): void {
   }
 }
 
+// Only the canonical pilot job gets the rich fixture — any other job
+// (including one freshly created via "+ Add job") starts with genuinely no
+// remembered spend/labour, matching what a real new job looks like. Without
+// this, every job showed the garden-room fixture's items regardless of
+// whether anything had actually been recorded against it.
 export function mockSectionsFor(jobId: string): MemoryViewSection[] {
   if (!mockMemoryByJob) mockMemoryByJob = new Map()
   if (!mockMemoryByJob.has(jobId)) {
-    const sections = buildMockSections()
+    const sections = jobId === MOCK_SEED_JOB_ID ? buildMockSections() : []
     rebaseMockDates(sections)
     mockMemoryByJob.set(jobId, sections)
   }
@@ -541,14 +550,13 @@ export function upsertMockItem(sections: MemoryViewSection[], item: MemoryViewIt
 // Resets on every full page load (module re-init), so Playwright tests that
 // start with page.goto get a clean fixture with no cross-test leakage.
 
-const MOCK_BUDGET_SEED_JOB = 'job-pilot-garden-room-001'
 let mockBudgetByJob: Map<string, BudgetCategory[]> | null = null
 
 export function mockBudgetCategoriesFor(jobId: string): BudgetCategory[] {
   if (!mockBudgetByJob) mockBudgetByJob = new Map()
   if (!mockBudgetByJob.has(jobId)) {
     const now = '2026-06-28T08:00:00.000Z'
-    if (jobId === MOCK_BUDGET_SEED_JOB) {
+    if (jobId === MOCK_SEED_JOB_ID) {
       // timber (budget, no spend), cladding (budget + spend), electrics (no
       // budget), labour (budget + labour spend).
       mockBudgetByJob.set(jobId, [
