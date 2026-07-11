@@ -380,6 +380,17 @@ describe('Workspace — manage budgets (Spend tab)', () => {
     fireEvent.click(within(clad).getByRole('menuitem', { name: /remove category/i }))
     expect(mockPatchBudgetCategory).not.toHaveBeenCalled()
   })
+
+  // Regression guard for the budget-before-spend fix (PR #51): the Budget
+  // categories section now renders unconditionally rather than only inside
+  // the hasSpendContent branch — confirm that doesn't leave a second
+  // "+ Add budget category" control behind when spend already exists.
+  it('shows exactly one Add-budget-category control when spend already exists', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    await spendHero()
+    expect(screen.getAllByRole('button', { name: /add budget category/i })).toHaveLength(1)
+  })
 })
 
 // Regression: budget setup must not require spend to exist first — a job

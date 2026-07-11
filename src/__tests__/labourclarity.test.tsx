@@ -155,6 +155,24 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
     expect(screen.queryByRole('button', { name: 'Add to labour' })).toBeNull()
   })
 
+  // Regression guard for the budget-before-spend fix (PR #51): moving the
+  // Budget categories section out of the hasSpendContent ternary must not
+  // introduce a second "+ Add budget category" control, and the Labour
+  // category must still be presented only via the Labour group — never as
+  // an additional ordinary "Budget category Labour" card alongside it.
+  it('with spend and a Labour category both present, there is exactly one Add-category control and no duplicate Labour card', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    await screen.findByRole('region', { name: /^labour spend$/i })
+
+    expect(screen.getAllByRole('button', { name: /add budget category/i })).toHaveLength(1)
+    // the ordinary "timber" category still renders as its own card…
+    expect(screen.getByRole('region', { name: /budget category timber/i })).toBeInTheDocument()
+    // …but Labour never renders as a second, duplicate ordinary category card
+    expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
+    expect(screen.getAllByRole('heading', { name: 'Labour', level: 3 })).toHaveLength(1)
+  })
+
   it('historical non-labour Labour-category spend is visible once, with Fix memory', async () => {
     renderWorkspace()
     openTab('Spend')
