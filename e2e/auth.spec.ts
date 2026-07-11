@@ -10,7 +10,8 @@ async function dismissExplainer(page: Page) {
 }
 
 async function logOut(page: Page) {
-  await page.getByRole('button', { name: 'Log out' }).click()
+  await page.getByRole('button', { name: /more actions/i }).click()
+  await page.getByRole('menuitem', { name: /log out/i }).click()
   await expect(page.getByRole('form', { name: /^log in$/i })).toBeVisible()
 }
 

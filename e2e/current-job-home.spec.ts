@@ -62,13 +62,13 @@ test.describe('Current job workspace', () => {
   test('Overview known spend uses total known cost (bought + labour)', async ({ page }) => {
     await page.waitForTimeout(700)
     // £2270 = bought + trusted labour, the job-level total known cost.
-    await expect(page.locator('.ws-card--spend')).toContainText('£2270')
+    await expect(page.getByRole('button', { name: /known spend — open spend/i })).toContainText('£2270')
   })
 
   test('latest activity sits below the Job so far summary', async ({ page }) => {
     await page.waitForTimeout(700)
-    const cards = page.locator('.ws-overview-cards')
-    const latest = page.locator('.ws-latest')
+    const cards = page.locator('.ws-jsf-card')
+    const latest = page.locator('.ws-latest-card')
     await expect(cards).toBeVisible()
     await expect(latest).toBeVisible()
     const cardsY = await cards.boundingBox().then(b => b?.y ?? 0)
@@ -77,13 +77,13 @@ test.describe('Current job workspace', () => {
   })
 
   test('job status shows "In progress" near the title', async ({ page }) => {
-    await expect(page.locator('.ws-job-title-row')).toContainText('In progress')
+    await expect(page.locator('.ws-header-titles')).toContainText('In progress')
   })
 
   test('Job so far shows the job-total labour hours, not just today', async ({ page }) => {
     await page.waitForTimeout(700)
-    await expect(page.locator('.ws-card--labour')).toContainText(/\d+h/)
-    await expect(page.locator('.ws-card--labour')).toContainText(/job total/i)
+    const labourRow = page.getByRole('button', { name: /labour hours — open labour/i })
+    await expect(labourRow).toContainText(/\d+h/)
   })
 
   test('Overview does not show a days-since-start metric', async ({ page }) => {

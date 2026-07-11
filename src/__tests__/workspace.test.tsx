@@ -171,10 +171,11 @@ describe('CurrentJobWorkspace — Things to check', () => {
     await waitFor(() => expect(screen.getByText('1 thing to check')).toBeInTheDocument())
   })
 
-  it('shows a quiet Nothing to check when empty', async () => {
+  it('shows nothing at all when the queue is empty — no "Nothing to check" block', async () => {
     vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Nothing to check')).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText(/still looking/i)).not.toBeInTheDocument())
+    expect(screen.queryByText(/nothing to check/i)).not.toBeInTheDocument()
   })
 
   it('the urgent banner opens the review queue', async () => {
@@ -444,8 +445,7 @@ describe('CurrentJobWorkspace — Job so far', () => {
       labourHoursSummary: { totalHours: '24', totalLabel: '24h job total', days: [] },
     }))
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('24h')).toBeInTheDocument())
-    expect(screen.getByText(/Job total/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /labour hours — open labour/i })).toHaveTextContent('24h'))
   })
 })
 

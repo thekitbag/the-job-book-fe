@@ -186,7 +186,8 @@ describe('Job title editing', () => {
   it('rename success updates the header and notifies the app to refresh caches', async () => {
     mockPatchJob.mockResolvedValue({ ...JOB, title: 'Patel Garden Room' })
     const { rerender } = renderWorkspace()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /rename job/i }))
     const input = screen.getByLabelText('Job title') as HTMLInputElement
     expect(input.value).toBe('Garden Room')
     fireEvent.change(input, { target: { value: '  Patel Garden Room  ' } })
@@ -201,7 +202,8 @@ describe('Job title editing', () => {
   it('rename failure keeps the old title and shows a retryable error', async () => {
     mockPatchJob.mockRejectedValue(new Error('boom'))
     renderWorkspace()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /rename job/i }))
     fireEvent.change(screen.getByLabelText('Job title'), { target: { value: 'New name' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not rename/i)
@@ -213,7 +215,8 @@ describe('Job title editing', () => {
 
   it('blank titles cannot be submitted', async () => {
     renderWorkspace()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /rename job/i }))
     fireEvent.change(screen.getByLabelText('Job title'), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(mockPatchJob).not.toHaveBeenCalled()

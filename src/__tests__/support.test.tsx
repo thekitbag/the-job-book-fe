@@ -138,7 +138,8 @@ describe('Support mode — gating', () => {
 
   it('an internal user sees the Support entry', async () => {
     render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} user={INTERNAL} />)
-    expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/internal/support')
+    fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+    expect(screen.getByRole('menuitem', { name: 'Support' })).toHaveAttribute('href', '/internal/support')
   })
 
   it('a normal user on the direct route gets Not authorised and no support data is fetched', async () => {
