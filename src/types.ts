@@ -659,7 +659,7 @@ export interface LabourTodaySummary {
   perPerson: { person: string; hours: number }[]
 }
 
-export type LatestActivityType = 'bought' | 'used' | 'labour' | 'note'
+export type LatestActivityType = 'bought' | 'used' | 'labour' | 'note' | 'photo'
 
 export interface LatestActivityItem {
   memoryItemId: string

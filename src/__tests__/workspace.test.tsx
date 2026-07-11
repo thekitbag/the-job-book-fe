@@ -6,8 +6,8 @@ import { saveNote, getNotesForJob } from '../db'
 import { makeNote } from './helpers'
 import type { RecordingResult, UseRecorderReturn } from '../useRecorder'
 import type { UploadNoteResponse } from '../api'
-import type { ReviewQueue } from '../types'
-import { getReviewQueue } from '../api'
+import type { Job, JobPhoto, MemoryViewResponse, ReviewQueue } from '../types'
+import { getBudgetSummary, getJobPhotos, getMemoryView, getReviewQueue } from '../api'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,8 @@ vi.mock('../api', () => ({
   getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
   getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] }, costSummary: undefined })),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
+  patchJob: vi.fn(),
+  resolveApiUrl: (url: string) => url,
 }))
 
 vi.mock('../useRecorder', () => {
@@ -345,5 +347,162 @@ describe('CurrentJobWorkspace — source history / no pipeline language', () => 
     await saveNote(note)
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Saved on this phone')).toBeInTheDocument())
+  })
+})
+
+// ── Job front page: status, Job so far, latest activity ─────────────────────
+
+function memItem(overrides: Partial<MemoryViewResponse['sections'][number]['items'][number]>) {
+  return {
+    id: Math.random().toString(36).slice(2),
+    memoryType: 'ordered_material',
+    summary: '',
+    materialName: null, quantity: null, unit: null, supplierName: null,
+    deliveryTiming: null, locationOrUse: null,
+    costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+    uncertaintyFlags: [],
+    sourceCandidateFactId: null, reviewDecisionId: null,
+    createdAt: '', updatedAt: '', source: null,
+    ...overrides,
+  }
+}
+
+function memoryViewWith(overrides: Partial<MemoryViewResponse>): MemoryViewResponse {
+  return {
+    job: { id: JOB.id, title: JOB.title, jobType: JOB.jobType, roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' },
+    generatedAt: '',
+    sections: [],
+    stillToCheck: { count: 0, items: [] },
+    ...overrides,
+  }
+}
+
+function photo(overrides: Partial<JobPhoto>): JobPhoto {
+  return {
+    id: 'photo-1', jobId: JOB.id, descriptor: null, mimeType: 'image/jpeg', sizeBytes: 100,
+    uploadedAt: '2026-07-08T09:00:00.000Z', createdAt: '2026-07-08T09:00:00.000Z', updatedAt: '2026-07-08T09:00:00.000Z',
+    linkedNoteId: null, linkedMemoryItemId: null, linkedNote: null, linkedMemoryItem: null,
+    imageUrl: 'https://example.com/p.jpg',
+    ...overrides,
+  }
+}
+
+describe('CurrentJobWorkspace — job status', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
+  })
+
+  it('shows "In progress" near the title for an active job', () => {
+    renderWorkspace()
+    expect(screen.getByText('In progress')).toBeInTheDocument()
+  })
+
+  it('shows "Finished" for a completed job', () => {
+    const job: Job = { ...JOB, status: 'completed' }
+    renderWorkspace({ job })
+    expect(screen.getByText('Finished')).toBeInTheDocument()
+  })
+
+  it('shows "Archived" for an archived job', () => {
+    const job: Job = { ...JOB, status: 'archived' }
+    renderWorkspace({ job })
+    expect(screen.getByText('Archived')).toBeInTheDocument()
+  })
+
+  it('title-cases an unknown status as a fallback', () => {
+    const job = { ...JOB, status: 'on_hold' } as unknown as Job
+    renderWorkspace({ job })
+    expect(screen.getByText('On hold')).toBeInTheDocument()
+  })
+})
+
+describe('CurrentJobWorkspace — Job so far', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
+  })
+
+  it('shows known spend (bought + labour) against total budget', async () => {
+    vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
+      costSummary: {
+        orderedMaterials: { knownSpendAmount: '336', knownSpendCurrency: 'GBP', knownSpendLabel: null, includedMemoryItemIds: [], missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], rows: [] },
+        totalKnownCost: { knownSpendAmount: '2270', knownSpendCurrency: 'GBP', knownSpendLabel: null, includedMemoryItemIds: [] },
+      },
+    }))
+    vi.mocked(getBudgetSummary).mockResolvedValue({
+      jobId: JOB.id, generatedAt: '', categories: [], uncategorized: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, rows: [] },
+      totals: { budgetAmount: '5000', budgetCurrency: 'GBP', knownSpendAmount: '2270', knownSpendCurrency: 'GBP', remainingAmount: '2730', remainingLabel: null, overBudget: false },
+    })
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText(/£2270/)).toBeInTheDocument())
+    expect(screen.getByText(/£5000/)).toBeInTheDocument()
+  })
+
+  it('shows the job-total labour hours, not just today', async () => {
+    vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
+      labourHoursSummary: { totalHours: '24', totalLabel: '24h job total', days: [] },
+    }))
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('24h')).toBeInTheDocument())
+    expect(screen.getByText(/Job total/)).toBeInTheDocument()
+  })
+})
+
+describe('CurrentJobWorkspace — latest activity', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
+  })
+
+  it('includes a photo row when photos exist, with date and time', async () => {
+    vi.mocked(getJobPhotos).mockResolvedValue({
+      jobId: JOB.id,
+      photos: [photo({ id: 'photo-9', descriptor: 'Jewson receipt', uploadedAt: '2026-07-08T09:15:00.000Z' })],
+    })
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Jewson receipt')).toBeInTheDocument())
+    expect(screen.getByText('Photo')).toBeInTheDocument()
+  })
+
+  it('tapping a labour activity row switches to the Labour tab', async () => {
+    vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
+      sections: [{
+        key: 'labour', label: 'Labour',
+        items: [memItem({ id: 'lab-1', memoryType: 'labour', labourHours: '4', labourTask: 'Footings', createdAt: '2026-07-08T09:00:00.000Z' })],
+      }],
+    }))
+    const user = userEvent.setup()
+    renderWorkspace()
+    const row = await screen.findByRole('button', { name: /labour.*footings/i })
+    await user.click(row)
+    expect(screen.getByRole('tab', { name: 'Labour' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('tapping a photo activity row switches to the Notes tab', async () => {
+    vi.mocked(getJobPhotos).mockResolvedValue({
+      jobId: JOB.id,
+      photos: [photo({ id: 'photo-9', descriptor: 'Jewson receipt', uploadedAt: '2026-07-08T09:15:00.000Z' })],
+    })
+    const user = userEvent.setup()
+    renderWorkspace()
+    const row = await screen.findByRole('button', { name: /photo.*jewson receipt/i })
+    await user.click(row)
+    expect(screen.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+describe('CurrentJobWorkspace — Record resilience', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+  })
+
+  it('Record stays visible when review, memory, budget, and photo loads all fail', async () => {
+    vi.mocked(getReviewQueue).mockRejectedValue(new Error('queue down'))
+    vi.mocked(getMemoryView).mockRejectedValue(new Error('memory down'))
+    vi.mocked(getBudgetSummary).mockRejectedValue(new Error('budget down'))
+    vi.mocked(getJobPhotos).mockRejectedValue(new Error('photos down'))
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument())
   })
 })

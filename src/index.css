@@ -3343,6 +3343,19 @@ code {
   color: var(--ink-500);
   font-size: var(--text-md);
 }
+.ws-status-chip {
+  flex-shrink: 0;
+  align-self: center;
+  border-radius: var(--r-pill);
+  padding: 0.2rem 0.6rem;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  background: var(--surface-sunk);
+  color: var(--ink-700);
+}
+.ws-status-chip--active { background: #e3f3e9; color: var(--green-700); }
+.ws-status-chip--completed { background: #e7eefb; color: #2b5fb3; }
+.ws-status-chip--archived { background: var(--surface-sunk); color: var(--ink-500); }
 .ws-header-actions {
   display: flex;
   align-items: center;
@@ -3439,7 +3452,16 @@ code {
   padding: 0.2rem 0.1rem;
 }
 
-/* — Overview summary cards — */
+/* — Job so far — */
+.ws-job-so-far { display: flex; flex-direction: column; gap: 0.5rem; }
+.ws-job-so-far-heading {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-lg);
+  color: var(--ink-500);
+  font-weight: 600;
+  margin: 0;
+}
 .ws-overview-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3517,14 +3539,31 @@ code {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
 }
-.ws-latest-headline {
+.ws-latest-row:active { opacity: 0.75; }
+.ws-latest-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+.ws-latest-headline {
   color: var(--ink-900);
   font-size: var(--text-md);
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.ws-latest-time {
+  color: var(--ink-500);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 .ws-latest-right {
   flex-shrink: 0;
@@ -3543,6 +3582,7 @@ code {
 }
 .ws-type-chip--labour { background: #eae6fb; color: #5a44b3; }
 .ws-type-chip--note   { background: #eef1f4; color: var(--ink-700); }
+.ws-type-chip--photo  { background: #fdeee0; color: #b3612b; }
 
 .mem-section-summary {
   font-weight: 800;
@@ -4148,7 +4188,11 @@ code {
 .labour-historical-note { margin: 0.2rem 0 0.5rem; }
 
 /* Job title rename */
-.ws-job-title-row { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
+/* wrap, not shrink: a long title must never be squeezed into a
+   character-per-line column by the status chip/Rename button — those wrap to
+   their own line first. */
+.ws-job-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.6rem; min-width: 0; }
+.ws-job-title { flex-shrink: 0; max-width: 100%; }
 .btn-rename-job {
   font: inherit; font-size: var(--text-2xs); font-weight: 800; flex-shrink: 0;
   color: var(--green-700); background: none; border: none; cursor: pointer; padding: 0.15rem 0;

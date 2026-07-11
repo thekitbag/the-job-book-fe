@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getDraftFacts, getReviewQueue, patchJob } from './api'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { getDraftFacts, getJobPhotos, getReviewQueue, patchJob } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
 import { useTranscriptPoll } from './useTranscriptPoll'
 import { usePwaInstall } from './usePwaInstall'
 import { useJobMemory } from './useJobMemory'
-import { deriveLabourToday, deriveLatestActivity, formatMoney } from './memoryScan'
+import { deriveLatestActivity, formatMoney, mergeLatestActivityWithPhotos } from './memoryScan'
 import SpendTab from './SpendTab'
 import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
-import SourceHistory, { formatDuration } from './SourceHistory'
-import type { AuthUser, CandidateFact, Job, LabourTodaySummary, LatestActivityItem, LocalNote, TotalKnownCost } from './types'
+import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
+import type { AuthUser, CandidateFact, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -35,14 +35,35 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'notes', label: 'Notes' },
 ]
 
-function relativeAge(iso: string, now = Date.now()): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const days = Math.floor((now - then) / 86_400_000)
-  return days <= 0 ? 'today' : `${days}d`
+// Where a latest-activity row's underlying detail lives. Tab-level navigation
+// is the v1 minimum (spec allows this); item-level reveal is a follow-up.
+const ACTIVITY_TAB: Record<LatestActivityType, Tab> = {
+  bought: 'spend',
+  used: 'used',
+  labour: 'labour',
+  note: 'notes',
+  photo: 'notes',
 }
 
-// ── Overview cards ──────────────────────────────────────────────────────────
+const JOB_STATUS_LABELS: Record<Job['status'], string> = {
+  active: 'In progress',
+  completed: 'Finished',
+  archived: 'Archived',
+}
+
+// Sentence case: "on_hold" → "On hold" — a plain fallback for a status value
+// the frontend doesn't have specific copy for yet.
+function titleCase(s: string): string {
+  const words = s.replace(/[_-]+/g, ' ').trim().split(' ').filter(Boolean)
+  return words.map((w, i) => (i === 0 ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(' ')
+}
+
+// Display-only status label — no editing, no project-management lifecycle.
+function jobStatusLabel(status: string): string {
+  return JOB_STATUS_LABELS[status as Job['status']] ?? titleCase(status)
+}
+
+// ── Overview: Job so far ─────────────────────────────────────────────────────
 
 function KnownSpendCard({ total, budgetAmount, onOpen }: {
   total: TotalKnownCost | null
@@ -65,28 +86,39 @@ function KnownSpendCard({ total, budgetAmount, onOpen }: {
   )
 }
 
-function LabourTodayCard({ summary, onOpen }: { summary: LabourTodaySummary; onOpen: () => void }) {
-  const people = summary.perPerson.map(p => `${p.person} ${p.hours}`).join(' · ')
+// Job-total labour hours (not "today") — the compact front-page signal.
+function LabourHoursCard({ labourHours, onOpen }: { labourHours: LabourHoursSummary | null; onOpen: () => void }) {
+  const hasHours = labourHours?.totalHours != null
   return (
-    <button type="button" className="ws-card ws-card--labour" onClick={onOpen} aria-label="Labour today — open Labour">
-      <span className="ws-card-cap">Labour today</span>
-      <span className="ws-card-amount">{summary.hasHours ? `${summary.totalHours}h` : 'None yet'}</span>
-      <span className="ws-card-sub">{people ? `${people} · ` : ''}Labour ›</span>
+    <button type="button" className="ws-card ws-card--labour" onClick={onOpen} aria-label="Labour hours — open Labour">
+      <span className="ws-card-cap">Labour</span>
+      <span className="ws-card-amount">{hasHours ? `${labourHours!.totalHours}h` : 'None yet'}</span>
+      <span className="ws-card-sub">{hasHours ? 'Job total · ' : ''}Labour ›</span>
     </button>
   )
 }
 
-function LatestActivity({ items }: { items: LatestActivityItem[] }) {
+function LatestActivity({ items, onOpenItem }: { items: LatestActivityItem[]; onOpenItem: (item: LatestActivityItem) => void }) {
   if (items.length === 0) return null
   return (
     <section className="ws-latest" aria-label="Latest on this job">
       <p className="ws-latest-heading">Latest on this job</p>
       <ul className="ws-latest-list">
         {items.map(item => (
-          <li key={item.memoryItemId} className="ws-latest-row">
-            <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
-            <span className="ws-latest-headline">{item.headline}</span>
-            <span className="ws-latest-right">{item.costLabel ?? relativeAge(item.effectiveAt)}</span>
+          <li key={item.memoryItemId}>
+            <button
+              type="button"
+              className="ws-latest-row"
+              onClick={() => onOpenItem(item)}
+              aria-label={`${item.typeLabel}: ${item.headline}`}
+            >
+              <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
+              <span className="ws-latest-body">
+                <span className="ws-latest-headline">{item.headline}</span>
+                <span className="ws-latest-time">{formatSavedStamp(item.effectiveAt)}</span>
+              </span>
+              {item.costLabel && <span className="ws-latest-right">{item.costLabel}</span>}
+            </button>
           </li>
         ))}
       </ul>
@@ -306,6 +338,23 @@ export default function CurrentJobWorkspace({
 
   useEffect(() => { loadQueue() }, [loadQueue])
 
+  // Latest activity's photo rows — loaded independently of JobPhotosSection's
+  // own Notes-tab fetch. Failure quietly omits photos rather than blocking
+  // Overview or Record. Stale-job guarded like JobPhotosSection; re-run after
+  // JobPhotosSection reports a change (e.g. a new upload) so Overview reflects it.
+  const [photos, setPhotos] = useState<JobPhoto[]>([])
+  const currentJobIdRef = useRef(job.id)
+  currentJobIdRef.current = job.id
+
+  const loadPhotos = useCallback(() => {
+    const requestedJobId = job.id
+    getJobPhotos(requestedJobId)
+      .then(res => { if (currentJobIdRef.current === requestedJobId) setPhotos(res.photos) })
+      .catch(() => { if (currentJobIdRef.current === requestedJobId) setPhotos([]) })
+  }, [job.id])
+
+  useEffect(() => { loadPhotos() }, [loadPhotos])
+
   const readyExtractionCount = notes.filter(
     n => n.localState === 'uploaded' && n.extractionStatus === 'ready',
   ).length
@@ -364,13 +413,9 @@ export default function CurrentJobWorkspace({
     setShowExplainer(false)
   }, [])
 
-  const labourToday = useMemo(
-    () => deriveLabourToday(mem.data?.sections ?? []),
-    [mem.data],
-  )
   const latest = useMemo(
-    () => deriveLatestActivity(mem.data?.sections ?? []),
-    [mem.data],
+    () => mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 20), photos),
+    [mem.data, photos],
   )
 
   // Photo link targets: trusted memory items only — review-queue drafts are
@@ -449,6 +494,7 @@ export default function CurrentJobWorkspace({
             <>
               <div className="ws-job-title-row">
                 <h1 className="ws-job-title">{job.title}</h1>
+                <span className={`ws-status-chip ws-status-chip--${job.status}`}>{jobStatusLabel(job.status)}</span>
                 <button type="button" className="btn-rename-job" onClick={startRename}>Rename</button>
               </div>
               {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
@@ -501,15 +547,18 @@ export default function CurrentJobWorkspace({
               <p className="mem-loading">Loading…</p>
             ) : (
               <>
-                <div className="ws-overview-cards">
-                  <KnownSpendCard
-                    total={mem.totalKnownCost}
-                    budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
-                    onOpen={() => setTab('spend')}
-                  />
-                  <LabourTodayCard summary={labourToday} onOpen={() => setTab('labour')} />
-                </div>
-                <LatestActivity items={latest} />
+                <section className="ws-job-so-far" aria-label="Job so far">
+                  <p className="ws-job-so-far-heading">Job so far</p>
+                  <div className="ws-overview-cards">
+                    <KnownSpendCard
+                      total={mem.totalKnownCost}
+                      budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
+                      onOpen={() => setTab('spend')}
+                    />
+                    <LabourHoursCard labourHours={mem.labourHours} onOpen={() => setTab('labour')} />
+                  </div>
+                </section>
+                <LatestActivity items={latest} onOpenItem={item => setTab(ACTIVITY_TAB[item.type])} />
               </>
             )}
 
@@ -545,7 +594,7 @@ export default function CurrentJobWorkspace({
             sectionKeys={NOTES_SECTION_KEYS}
             ariaLabel="Notes"
             directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }}
-            footer={<JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} />}
+            footer={<JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />}
           />,
         )}
       </div>

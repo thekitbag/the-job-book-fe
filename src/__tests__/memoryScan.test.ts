@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, eachTotalGaps, friendlyDayLabel, hourlyTotalGaps, joinWithAnd, localDateKey, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
+import { costDetailRows, deriveBudgetSummary, deriveCostSummary, deriveEachTotal, deriveHourlyTotal, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, eachTotalGaps, friendlyDayLabel, hourlyTotalGaps, joinWithAnd, localDateKey, deriveLabourSummary, deriveLabourToday, deriveLatestActivity, deriveScanGroups, deriveTotalKnownCost, mergeLatestActivityWithPhotos, safeLabourCost, safeLineTotal, spendExclusionCopy, suggestBudgetCategory } from '../memoryScan'
 import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../types'
 
 function item(overrides: Partial<MemoryViewItem>): MemoryViewItem {
@@ -731,6 +731,49 @@ describe('deriveLatestActivity', () => {
     const latest = deriveLatestActivity(sections, 1)
     expect(latest).toHaveLength(1)
     expect(latest[0].memoryItemId).toBe('a')
+  })
+})
+
+// ── mergeLatestActivityWithPhotos ────────────────────────────────────────────
+
+describe('mergeLatestActivityWithPhotos', () => {
+  it('folds photos in as newest-first Photo rows with no cost', () => {
+    const memoryItems = deriveLatestActivity([
+      section('ordered_materials', [
+        item({ id: 'bought', memoryType: 'ordered_material', materialName: 'OSB', totalCostAmount: '336', costCurrency: 'GBP', createdAt: '2026-07-01T09:00:00.000Z' }),
+      ]),
+    ])
+    const photos = [
+      { id: 'photo-1', jobId: 'job-1', descriptor: 'Jewson receipt', mimeType: 'image/jpeg', sizeBytes: 100, uploadedAt: '2026-07-02T09:00:00.000Z', createdAt: '2026-07-02T09:00:00.000Z', updatedAt: '2026-07-02T09:00:00.000Z', linkedNoteId: null, linkedMemoryItemId: null, linkedNote: null, linkedMemoryItem: null, imageUrl: 'x' },
+    ]
+    const merged = mergeLatestActivityWithPhotos(memoryItems, photos)
+    expect(merged.map(i => i.memoryItemId)).toEqual(['photo-1', 'bought'])
+    expect(merged[0].type).toBe('photo')
+    expect(merged[0].typeLabel).toBe('Photo')
+    expect(merged[0].headline).toBe('Jewson receipt')
+    expect(merged[0].costLabel).toBeNull()
+  })
+
+  it('falls back to "Photo uploaded" when no descriptor is set', () => {
+    const photos = [
+      { id: 'photo-2', jobId: 'job-1', descriptor: null, mimeType: 'image/jpeg', sizeBytes: 100, uploadedAt: '2026-07-02T09:00:00.000Z', createdAt: '2026-07-02T09:00:00.000Z', updatedAt: '2026-07-02T09:00:00.000Z', linkedNoteId: null, linkedMemoryItemId: null, linkedNote: null, linkedMemoryItem: null, imageUrl: 'x' },
+    ]
+    const merged = mergeLatestActivityWithPhotos([], photos)
+    expect(merged[0].headline).toBe('Photo uploaded')
+  })
+
+  it('honours the limit across the merged list', () => {
+    const memoryItems = deriveLatestActivity([
+      section('ordered_materials', [
+        item({ id: 'bought', memoryType: 'ordered_material', createdAt: '2026-07-03T09:00:00.000Z' }),
+      ]),
+    ])
+    const photos = [
+      { id: 'photo-3', jobId: 'job-1', descriptor: null, mimeType: 'image/jpeg', sizeBytes: 100, uploadedAt: '2026-07-04T09:00:00.000Z', createdAt: '2026-07-04T09:00:00.000Z', updatedAt: '2026-07-04T09:00:00.000Z', linkedNoteId: null, linkedMemoryItemId: null, linkedNote: null, linkedMemoryItem: null, imageUrl: 'x' },
+    ]
+    const merged = mergeLatestActivityWithPhotos(memoryItems, photos, 1)
+    expect(merged).toHaveLength(1)
+    expect(merged[0].memoryItemId).toBe('photo-3')
   })
 })
 

@@ -1,4 +1,4 @@
-import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, JobPhoto, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -948,4 +948,27 @@ export function deriveLatestActivity(sections: MemoryViewSection[], limit = 5): 
   }
   all.sort((a, b) => (b.effectiveAt ?? '').localeCompare(a.effectiveAt ?? ''))
   return all.slice(0, limit)
+}
+
+/**
+ * Folds trusted photos into a latest-activity list as 'photo' rows, re-sorted
+ * newest-first and re-limited. Photos carry no trusted cost (evidence, not
+ * spend), so costLabel is always null.
+ */
+export function mergeLatestActivityWithPhotos(
+  items: LatestActivityItem[],
+  photos: JobPhoto[],
+  limit = 5,
+): LatestActivityItem[] {
+  const photoItems: LatestActivityItem[] = photos.map(photo => ({
+    memoryItemId: photo.id,
+    type: 'photo',
+    typeLabel: 'Photo',
+    headline: photo.descriptor ?? 'Photo uploaded',
+    costLabel: null,
+    effectiveAt: photo.uploadedAt,
+  }))
+  return [...items, ...photoItems]
+    .sort((a, b) => (b.effectiveAt ?? '').localeCompare(a.effectiveAt ?? ''))
+    .slice(0, limit)
 }
