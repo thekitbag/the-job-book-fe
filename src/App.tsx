@@ -34,7 +34,10 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
     const match = jobs.find(j => j.id === storedId)
     if (match) return match
   }
-  return jobs.find(j => j.status === 'active') ?? jobs[0] ?? null
+  return jobs.find(j => j.status === 'started')
+    ?? jobs.find(j => j.status === 'planning')
+    ?? jobs.find(j => j.status === 'finished')
+    ?? jobs[0] ?? null
 }
 
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
@@ -124,9 +127,31 @@ export default function App() {
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null))
   }, [appState])
 
-  // A job edit (title rename) must update everywhere the job is shown or
-  // cached: the workspace header, the job list, and the offline cache.
+  // A job edit (title rename, status change) must update everywhere the job
+  // is shown or cached: the workspace header, the job list, and the offline
+  // cache. Archiving is special: it removes the job from the normal list,
+  // and if it was the selected job, moves the user to another visible job
+  // (or the job picker/empty state if none remain).
   function handleJobUpdated(updated: Job) {
+    if (updated.status === 'archived') {
+      const remaining = jobs.filter(j => j.id !== updated.id)
+      localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(remaining))
+      setJobs(remaining)
+      // Stale guard: only move the selection if the archived job is (still)
+      // the one currently selected — an archive response for a job the user
+      // has since switched away from must not disturb the job now shown.
+      if (!selectedJob || selectedJob.id !== updated.id) return
+      const next = pickJob(remaining, null)
+      if (next) {
+        setSelectedJob(next)
+        localStorage.setItem(SELECTED_JOB_ID_KEY, next.id)
+      } else {
+        setSelectedJob(null)
+        localStorage.removeItem(SELECTED_JOB_ID_KEY)
+        setAppState('noJobs')
+      }
+      return
+    }
     setSelectedJob(prev => (prev && prev.id === updated.id ? updated : prev))
     setJobs(prev => {
       const next = prev.map(j => (j.id === updated.id ? updated : j))

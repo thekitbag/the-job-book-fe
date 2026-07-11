@@ -44,7 +44,8 @@ vi.mock('../CurrentJobWorkspace', () => ({
         <button onClick={onOpenReviewQueue}>mock-open-queue</button>
         <button onClick={onSwitchJob}>mock-switch-job</button>
         <button onClick={onLogout}>mock-logout</button>
-        <button onClick={() => onJobUpdated?.({ ...job, status: 'paused' })}>mock-status-update</button>
+        <button onClick={() => onJobUpdated?.({ ...job, status: 'planning' })}>mock-status-update</button>
+        <button onClick={() => onJobUpdated?.({ ...job, status: 'archived' })}>mock-archive-job</button>
       </div>
     )
   },
@@ -59,8 +60,8 @@ vi.mock('../ReviewQueueScreen', () => ({
 vi.mock('../JobPickerScreen', () => ({
   default: ({ onJobAdded, onSelect }: { onJobAdded: (j: unknown) => void; onSelect: (j: unknown) => void }) => (
     <div data-testid="job-picker-screen">
-      <button onClick={() => onJobAdded({ id: 'new-job-001', title: 'New Job', jobType: 'other', roughLocationOrLabel: null, status: 'active', createdAt: '2026-06-10T10:00:00Z', updatedAt: '2026-06-10T10:00:00Z' })}>mock-add-job</button>
-      <button onClick={() => onSelect({ id: 'job-002', title: 'Kitchen Extension', jobType: 'extension', roughLocationOrLabel: null, status: 'active', createdAt: '2026-05-20T08:00:00Z', updatedAt: '2026-06-08T14:00:00Z' })}>mock-select-job-b</button>
+      <button onClick={() => onJobAdded({ id: 'new-job-001', title: 'New Job', jobType: 'other', roughLocationOrLabel: null, status: 'started', createdAt: '2026-06-10T10:00:00Z', updatedAt: '2026-06-10T10:00:00Z' })}>mock-add-job</button>
+      <button onClick={() => onSelect({ id: 'job-002', title: 'Kitchen Extension', jobType: 'extension', roughLocationOrLabel: null, status: 'started', createdAt: '2026-05-20T08:00:00Z', updatedAt: '2026-06-08T14:00:00Z' })}>mock-select-job-b</button>
     </div>
   ),
 }))
@@ -86,7 +87,7 @@ const JOB_A = {
   title: 'Garden Room',
   jobType: 'garden_room' as const,
   roughLocationOrLabel: 'Mrs Patel',
-  status: 'active' as const,
+  status: 'started' as const,
   createdAt: '2026-06-01T08:00:00Z',
   updatedAt: '2026-06-10T09:00:00Z',
 }
@@ -96,7 +97,7 @@ const JOB_B = {
   title: 'Kitchen Extension',
   jobType: 'extension' as const,
   roughLocationOrLabel: null,
-  status: 'active' as const,
+  status: 'started' as const,
   createdAt: '2026-05-20T08:00:00Z',
   updatedAt: '2026-06-08T14:00:00Z',
 }
@@ -354,9 +355,9 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mock-status-update/i }))
 
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-status', 'paused'))
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-status', 'planning'))
     const cached = JSON.parse(localStorage.getItem(CACHED_JOBS_KEY)!) as typeof JOB_A[]
-    expect(cached.find(j => j.id === JOB_A.id)?.status).toBe('paused')
+    expect(cached.find(j => j.id === JOB_A.id)?.status).toBe('planning')
   })
 
   it('stale job-switch guard: a status update for job A cannot overwrite job B after switching', async () => {
@@ -373,10 +374,52 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
     // Job A's stale status update resolves now, after the switch to job B.
-    act(() => { staleOnJobUpdated({ ...JOB_A, status: 'paused' }) })
+    act(() => { staleOnJobUpdated({ ...JOB_A, status: 'planning' }) })
 
     // Job B must remain untouched — still selected, still its own status.
     expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id)
-    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-status', 'active')
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-status', 'started')
+  })
+
+  it('archiving the selected job removes it from the cache and moves to another visible job', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id))
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-archive-job/i }))
+
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
+    const cached = JSON.parse(localStorage.getItem(CACHED_JOBS_KEY)!) as typeof JOB_A[]
+    expect(cached.find(j => j.id === JOB_A.id)).toBeUndefined()
+    expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(JOB_B.id)
+  })
+
+  it('archiving the only remaining job falls back to the job picker / empty state', async () => {
+    mockGetJobs.mockResolvedValue([JOB_A])
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id))
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-archive-job/i }))
+
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    expect(localStorage.getItem(SELECTED_ID_KEY)).toBeNull()
+  })
+
+  it('archiving a job that is no longer selected (stale) still removes it from the cache without disturbing the current job', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id))
+    const staleOnJobUpdated = lastOnJobUpdated!
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
+
+    // Job A's stale archive response resolves after the switch to job B.
+    act(() => { staleOnJobUpdated({ ...JOB_A, status: 'archived' }) })
+
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id)
+    const cached = JSON.parse(localStorage.getItem(CACHED_JOBS_KEY)!) as typeof JOB_A[]
+    expect(cached.find(j => j.id === JOB_A.id)).toBeUndefined()
   })
 })

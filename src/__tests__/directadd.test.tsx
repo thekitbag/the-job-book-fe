@@ -28,7 +28,7 @@ const mockCreateMemoryItem = vi.mocked(api.createMemoryItem)
 
 const JOB: Job = {
   id: 'job-da-001', title: 'Garden Room', jobType: 'garden_room',
-  roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '',
+  roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '',
 }
 
 const EMPTY_BUDGET: BudgetSummaryResponse = {

@@ -19,7 +19,7 @@ vi.mock('../api', () => ({
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn(() => Promise.resolve([])),
   getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
-  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] }, costSummary: undefined })),
+  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] }, costSummary: undefined })),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
   patchJob: vi.fn(),
   resolveApiUrl: (url: string) => url,
@@ -48,7 +48,7 @@ const JOB = {
   title: 'Garden Room',
   jobType: 'garden_room' as const,
   roughLocationOrLabel: '14 Oakfield Rd',
-  status: 'active' as const,
+  status: 'started' as const,
   createdAt: '2026-06-01T08:00:00Z',
   updatedAt: '2026-06-10T09:00:00Z',
 }
@@ -370,7 +370,7 @@ function memItem(overrides: Partial<MemoryViewResponse['sections'][number]['item
 
 function memoryViewWith(overrides: Partial<MemoryViewResponse>): MemoryViewResponse {
   return {
-    job: { id: JOB.id, title: JOB.title, jobType: JOB.jobType, roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' },
+    job: { id: JOB.id, title: JOB.title, jobType: JOB.jobType, roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '' },
     generatedAt: '',
     sections: [],
     stillToCheck: { count: 0, items: [] },
@@ -394,13 +394,19 @@ describe('CurrentJobWorkspace — job status', () => {
     vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
   })
 
-  it('shows "In progress" near the title for an active job', () => {
+  it('shows "Started" near the title for a started job', () => {
     renderWorkspace()
-    expect(screen.getByText('In progress')).toBeInTheDocument()
+    expect(screen.getByText('Started')).toBeInTheDocument()
   })
 
-  it('shows "Finished" for a completed job', () => {
-    const job: Job = { ...JOB, status: 'completed' }
+  it('shows "Planning" for a planning job', () => {
+    const job: Job = { ...JOB, status: 'planning' }
+    renderWorkspace({ job })
+    expect(screen.getByText('Planning')).toBeInTheDocument()
+  })
+
+  it('shows "Finished" for a finished job', () => {
+    const job: Job = { ...JOB, status: 'finished' }
     renderWorkspace({ job })
     expect(screen.getByText('Finished')).toBeInTheDocument()
   })
@@ -521,37 +527,48 @@ describe('CurrentJobWorkspace — status editing', () => {
 
   it('header displays the current status label', () => {
     renderWorkspace()
-    expect(screen.getByText('In progress')).toBeInTheDocument()
+    expect(screen.getByText('Started')).toBeInTheDocument()
   })
 
-  it('a status edit affordance is available to a normal user', async () => {
+  it('a status edit affordance is available to a normal user, offering all four statuses', async () => {
     const user = userEvent.setup()
     renderWorkspace()
     await openStatusEditor(user)
     expect(screen.getByRole('group', { name: /change status/i })).toBeInTheDocument()
-    for (const label of ['In progress', 'Paused', 'Finished']) {
+    for (const label of ['Planning', 'Started', 'Finished', 'Archived']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
   })
 
-  it('changing to Paused calls PATCH and adopts the returned job', async () => {
+  it('changing to Planning calls PATCH and adopts the returned job', async () => {
     const onJobUpdated = vi.fn()
-    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'paused' })
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'planning' })
     const user = userEvent.setup()
     renderWorkspace({ onJobUpdated })
     await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Paused' }))
-    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'paused' }))
-    expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'paused' }))
+    await user.click(screen.getByRole('button', { name: 'Planning' }))
+    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'planning' }))
+    expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'planning' }))
+  })
+
+  it('changing to Started calls PATCH and adopts the returned job', async () => {
+    const onJobUpdated = vi.fn()
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'started' })
+    const user = userEvent.setup()
+    renderWorkspace({ job: { ...JOB, status: 'planning' }, onJobUpdated })
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: 'Started' }))
+    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'started' }))
+    expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'started' }))
   })
 
   it('changing to Finished keeps Record visible and does not navigate away', async () => {
-    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'completed' })
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'finished' })
     const user = userEvent.setup()
     renderWorkspace()
     await openStatusEditor(user)
     await user.click(screen.getByRole('button', { name: 'Finished' }))
-    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'completed' }))
+    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'finished' }))
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
   })
 
@@ -561,11 +578,11 @@ describe('CurrentJobWorkspace — status editing', () => {
     const user = userEvent.setup()
     renderWorkspace({ onJobUpdated })
     await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Paused' }))
+    await user.click(screen.getByRole('button', { name: 'Planning' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not update status/i)
     expect(onJobUpdated).not.toHaveBeenCalled()
     // the previous confirmed status is still shown as the "current" option
-    expect(screen.getByRole('button', { name: 'In progress' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Started' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('cancelling the status editor restores the plain status chip', async () => {
@@ -574,6 +591,29 @@ describe('CurrentJobWorkspace — status editing', () => {
     await openStatusEditor(user)
     await user.click(screen.getByRole('button', { name: /cancel/i }))
     expect(screen.queryByRole('group', { name: /change status/i })).not.toBeInTheDocument()
-    expect(screen.getByText('In progress')).toBeInTheDocument()
+    expect(screen.getByText('Started')).toBeInTheDocument()
+  })
+
+  it('archiving requires confirmation — declining leaves status unchanged', async () => {
+    const confirmMock = vi.fn(() => false)
+    window.confirm = confirmMock
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: 'Archived' }))
+    expect(confirmMock).toHaveBeenCalled()
+    expect(patchJob).not.toHaveBeenCalled()
+  })
+
+  it('archiving with confirmation calls PATCH with status archived', async () => {
+    window.confirm = vi.fn(() => true)
+    const onJobUpdated = vi.fn()
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'archived' })
+    const user = userEvent.setup()
+    renderWorkspace({ onJobUpdated })
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: 'Archived' }))
+    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'archived' }))
+    expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'archived' }))
   })
 })

@@ -41,13 +41,13 @@ const mockGetSupportPhotos = vi.mocked(api.getSupportPhotos)
 const INTERNAL: AuthUser = { id: 'u-founder', email: 'founder@test', name: 'Founder', role: 'INTERNAL' }
 const PILOT: AuthUser = { id: 'u-mike', email: 'mike@test', name: 'Mike', role: 'PILOT' }
 
-const JOB: Job = { id: 'job-1', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' }
+const JOB: Job = { id: 'job-1', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '' }
 
 const SUPPORT_MIKE: SupportUser = {
   id: 'u-mike', email: 'mike@test', name: 'Mike', role: 'PILOT',
   createdAt: '', updatedAt: '', jobCount: 1, lastActivityAt: '2026-07-09T08:00:00Z',
 }
-const SUPPORT_JOB = { id: 'job-1', ownerUserId: 'u-mike', title: 'Garden Room', jobType: 'garden_room', status: 'active', roughLocationOrLabel: null, createdAt: '', updatedAt: '' }
+const SUPPORT_JOB = { id: 'job-1', ownerUserId: 'u-mike', title: 'Garden Room', jobType: 'garden_room', status: 'started', roughLocationOrLabel: null, createdAt: '', updatedAt: '' }
 
 function memoryView(): MemoryViewResponse {
   return {

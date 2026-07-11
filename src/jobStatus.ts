@@ -1,9 +1,9 @@
 import type { EditableJobStatus, Job } from './types'
 
 const JOB_STATUS_LABELS: Record<Job['status'], string> = {
-  active: 'In progress',
-  paused: 'Paused',
-  completed: 'Finished',
+  planning: 'Planning',
+  started: 'Started',
+  finished: 'Finished',
   archived: 'Archived',
 }
 
@@ -18,10 +18,12 @@ export function jobStatusLabel(status: string): string {
   return JOB_STATUS_LABELS[status as Job['status']] ?? titleCase(status)
 }
 
-// The only statuses offered in the edit surface — archived is excluded (not
-// editable through this endpoint in this slice).
+// All four statuses are offered in the edit surface. Archived is last and
+// treated specially by the caller (requires explicit confirmation — it's an
+// archive action, not a delete, but it does remove the job from the normal list).
 export const EDITABLE_JOB_STATUSES: { value: EditableJobStatus; label: string }[] = [
-  { value: 'active', label: JOB_STATUS_LABELS.active },
-  { value: 'paused', label: JOB_STATUS_LABELS.paused },
-  { value: 'completed', label: JOB_STATUS_LABELS.completed },
+  { value: 'planning', label: JOB_STATUS_LABELS.planning },
+  { value: 'started', label: JOB_STATUS_LABELS.started },
+  { value: 'finished', label: JOB_STATUS_LABELS.finished },
+  { value: 'archived', label: JOB_STATUS_LABELS.archived },
 ]

@@ -31,7 +31,7 @@ const JOB_A: Job = {
   title: 'Garden Room',
   jobType: 'garden_room',
   roughLocationOrLabel: null,
-  status: 'active',
+  status: 'started',
   createdAt: '2026-06-01T08:00:00Z',
   updatedAt: '2026-06-10T09:00:00Z',
 }
@@ -41,7 +41,7 @@ const JOB_B: Job = {
   title: 'Kitchen Extension',
   jobType: 'extension',
   roughLocationOrLabel: null,
-  status: 'active',
+  status: 'started',
   createdAt: '2026-05-20T08:00:00Z',
   updatedAt: '2026-06-08T14:00:00Z',
 }

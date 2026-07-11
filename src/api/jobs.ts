@@ -30,7 +30,8 @@ export async function createJob(title: string, jobType?: JobType): Promise<Job> 
 }
 
 // PATCH /api/jobs/:jobId — owner-scoped job edit (title and/or status).
-// `archived` is not accepted through this endpoint in this slice.
+// `archived` is an archive action here, not a delete — it removes the job
+// from the normal job list but keeps its data.
 export async function patchJob(jobId: string, req: { title?: string; status?: EditableJobStatus }): Promise<Job> {
   if (USE_MOCK) return mockPatchJob(jobId, req)
   const res = await apiFetch(`/api/jobs/${jobId}`, {

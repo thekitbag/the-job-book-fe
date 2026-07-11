@@ -100,8 +100,8 @@ test.describe('Current job workspace', () => {
     expect(latestY).toBeGreaterThan(cardsY)
   })
 
-  test('job status shows "In progress" near the title', async ({ page }) => {
-    await expect(page.locator('.ws-header-titles')).toContainText('In progress')
+  test('job status shows "Started" near the title', async ({ page }) => {
+    await expect(page.locator('.ws-header-titles')).toContainText('Started')
   })
 
   test('Job so far shows the job-total labour hours, not just today', async ({ page }) => {

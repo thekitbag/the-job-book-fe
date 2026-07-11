@@ -548,10 +548,18 @@ export default function CurrentJobWorkspace({
                     <button
                       key={opt.value}
                       type="button"
-                      className={`ws-status-edit-opt${job.status === opt.value ? ' ws-status-edit-opt--current' : ''}`}
+                      className={`ws-status-edit-opt${job.status === opt.value ? ' ws-status-edit-opt--current' : ''}${opt.value === 'archived' ? ' ws-status-edit-opt--archive' : ''}`}
                       disabled={savingStatus !== null}
                       aria-pressed={job.status === opt.value}
-                      onClick={() => saveStatus(opt.value)}
+                      onClick={() => {
+                        // Archiving removes the job from the normal list — it's
+                        // an archive action, not a delete, but still needs
+                        // explicit confirmation before applying.
+                        if (opt.value === 'archived' && !window.confirm(
+                          `Archive "${job.title}"? It will be removed from your normal job list. Its data is kept and it stays visible to Support.`,
+                        )) return
+                        saveStatus(opt.value)
+                      }}
                     >
                       {savingStatus === opt.value ? 'Saving…' : opt.label}
                     </button>

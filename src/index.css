@@ -3400,6 +3400,7 @@ code {
 }
 .ws-status-edit-opt:active { background: var(--surface-sunk); }
 .ws-status-edit-opt--current { border-color: var(--green-600); color: var(--green-700); background: #e3f3e9; }
+.ws-status-edit-opt--archive { color: var(--danger); border-color: var(--danger); }
 .ws-status-edit-cancel {
   border: none;
   background: none;
