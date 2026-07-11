@@ -7,7 +7,7 @@ import { makeNote } from './helpers'
 import type { RecordingResult, UseRecorderReturn } from '../useRecorder'
 import type { UploadNoteResponse } from '../api'
 import type { Job, JobPhoto, MemoryViewResponse, ReviewQueue } from '../types'
-import { getBudgetSummary, getJobPhotos, getMemoryView, getReviewQueue } from '../api'
+import { getBudgetSummary, getJobPhotos, getMemoryView, getReviewQueue, patchJob } from '../api'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -504,5 +504,76 @@ describe('CurrentJobWorkspace — Record resilience', () => {
     vi.mocked(getJobPhotos).mockRejectedValue(new Error('photos down'))
     renderWorkspace()
     await waitFor(() => expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument())
+  })
+})
+
+// ── Job status editing ───────────────────────────────────────────────────────
+
+describe('CurrentJobWorkspace — status editing', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
+  })
+
+  async function openStatusEditor(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /status:.*change status/i }))
+  }
+
+  it('header displays the current status label', () => {
+    renderWorkspace()
+    expect(screen.getByText('In progress')).toBeInTheDocument()
+  })
+
+  it('a status edit affordance is available to a normal user', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusEditor(user)
+    expect(screen.getByRole('group', { name: /change status/i })).toBeInTheDocument()
+    for (const label of ['In progress', 'Paused', 'Finished']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
+    }
+  })
+
+  it('changing to Paused calls PATCH and adopts the returned job', async () => {
+    const onJobUpdated = vi.fn()
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'paused' })
+    const user = userEvent.setup()
+    renderWorkspace({ onJobUpdated })
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: 'Paused' }))
+    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'paused' }))
+    expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'paused' }))
+  })
+
+  it('changing to Finished keeps Record visible and does not navigate away', async () => {
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'completed' })
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: 'Finished' }))
+    await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'completed' }))
+    expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
+  })
+
+  it('PATCH failure keeps the previous status and shows a retryable error', async () => {
+    vi.mocked(patchJob).mockRejectedValue(new Error('boom'))
+    const onJobUpdated = vi.fn()
+    const user = userEvent.setup()
+    renderWorkspace({ onJobUpdated })
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: 'Paused' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not update status/i)
+    expect(onJobUpdated).not.toHaveBeenCalled()
+    // the previous confirmed status is still shown as the "current" option
+    expect(screen.getByRole('button', { name: 'In progress' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('cancelling the status editor restores the plain status chip', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusEditor(user)
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByRole('group', { name: /change status/i })).not.toBeInTheDocument()
+    expect(screen.getByText('In progress')).toBeInTheDocument()
   })
 })

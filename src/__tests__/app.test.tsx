@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import App from '../App'
 import { getJobs, logout, onUnauthorized, ApiError } from '../api'
 
@@ -28,15 +28,26 @@ vi.mock('../api', async (importOriginal) => {
   }
 })
 
+// Captures the most recently rendered instance's onJobUpdated + job, so a
+// test can invoke a *stale* (job-A-scoped) callback after switching to job B
+// — simulating a status PATCH that resolves after the user has moved on.
+let lastOnJobUpdated: ((job: { id: string; title: string; status: string }) => void) | null = null
+let lastRenderedJob: { id: string; title: string; status: string } | null = null
+
 vi.mock('../CurrentJobWorkspace', () => ({
-  default: ({ job, onOpenReviewQueue, onSwitchJob, onLogout }: { job: { id: string; title: string }; onOpenReviewQueue: () => void; onSwitchJob: () => void; onLogout: () => void }) => (
-    <div data-testid="workspace-screen" data-job-id={job.id}>
-      {job.title}
-      <button onClick={onOpenReviewQueue}>mock-open-queue</button>
-      <button onClick={onSwitchJob}>mock-switch-job</button>
-      <button onClick={onLogout}>mock-logout</button>
-    </div>
-  ),
+  default: ({ job, onOpenReviewQueue, onSwitchJob, onLogout, onJobUpdated }: { job: { id: string; title: string; status: string }; onOpenReviewQueue: () => void; onSwitchJob: () => void; onLogout: () => void; onJobUpdated?: (job: { id: string; title: string; status: string }) => void }) => {
+    lastOnJobUpdated = onJobUpdated ?? null
+    lastRenderedJob = job
+    return (
+      <div data-testid="workspace-screen" data-job-id={job.id} data-job-status={job.status}>
+        {job.title}
+        <button onClick={onOpenReviewQueue}>mock-open-queue</button>
+        <button onClick={onSwitchJob}>mock-switch-job</button>
+        <button onClick={onLogout}>mock-logout</button>
+        <button onClick={() => onJobUpdated?.({ ...job, status: 'paused' })}>mock-status-update</button>
+      </div>
+    )
+  },
 }))
 
 vi.mock('../ReviewQueueScreen', () => ({
@@ -335,5 +346,37 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('auth-screen')).not.toBeInTheDocument()
     window.history.pushState({}, '', originalLocation)
+  })
+
+  it('a job status update refreshes the header and the cached job list', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-status-update/i }))
+
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-status', 'paused'))
+    const cached = JSON.parse(localStorage.getItem(CACHED_JOBS_KEY)!) as typeof JOB_A[]
+    expect(cached.find(j => j.id === JOB_A.id)?.status).toBe('paused')
+  })
+
+  it('stale job-switch guard: a status update for job A cannot overwrite job B after switching', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+    expect(lastRenderedJob?.id).toBe(JOB_A.id)
+    // Capture job A's onJobUpdated before switching — this stands in for an
+    // in-flight PATCH promise from job A that hasn't resolved yet.
+    const staleOnJobUpdated = lastOnJobUpdated!
+
+    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
+    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
+    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
+
+    // Job A's stale status update resolves now, after the switch to job B.
+    act(() => { staleOnJobUpdated({ ...JOB_A, status: 'paused' }) })
+
+    // Job B must remain untouched — still selected, still its own status.
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id)
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-status', 'active')
   })
 })

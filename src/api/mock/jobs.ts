@@ -1,7 +1,9 @@
-import type { Job, JobType } from '../../types'
+import type { EditableJobStatus, Job, JobType } from '../../types'
 import { ApiError } from '../client'
 import { delay } from './util'
 import { getMockSession, MOCK_MIKE_EMAIL } from './auth'
+
+const EDITABLE_STATUSES: EditableJobStatus[] = ['active', 'paused', 'completed']
 
 export const MOCK_JOBS: Job[] = [
   {
@@ -24,9 +26,16 @@ export const MOCK_JOBS: Job[] = [
   },
 ]
 
+// Prefers the most recently updated active job, then paused, then completed —
+// archived jobs are never a "current" pick. Mirrors GET /api/jobs/current,
+// though the app UI currently drives selection via getJobs() + local pickJob().
 export async function mockGetCurrentJob(): Promise<Job> {
   await delay(200)
-  return MOCK_JOBS[0]
+  const byStatus = (s: Job['status']) =>
+    [...MOCK_JOBS].filter(j => j.status === s).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+  const job = byStatus('active') ?? byStatus('paused') ?? byStatus('completed')
+  if (!job) throw new ApiError('No jobs', 404)
+  return job
 }
 
 export async function mockGetJobs(): Promise<Job[]> {
@@ -34,7 +43,9 @@ export async function mockGetJobs(): Promise<Job[]> {
   // A signed-up mock account other than seeded Mike starts with no jobs.
   const session = getMockSession()
   if (session && session.email !== MOCK_MIKE_EMAIL) return []
-  return MOCK_JOBS
+  // Active/paused/completed jobs stay visible; archived never appears in the
+  // normal job list.
+  return MOCK_JOBS.filter(j => j.status !== 'archived')
 }
 
 export async function mockCreateJob(title: string, jobType?: JobType): Promise<Job> {
@@ -52,16 +63,23 @@ export async function mockCreateJob(title: string, jobType?: JobType): Promise<J
   return newJob
 }
 
-// Owner-scoped title edit, mirroring backend validation (trim, non-blank, ≤80).
-export async function mockPatchJob(jobId: string, req: { title?: string }): Promise<Job> {
+// Owner-scoped title/status edit, mirroring backend validation (title:
+// trim, non-blank, ≤80; status: one of active/paused/completed — archived
+// is rejected through this route, matching the backend contract).
+export async function mockPatchJob(jobId: string, req: { title?: string; status?: EditableJobStatus }): Promise<Job> {
   await delay(300)
   const job = MOCK_JOBS.find(j => j.id === jobId)
   if (!job) throw new ApiError('Job not found', 404)
+  if (req.title === undefined && req.status === undefined) throw new ApiError('No editable fields', 400)
   if (req.title !== undefined) {
     const title = req.title.trim()
     if (!title) throw new ApiError('Title is required', 400)
     if (title.length > 80) throw new ApiError('Title too long', 400)
     job.title = title
+  }
+  if (req.status !== undefined) {
+    if (!EDITABLE_STATUSES.includes(req.status)) throw new ApiError('Invalid status', 400)
+    job.status = req.status
   }
   job.updatedAt = new Date().toISOString()
   return { ...job }

@@ -12,7 +12,8 @@ import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
-import type { AuthUser, CandidateFact, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
+import { EDITABLE_JOB_STATUSES, jobStatusLabel } from './jobStatus'
+import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -43,24 +44,6 @@ const ACTIVITY_TAB: Record<LatestActivityType, Tab> = {
   labour: 'labour',
   note: 'notes',
   photo: 'notes',
-}
-
-const JOB_STATUS_LABELS: Record<Job['status'], string> = {
-  active: 'In progress',
-  completed: 'Finished',
-  archived: 'Archived',
-}
-
-// Sentence case: "on_hold" → "On hold" — a plain fallback for a status value
-// the frontend doesn't have specific copy for yet.
-function titleCase(s: string): string {
-  const words = s.replace(/[_-]+/g, ' ').trim().split(' ').filter(Boolean)
-  return words.map((w, i) => (i === 0 ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(' ')
-}
-
-// Display-only status label — no editing, no project-management lifecycle.
-function jobStatusLabel(status: string): string {
-  return JOB_STATUS_LABELS[status as Job['status']] ?? titleCase(status)
 }
 
 // ── Overview: Job so far ─────────────────────────────────────────────────────
@@ -285,11 +268,16 @@ export default function CurrentJobWorkspace({
   const [titleDraft, setTitleDraft] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
-  // Header overflow menu — Rename/Support/Log out live behind "⋯" so the
-  // title row never has to compete with them for width at phone size.
+  // Header overflow menu — Rename/Change status/Support/Log out live behind
+  // "⋯" so the title row never has to compete with them for width at phone size.
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
+  // Status editing (PATCH /api/jobs/:jobId). Failure keeps the previous
+  // confirmed status visible with a retryable inline error.
+  const [editingStatus, setEditingStatus] = useState(false)
+  const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
 
-  const startRename = () => { setTitleDraft(job.title); setTitleError(null); setRenaming(true) }
+  const startRename = () => { setTitleDraft(job.title); setTitleError(null); setEditingStatus(false); setRenaming(true) }
   const saveTitle = async () => {
     const title = titleDraft.trim()
     if (!title || title.length > 80 || savingTitle) return
@@ -303,6 +291,22 @@ export default function CurrentJobWorkspace({
       setTitleError('Could not rename — try again')
     } finally {
       setSavingTitle(false)
+    }
+  }
+
+  const startEditStatus = () => { setStatusError(null); setRenaming(false); setEditingStatus(true) }
+  const saveStatus = async (status: EditableJobStatus) => {
+    if (savingStatus) return
+    setSavingStatus(status)
+    setStatusError(null)
+    try {
+      const updated = await patchJob(job.id, { status })
+      onJobUpdated(updated)
+      setEditingStatus(false)
+    } catch {
+      setStatusError('Could not update status — try again')
+    } finally {
+      setSavingStatus(null)
     }
   }
   const { showBanner, isIosSafari, triggerInstall, dismiss: dismissInstall } = usePwaInstall()
@@ -538,7 +542,41 @@ export default function CurrentJobWorkspace({
               {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
                 <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
               )}
-              <span className={`ws-status-chip ws-status-chip--${job.status}`}>{jobStatusLabel(job.status)}</span>
+              {editingStatus ? (
+                <div className="ws-status-edit" role="group" aria-label="Change status">
+                  {EDITABLE_JOB_STATUSES.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`ws-status-edit-opt${job.status === opt.value ? ' ws-status-edit-opt--current' : ''}`}
+                      disabled={savingStatus !== null}
+                      aria-pressed={job.status === opt.value}
+                      onClick={() => saveStatus(opt.value)}
+                    >
+                      {savingStatus === opt.value ? 'Saving…' : opt.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="ws-status-edit-cancel"
+                    disabled={savingStatus !== null}
+                    onClick={() => { setEditingStatus(false); setStatusError(null) }}
+                  >
+                    Cancel
+                  </button>
+                  {statusError && <p className="queue-item-error" role="alert">{statusError}</p>}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={`ws-status-chip ws-status-chip--${job.status}`}
+                  onClick={startEditStatus}
+                  aria-label={`Status: ${jobStatusLabel(job.status)} — change status`}
+                >
+                  {jobStatusLabel(job.status)}
+                  <span className="ws-status-chip-chev" aria-hidden="true">▾</span>
+                </button>
+              )}
             </>
           )}
         </div>

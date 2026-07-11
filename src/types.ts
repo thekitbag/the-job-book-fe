@@ -42,11 +42,15 @@ export interface Job {
   id: string
   title: string
   jobType: JobType | string
-  status: 'active' | 'completed' | 'archived'
+  status: 'active' | 'paused' | 'completed' | 'archived'
   roughLocationOrLabel: string | null
   createdAt: string
   updatedAt: string
 }
+
+// Statuses editable through PATCH /api/jobs/:jobId in this slice — archived
+// is read-only here (not exposed as an edit option).
+export type EditableJobStatus = 'active' | 'paused' | 'completed'
 
 export type FactType =
   | 'ordered_material'
