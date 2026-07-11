@@ -177,7 +177,13 @@ function PhotoCard({ photo, linkTargets, onSave }: {
   )
 }
 
-export default function JobPhotosSection({ jobId, linkTargets }: { jobId: string; linkTargets: PhotoLinkTarget[] }) {
+export default function JobPhotosSection({ jobId, linkTargets, onPhotosChanged = () => {} }: {
+  jobId: string
+  linkTargets: PhotoLinkTarget[]
+  // Notifies a parent (e.g. Overview's latest activity) that the photo list
+  // changed, so it can refresh its own independent read of photos.
+  onPhotosChanged?: () => void
+}) {
   const [photos, setPhotos] = useState<JobPhoto[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
 
@@ -233,6 +239,7 @@ export default function JobPhotosSection({ jobId, linkTargets }: { jobId: string
       resetForm()
       setOpen(false)
       await load()
+      onPhotosChanged()
     } catch {
       setUploadError('Could not upload — check your connection and try again')
     } finally {

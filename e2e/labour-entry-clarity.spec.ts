@@ -73,7 +73,8 @@ test.describe('Labour entry point & budget clarity', () => {
 
   test('job title can be renamed and the new title persists across the app', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('button', { name: 'Rename' }).click()
+    await page.getByRole('button', { name: /more actions/i }).click()
+    await page.getByRole('menuitem', { name: /rename job/i }).click()
     const input = page.getByLabel('Job title')
     await expect(input).toHaveValue('Garden Room')
     await input.fill('Patel Garden Room')

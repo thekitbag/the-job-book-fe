@@ -5,6 +5,12 @@ import { test, expect } from '@playwright/test'
 // The home screen is now the current-job workspace: header + Overview/Spend/
 // Labour/Used/Notes tabs + a pinned Record bar.
 
+// 1×1 PNG bytes for a real file upload through the picker.
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNsaGj4DwAFhAJ/lY0V5AAAAABJRU5ErkJggg==',
+  'base64',
+)
+
 test.describe('Current job workspace', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
@@ -32,6 +38,30 @@ test.describe('Current job workspace', () => {
     }
   })
 
+  test('all five tabs fit on one row without horizontal scroll at phone width', async ({ page }) => {
+    // A scrolled-off tab has no visible affordance on a phone and just stops
+    // getting used — the tab bar must never need horizontal scrolling.
+    const tabs = page.locator('.ws-tabs')
+    const scrollWidth = await tabs.evaluate(el => el.scrollWidth)
+    const clientWidth = await tabs.evaluate(el => el.clientWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+    for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
+      const box = await page.getByRole('tab', { name: t }).boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(clientWidth + 1)
+    }
+  })
+
+  test('job title never wraps into a vertical character column', async ({ page }) => {
+    const title = page.locator('.ws-job-title')
+    const box = await title.boundingBox()
+    // A collapsed/crushed title renders far taller than wide relative to its
+    // own font size — guard against the flex-shrink regression seen earlier.
+    expect(box).not.toBeNull()
+    expect(box!.width).toBeGreaterThan(box!.height)
+  })
+
   test('Switch is visible from the workspace', async ({ page }) => {
     await expect(page.getByRole('button', { name: /switch/i })).toBeVisible()
   })
@@ -56,18 +86,76 @@ test.describe('Current job workspace', () => {
   test('Overview known spend uses total known cost (bought + labour)', async ({ page }) => {
     await page.waitForTimeout(700)
     // £2270 = bought + trusted labour, the job-level total known cost.
-    await expect(page.locator('.ws-card--spend')).toContainText('£2270')
+    await expect(page.getByRole('button', { name: /known spend — open spend/i })).toContainText('£2270')
   })
 
-  test('latest activity sits below the summary cards', async ({ page }) => {
+  test('latest activity sits below the Job so far summary', async ({ page }) => {
     await page.waitForTimeout(700)
-    const cards = page.locator('.ws-overview-cards')
-    const latest = page.locator('.ws-latest')
+    const cards = page.locator('.ws-jsf-card')
+    const latest = page.locator('.ws-latest-card')
     await expect(cards).toBeVisible()
     await expect(latest).toBeVisible()
     const cardsY = await cards.boundingBox().then(b => b?.y ?? 0)
     const latestY = await latest.boundingBox().then(b => b?.y ?? 0)
     expect(latestY).toBeGreaterThan(cardsY)
+  })
+
+  test('job status shows "In progress" near the title', async ({ page }) => {
+    await expect(page.locator('.ws-header-titles')).toContainText('In progress')
+  })
+
+  test('Job so far shows the job-total labour hours, not just today', async ({ page }) => {
+    await page.waitForTimeout(700)
+    const labourRow = page.getByRole('button', { name: /labour hours — open labour/i })
+    await expect(labourRow).toContainText(/\d+h/)
+  })
+
+  test('Overview does not show a days-since-start metric', async ({ page }) => {
+    const bodyText = await page.locator('body').textContent()
+    expect(bodyText).not.toMatch(/days? since start/i)
+  })
+
+  test('latest activity rows show a type, date and time, and open the right tab on tap', async ({ page }) => {
+    await page.waitForTimeout(700)
+    const rows = page.locator('.ws-latest-row')
+    const firstRow = rows.first()
+    await expect(firstRow).toBeVisible()
+    const typeLabel = await firstRow.locator('.ws-type-chip').textContent()
+    await expect(firstRow.locator('.ws-latest-time')).toHaveText(/\d{2}:\d{2}/)
+
+    // Tab-per-type mapping mirrors CurrentJobWorkspace's ACTIVITY_TAB.
+    const expectedTab: Record<string, string> = {
+      Bought: 'Spend', Labour: 'Labour', Used: 'Used', Note: 'Notes', Photo: 'Notes',
+    }
+    await firstRow.click()
+    const tabName = expectedTab[typeLabel!.trim()]
+    await expect(page.getByRole('tab', { name: tabName })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('a newly uploaded photo appears in the Notes tab with a Photo latest-activity entry when it is the newest item', async ({ page }) => {
+    // The garden-room mock always seeds same-day labour entries, so a fresh
+    // upload isn't guaranteed to be the very newest row — assert it lands in
+    // Notes (the durable, ranking-independent proof) and, if it does surface
+    // in the top-5 latest feed, that it renders correctly there too.
+    await page.getByRole('tab', { name: 'Notes' }).click()
+    await page.waitForTimeout(700)
+    const photos = page.getByRole('region', { name: /job photos/i })
+    await photos.getByRole('button', { name: 'Add photo' }).click()
+    const form = photos.getByRole('form', { name: 'Add photo' })
+    await form.locator('input[type="file"]').setInputFiles({ name: 'site.png', mimeType: 'image/png', buffer: PNG })
+    await form.getByLabel(/what is it/i).fill('Front elevation')
+    await form.getByRole('button', { name: 'Save photo' }).click()
+    await page.waitForTimeout(900)
+    await expect(photos.getByText('Front elevation')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Overview' }).click()
+    await page.waitForTimeout(700)
+    const photoRow = page.locator('.ws-latest-row', { hasText: 'Front elevation' })
+    if (await photoRow.isVisible().catch(() => false)) {
+      await expect(photoRow.locator('.ws-type-chip')).toHaveText('Photo')
+      await photoRow.click()
+      await expect(page.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true')
+    }
   })
 
   test('no file size on the normal workspace', async ({ page }) => {

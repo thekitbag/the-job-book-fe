@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getDraftFacts, getReviewQueue, patchJob } from './api'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { getDraftFacts, getJobPhotos, getReviewQueue, patchJob } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
 import { useTranscriptPoll } from './useTranscriptPoll'
 import { usePwaInstall } from './usePwaInstall'
 import { useJobMemory } from './useJobMemory'
-import { deriveLabourToday, deriveLatestActivity, formatMoney } from './memoryScan'
+import { deriveLatestActivity, formatMoney, mergeLatestActivityWithPhotos } from './memoryScan'
 import SpendTab from './SpendTab'
 import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
-import SourceHistory, { formatDuration } from './SourceHistory'
-import type { AuthUser, CandidateFact, Job, LabourTodaySummary, LatestActivityItem, LocalNote, TotalKnownCost } from './types'
+import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
+import type { AuthUser, CandidateFact, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -35,58 +35,97 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'notes', label: 'Notes' },
 ]
 
-function relativeAge(iso: string, now = Date.now()): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const days = Math.floor((now - then) / 86_400_000)
-  return days <= 0 ? 'today' : `${days}d`
+// Where a latest-activity row's underlying detail lives. Tab-level navigation
+// is the v1 minimum (spec allows this); item-level reveal is a follow-up.
+const ACTIVITY_TAB: Record<LatestActivityType, Tab> = {
+  bought: 'spend',
+  used: 'used',
+  labour: 'labour',
+  note: 'notes',
+  photo: 'notes',
 }
 
-// ── Overview cards ──────────────────────────────────────────────────────────
+const JOB_STATUS_LABELS: Record<Job['status'], string> = {
+  active: 'In progress',
+  completed: 'Finished',
+  archived: 'Archived',
+}
 
-function KnownSpendCard({ total, budgetAmount, onOpen }: {
+// Sentence case: "on_hold" → "On hold" — a plain fallback for a status value
+// the frontend doesn't have specific copy for yet.
+function titleCase(s: string): string {
+  const words = s.replace(/[_-]+/g, ' ').trim().split(' ').filter(Boolean)
+  return words.map((w, i) => (i === 0 ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(' ')
+}
+
+// Display-only status label — no editing, no project-management lifecycle.
+function jobStatusLabel(status: string): string {
+  return JOB_STATUS_LABELS[status as Job['status']] ?? titleCase(status)
+}
+
+// ── Overview: Job so far ─────────────────────────────────────────────────────
+// One consolidated card, row-per-signal — not a grid of separate stat cards.
+
+function JobSoFar({ total, budgetAmount, labourHours, onOpenSpend, onOpenLabour }: {
   total: TotalKnownCost | null
   budgetAmount: string | null
-  onOpen: () => void
+  labourHours: LabourHoursSummary | null
+  onOpenSpend: () => void
+  onOpenLabour: () => void
 }) {
   const known = total?.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
   const budget = budgetAmount ? parseFloat(budgetAmount) : null
   const hasBudget = budget !== null && budget > 0
   const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
+  const hasHours = labourHours?.totalHours != null
+
   return (
-    <button type="button" className="ws-card ws-card--spend" onClick={onOpen} aria-label="Known spend — open Spend">
-      <span className="ws-card-cap">Known spend</span>
-      <span className="ws-card-amount">{total?.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}</span>
-      {hasBudget && <span className="ws-card-bar"><span style={{ width: `${pct}%` }} /></span>}
-      <span className="ws-card-sub">
-        {hasBudget ? `of ${formatMoney(budget!, 'GBP')} · ` : 'No budget yet · '}Spend ›
-      </span>
-    </button>
+    <section className="ws-jsf" aria-label="Job so far">
+      <h2 className="mem-section-heading">Job so far</h2>
+      <div className="ws-jsf-card">
+        <button type="button" className="ws-jsf-row" onClick={onOpenSpend} aria-label="Known spend — open Spend">
+          <span className="ws-jsf-row-top">
+            <span className="ws-jsf-label">Known spend</span>
+            <span className="ws-jsf-value">
+              {total?.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}
+              {hasBudget && <span className="ws-jsf-value-of"> of {formatMoney(budget!, 'GBP')}</span>}
+            </span>
+          </span>
+          {hasBudget && <span className="ws-card-bar"><span style={{ width: `${pct}%` }} /></span>}
+        </button>
+        <div className="ws-jsf-divider" />
+        <button type="button" className="ws-jsf-row" onClick={onOpenLabour} aria-label="Labour hours — open Labour">
+          <span className="ws-jsf-row-top">
+            <span className="ws-jsf-label">Labour hours</span>
+            <span className="ws-jsf-value">{hasHours ? `${labourHours!.totalHours}h` : 'None yet'}</span>
+          </span>
+        </button>
+      </div>
+    </section>
   )
 }
 
-function LabourTodayCard({ summary, onOpen }: { summary: LabourTodaySummary; onOpen: () => void }) {
-  const people = summary.perPerson.map(p => `${p.person} ${p.hours}`).join(' · ')
-  return (
-    <button type="button" className="ws-card ws-card--labour" onClick={onOpen} aria-label="Labour today — open Labour">
-      <span className="ws-card-cap">Labour today</span>
-      <span className="ws-card-amount">{summary.hasHours ? `${summary.totalHours}h` : 'None yet'}</span>
-      <span className="ws-card-sub">{people ? `${people} · ` : ''}Labour ›</span>
-    </button>
-  )
-}
-
-function LatestActivity({ items }: { items: LatestActivityItem[] }) {
+function LatestActivity({ items, onOpenItem }: { items: LatestActivityItem[]; onOpenItem: (item: LatestActivityItem) => void }) {
   if (items.length === 0) return null
   return (
     <section className="ws-latest" aria-label="Latest on this job">
-      <p className="ws-latest-heading">Latest on this job</p>
-      <ul className="ws-latest-list">
+      <h2 className="mem-section-heading">Latest on this job</h2>
+      <ul className="ws-latest-card">
         {items.map(item => (
-          <li key={item.memoryItemId} className="ws-latest-row">
-            <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
-            <span className="ws-latest-headline">{item.headline}</span>
-            <span className="ws-latest-right">{item.costLabel ?? relativeAge(item.effectiveAt)}</span>
+          <li key={item.memoryItemId}>
+            <button
+              type="button"
+              className="ws-latest-row"
+              onClick={() => onOpenItem(item)}
+              aria-label={`${item.typeLabel}: ${item.headline}`}
+            >
+              <span className="ws-latest-top">
+                <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
+                <span className="ws-latest-headline">{item.headline}</span>
+                {item.costLabel && <span className="ws-latest-right">{item.costLabel}</span>}
+              </span>
+              <span className="ws-latest-time">{formatSavedStamp(item.effectiveAt)}</span>
+            </button>
           </li>
         ))}
       </ul>
@@ -246,6 +285,9 @@ export default function CurrentJobWorkspace({
   const [titleDraft, setTitleDraft] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
+  // Header overflow menu — Rename/Support/Log out live behind "⋯" so the
+  // title row never has to compete with them for width at phone size.
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
 
   const startRename = () => { setTitleDraft(job.title); setTitleError(null); setRenaming(true) }
   const saveTitle = async () => {
@@ -306,6 +348,23 @@ export default function CurrentJobWorkspace({
 
   useEffect(() => { loadQueue() }, [loadQueue])
 
+  // Latest activity's photo rows — loaded independently of JobPhotosSection's
+  // own Notes-tab fetch. Failure quietly omits photos rather than blocking
+  // Overview or Record. Stale-job guarded like JobPhotosSection; re-run after
+  // JobPhotosSection reports a change (e.g. a new upload) so Overview reflects it.
+  const [photos, setPhotos] = useState<JobPhoto[]>([])
+  const currentJobIdRef = useRef(job.id)
+  currentJobIdRef.current = job.id
+
+  const loadPhotos = useCallback(() => {
+    const requestedJobId = job.id
+    getJobPhotos(requestedJobId)
+      .then(res => { if (currentJobIdRef.current === requestedJobId) setPhotos(res.photos) })
+      .catch(() => { if (currentJobIdRef.current === requestedJobId) setPhotos([]) })
+  }, [job.id])
+
+  useEffect(() => { loadPhotos() }, [loadPhotos])
+
   const readyExtractionCount = notes.filter(
     n => n.localState === 'uploaded' && n.extractionStatus === 'ready',
   ).length
@@ -364,13 +423,9 @@ export default function CurrentJobWorkspace({
     setShowExplainer(false)
   }, [])
 
-  const labourToday = useMemo(
-    () => deriveLabourToday(mem.data?.sections ?? []),
-    [mem.data],
-  )
   const latest = useMemo(
-    () => deriveLatestActivity(mem.data?.sections ?? []),
-    [mem.data],
+    () => mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 20), photos),
+    [mem.data, photos],
   )
 
   // Photo link targets: trusted memory items only — review-queue drafts are
@@ -394,10 +449,12 @@ export default function CurrentJobWorkspace({
         </button>
       )
     }
-    const quiet = queueLoadState === 'loading'
-      ? 'Still looking for useful job facts'
-      : 'Nothing to check'
-    return <p className="ws-ttc-quiet">{quiet}</p>
+    // Nothing pending (or the queue failed to load): quiet omission, not a
+    // "Nothing to check" block — only the transient loading state gets copy.
+    if (queueLoadState === 'loading') {
+      return <p className="ws-ttc-quiet">Still looking for useful job facts</p>
+    }
+    return null
   }
 
   // Memory-dependent tabs share one load/error gate so a memory-view failure
@@ -419,11 +476,40 @@ export default function CurrentJobWorkspace({
 
   return (
     <div className="ws-page">
-      {mem.openMenuCatId && (
-        <div className="mem-menu-scrim" onClick={() => mem.setOpenMenuCatId(null)} aria-hidden="true" />
+      {(mem.openMenuCatId || headerMenuOpen) && (
+        <div
+          className="mem-menu-scrim"
+          onClick={() => { mem.setOpenMenuCatId(null); setHeaderMenuOpen(false) }}
+          aria-hidden="true"
+        />
       )}
 
       <header className="ws-header">
+        <div className="ws-header-top">
+          <button type="button" className="btn-switch-job" onClick={onSwitchJob}>‹ Switch job</button>
+          <div className="ws-header-top-right">
+            {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
+            <div className="ws-header-menu-wrap">
+              <button
+                type="button"
+                className="btn-header-menu"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={headerMenuOpen}
+                onClick={() => setHeaderMenuOpen(o => !o)}
+              >⋯</button>
+              {headerMenuOpen && (
+                <div className="ws-header-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); startRename() }}>Rename job</button>
+                  {user?.role === 'INTERNAL' && (
+                    <a role="menuitem" href="/internal/support" onClick={() => setHeaderMenuOpen(false)}>Support</a>
+                  )}
+                  <button type="button" role="menuitem" className="ws-header-menu-danger" onClick={() => { setHeaderMenuOpen(false); onLogout() }}>Log out</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
         <div className="ws-header-titles">
           {renaming ? (
             <form className="ws-rename-form" aria-label="Rename job" onSubmit={e => { e.preventDefault(); void saveTitle() }}>
@@ -447,22 +533,14 @@ export default function CurrentJobWorkspace({
             </form>
           ) : (
             <>
-              <div className="ws-job-title-row">
-                <h1 className="ws-job-title">{job.title}</h1>
-                <button type="button" className="btn-rename-job" onClick={startRename}>Rename</button>
-              </div>
+              <h1 className="ws-job-title">{job.title}</h1>
               {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
               {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
                 <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
               )}
+              <span className={`ws-status-chip ws-status-chip--${job.status}`}>{jobStatusLabel(job.status)}</span>
             </>
           )}
-        </div>
-        <div className="ws-header-actions">
-          {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
-          {user?.role === 'INTERNAL' && <a className="btn-support-entry" href="/internal/support">Support</a>}
-          <button className="btn-switch-job" onClick={onSwitchJob}>Switch ›</button>
-          <button className="btn-logout" onClick={onLogout}>Log out</button>
         </div>
       </header>
 
@@ -501,15 +579,14 @@ export default function CurrentJobWorkspace({
               <p className="mem-loading">Loading…</p>
             ) : (
               <>
-                <div className="ws-overview-cards">
-                  <KnownSpendCard
-                    total={mem.totalKnownCost}
-                    budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
-                    onOpen={() => setTab('spend')}
-                  />
-                  <LabourTodayCard summary={labourToday} onOpen={() => setTab('labour')} />
-                </div>
-                <LatestActivity items={latest} />
+                <JobSoFar
+                  total={mem.totalKnownCost}
+                  budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
+                  labourHours={mem.labourHours}
+                  onOpenSpend={() => setTab('spend')}
+                  onOpenLabour={() => setTab('labour')}
+                />
+                <LatestActivity items={latest} onOpenItem={item => setTab(ACTIVITY_TAB[item.type])} />
               </>
             )}
 
@@ -545,7 +622,7 @@ export default function CurrentJobWorkspace({
             sectionKeys={NOTES_SECTION_KEYS}
             ariaLabel="Notes"
             directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }}
-            footer={<JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} />}
+            footer={<JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />}
           />,
         )}
       </div>

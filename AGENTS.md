@@ -123,6 +123,7 @@ Do not use superseded briefs unless the tech lead explicitly reactivates them. D
 ## Implementation Standards
 
 - Use TypeScript.
+- Start with failing tests for the core acceptance criteria before implementing the feature when the expected behaviour or API contract is known. This is required by default for bug fixes, auth/data-boundary work, save/refetch flows, and cross-repo contract behaviour. For exploratory visual layout, you may sketch first, but lock the agreed behaviour with tests before handoff. In your handoff, identify which tests failed before implementation and now pass. If you cannot write tests first, explain why.
 - Prefer React and Vite unless a tech brief changes the stack.
 - Use IndexedDB for durable local audio capture; do not rely on React state for unsynced audio.
 - Use stable `clientNoteId` values for upload retry/idempotency.

@@ -3323,12 +3323,18 @@ code {
 /* — Header — */
 .ws-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 1.1rem 0 0.6rem;
 }
-.ws-header-titles { min-width: 0; }
+.ws-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.ws-header-top-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+.ws-header-titles { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
 .ws-job-title {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
@@ -3337,50 +3343,71 @@ code {
   color: var(--ink-900);
   margin: 0;
   overflow-wrap: anywhere;
+  width: 100%;
 }
 .ws-job-location {
-  margin: 0.2rem 0 0;
+  margin: 0;
   color: var(--ink-500);
   font-size: var(--text-md);
 }
-.ws-header-actions {
+.ws-status-chip {
+  flex-shrink: 0;
+  border-radius: var(--r-pill);
+  padding: 0.2rem 0.6rem;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  background: var(--surface-sunk);
+  color: var(--ink-700);
+}
+.ws-status-chip--active { background: #e3f3e9; color: var(--green-700); }
+.ws-status-chip--completed { background: #e7eefb; color: #2b5fb3; }
+.ws-status-chip--archived { background: var(--surface-sunk); color: var(--ink-500); }
+
+/* Plain text back-link, not a pill — matches "‹ Switch job" in the approved mockup */
+.btn-switch-job {
+  border: none;
+  background: none;
+  color: var(--ink-700);
+  padding: 0.4rem 0.2rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  min-height: 40px;
+}
+.btn-switch-job:active { color: var(--ink-900); }
+
+/* Header overflow menu — Rename/Support/Log out, tucked behind "⋯" so the
+   title row never competes with them for width. Mirrors .budget-cat-menu. */
+.ws-header-menu-wrap { position: relative; flex-shrink: 0; }
+.btn-header-menu {
+  width: 40px; height: 40px; border: 1px solid var(--line-strong); background: var(--surface);
+  cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--ink-700); border-radius: var(--r-pill);
+}
+.btn-header-menu:active { background: var(--surface-sunk); }
+.ws-header-menu {
+  position: absolute; right: 0; top: 46px; z-index: 30;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 160px; overflow: hidden;
+}
+.ws-header-menu button, .ws-header-menu a {
+  display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: var(--text-sm); font-weight: 700; color: var(--ink-900); padding: 0.8rem 0.9rem;
+  min-height: 48px; text-decoration: none; box-sizing: border-box;
+}
+.ws-header-menu button:active, .ws-header-menu a:active { background: var(--surface-sunk); }
+.ws-header-menu-danger { color: var(--danger); border-top: 1px solid var(--line) !important; }
+
+/* — Tab row: segmented pill tabs, active = solid dark pill —
+   All 5 must fit without horizontal scroll: a scrolled-off tab has no
+   visible affordance on a phone and simply stops getting used. Only the
+   active tab carries pill padding; inactive tabs are plain, tightly spaced
+   text so five labels comfortably fit at 390px width. */
+.ws-tabs {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-shrink: 0;
-}
-.btn-switch-job {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--ink-700);
-  border-radius: var(--r-pill);
-  padding: 0.45rem 0.85rem;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  min-height: 40px;
-}
-.btn-switch-job:active { background: var(--surface-sunk); }
-
-/* Reachable but unobtrusive — plain text, no border, secondary to Switch */
-.btn-logout {
-  border: none;
-  background: none;
-  color: var(--ink-500);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  text-decoration: underline;
-  padding: 0.45rem 0.5rem;
-  min-height: 40px;
-}
-.btn-logout:active { color: var(--ink-700); }
-
-/* — Tab row: full-width underline tabs, brand-green active — */
-.ws-tabs {
-  display: flex;
   width: 100%;
-  /* stretch edge-to-edge so the underline rule spans the whole width */
   margin: 0 -1rem;
-  padding: 0 1rem;
+  padding: 0.2rem 1rem 0.6rem;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -3388,25 +3415,24 @@ code {
   z-index: 5;
 }
 .ws-tab {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   border: none;
   background: none;
-  color: var(--ink-500);
-  padding: 0.75rem 0.2rem;
+  color: var(--ink-700);
+  padding: 0.5rem 0.35rem;
   font-size: var(--text-sm);
   font-weight: 700;
-  text-align: center;
   white-space: nowrap;
-  border-bottom: 2.5px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  border-radius: var(--r-pill);
+  transition: background-color 0.12s ease, color 0.12s ease, padding 0.12s ease;
 }
-.ws-tab:active { color: var(--ink-700); }
+.ws-tab:active { background: var(--surface-sunk); }
 .ws-tab--active {
-  color: var(--green-700);
-  border-bottom-color: var(--green-600);
+  background: var(--ink-900);
+  color: #fff;
+  padding: 0.5rem 0.85rem;
 }
+.ws-tab--active:active { background: var(--ink-900); }
 
 .ws-body { padding-top: 0.85rem; }
 .ws-overview { display: flex; flex-direction: column; gap: 1rem; }
@@ -3439,41 +3465,42 @@ code {
   padding: 0.2rem 0.1rem;
 }
 
-/* — Overview summary cards — */
-.ws-overview-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-.ws-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.3rem;
-  text-align: left;
+/* — Job so far: one consolidated card, row-per-signal — */
+.ws-jsf { display: flex; flex-direction: column; gap: 0.5rem; }
+.ws-jsf-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
-  padding: 1rem;
-  min-height: 128px;
+  overflow: hidden;
 }
-.ws-card:active { background: var(--surface-sunk); }
-.ws-card-cap {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  color: var(--ink-500);
-  font-weight: 600;
+.ws-jsf-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.9rem 1rem;
 }
-.ws-card-amount {
+.ws-jsf-row:active { background: var(--surface-sunk); }
+.ws-jsf-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.ws-jsf-label { color: var(--ink-700); font-size: var(--text-md); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.ws-jsf-value {
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
+  font-size: var(--text-xl);
   font-weight: 800;
   color: var(--ink-900);
-  line-height: 1;
-  margin-top: 0.1rem;
+  text-align: right;
 }
+.ws-jsf-value-of { font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600; color: var(--ink-500); }
+.ws-jsf-divider { border-top: 1px solid var(--line); margin: 0 1rem; }
 .ws-card-bar {
   display: block;
   width: 100%;
@@ -3481,7 +3508,7 @@ code {
   border-radius: var(--r-pill);
   background: var(--line-strong);
   overflow: hidden;
-  margin: 0.25rem 0 0.1rem;
+  margin: 0.5rem 0 0;
 }
 .ws-card-bar > span {
   display: block;
@@ -3489,31 +3516,31 @@ code {
   background: var(--green-600);
   border-radius: var(--r-pill);
 }
-.ws-card-sub {
-  color: var(--ink-500);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  margin-top: auto;
-}
 
 /* — Latest on this job — */
-.ws-latest {
+.ws-latest { display: flex; flex-direction: column; gap: 0.5rem; }
+.ws-latest-card {
+  list-style: none; margin: 0; padding: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
-  padding: 1rem;
+  overflow: hidden;
 }
-.ws-latest-heading {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  color: var(--ink-500);
-  font-weight: 600;
-  margin: 0 0 0.65rem;
-}
-.ws-latest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.ws-latest-card li + li { border-top: 1px solid var(--line); }
 .ws-latest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0.8rem 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ws-latest-row:active { background: var(--surface-sunk); }
+.ws-latest-top {
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -3526,11 +3553,16 @@ code {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.ws-latest-time {
+  color: var(--ink-500);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
 .ws-latest-right {
   flex-shrink: 0;
-  color: var(--ink-500);
+  color: var(--ink-900);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 800;
 }
 .ws-type-chip {
   flex-shrink: 0;
@@ -3543,6 +3575,7 @@ code {
 }
 .ws-type-chip--labour { background: #eae6fb; color: #5a44b3; }
 .ws-type-chip--note   { background: #eef1f4; color: var(--ink-700); }
+.ws-type-chip--photo  { background: #fdeee0; color: #b3612b; }
 
 .mem-section-summary {
   font-weight: 800;
@@ -4148,12 +4181,7 @@ code {
 .labour-historical-note { margin: 0.2rem 0 0.5rem; }
 
 /* Job title rename */
-.ws-job-title-row { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
-.btn-rename-job {
-  font: inherit; font-size: var(--text-2xs); font-weight: 800; flex-shrink: 0;
-  color: var(--green-700); background: none; border: none; cursor: pointer; padding: 0.15rem 0;
-}
-.ws-rename-form { display: flex; flex-direction: column; gap: 0.4rem; }
+.ws-rename-form { display: flex; flex-direction: column; gap: 0.4rem; width: 100%; }
 .ws-rename-input {
   font: inherit; font-size: var(--text-lg); font-weight: 700;
   border: 1px solid var(--line-strong); border-radius: var(--r-md);

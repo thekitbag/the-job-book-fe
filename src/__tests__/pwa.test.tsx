@@ -19,6 +19,7 @@ vi.mock('../api', () => ({
   getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
   getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-pilot-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
+  getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-pilot-001', photos: [] })),
 }))
 
 vi.mock('../useRecorder', () => {

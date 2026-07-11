@@ -14,8 +14,12 @@ async function loginAsFounder(page: Page) {
   await page.goto('/')
   await page.waitForTimeout(800)
   await dismissIntro(page)
-  const logout = page.getByRole('button', { name: /log out/i })
-  if (await logout.isVisible().catch(() => false)) { await logout.click(); await page.waitForTimeout(600) }
+  const menuButton = page.getByRole('button', { name: /more actions/i })
+  if (await menuButton.isVisible().catch(() => false)) {
+    await menuButton.click()
+    await page.getByRole('menuitem', { name: /log out/i }).click()
+    await page.waitForTimeout(600)
+  }
   await page.getByLabel(/email/i).fill('founder@thejobbook.test')
   await page.getByLabel(/password/i).fill('demo')
   await page.getByRole('button', { name: /log in/i }).click()
