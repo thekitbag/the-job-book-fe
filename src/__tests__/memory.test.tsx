@@ -380,6 +380,85 @@ describe('Workspace — manage budgets (Spend tab)', () => {
     fireEvent.click(within(clad).getByRole('menuitem', { name: /remove category/i }))
     expect(mockPatchBudgetCategory).not.toHaveBeenCalled()
   })
+
+  // Regression guard for the budget-before-spend fix (PR #51): the Budget
+  // categories section now renders unconditionally rather than only inside
+  // the hasSpendContent branch — confirm that doesn't leave a second
+  // "+ Add budget category" control behind when spend already exists.
+  it('shows exactly one Add-budget-category control when spend already exists', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    await spendHero()
+    expect(screen.getAllByRole('button', { name: /add budget category/i })).toHaveLength(1)
+  })
+})
+
+// Regression: budget setup must not require spend to exist first — a job
+// with no ordered/labour spend and no categories yet still needs a way to
+// create its first budget category.
+describe('Workspace — budget setup before spend', () => {
+  const CAT_MATERIALS: BudgetCategory = { id: 'c-new', jobId: 'job-mem-001', name: 'Materials', budgetAmount: '500', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' }
+  const BUDGET_WITH_EMPTY_CATEGORY: BudgetSummaryResponse = {
+    jobId: 'job-mem-001', generatedAt: '',
+    categories: [{ category: CAT_MATERIALS, knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, budgetAmount: '500', budgetCurrency: 'GBP', budgetLabel: '£500 budget', remainingAmount: '500', remainingLabel: '£500 remaining', overBudget: false, rows: [] }],
+    uncategorized: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, rows: [] },
+    totals: { budgetAmount: '500', budgetCurrency: 'GBP', knownSpendAmount: null, knownSpendCurrency: null, remainingAmount: '500', remainingLabel: '£500 remaining', overBudget: false },
+  }
+
+  it('a job with no spend and no categories still shows a way to add a budget category', async () => {
+    mockGetMemoryView.mockResolvedValue(EMPTY_MEMORY_VIEW)
+    mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
+    renderWorkspace()
+    openTab('Spend')
+    await screen.findByText(/Nothing spent yet/i)
+    expect(screen.getByRole('button', { name: /add budget category/i })).toBeInTheDocument()
+  })
+
+  it('adding a category before any spend renders an empty category card with budget copy and an Add-to action', async () => {
+    mockGetMemoryView.mockResolvedValue(EMPTY_MEMORY_VIEW)
+    mockGetBudgetSummary.mockResolvedValueOnce(EMPTY_BUDGET).mockResolvedValue(BUDGET_WITH_EMPTY_CATEGORY)
+    mockCreateBudgetCategory.mockResolvedValue(CAT_MATERIALS)
+    renderWorkspace()
+    openTab('Spend')
+    await screen.findByText(/Nothing spent yet/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /add budget category/i }))
+    const form = screen.getByRole('form', { name: /budget category/i })
+    fireEvent.change(form.querySelector('input[name="categoryName"]')!, { target: { value: 'Materials' } })
+    fireEvent.change(form.querySelector('input[name="budgetAmount"]')!, { target: { value: '500' } })
+    fireEvent.click(screen.getByRole('button', { name: /save category/i }))
+
+    await waitFor(() => expect(mockCreateBudgetCategory).toHaveBeenCalledWith('job-mem-001', { name: 'Materials', budgetAmount: '500' }))
+    const card = await screen.findByRole('region', { name: /budget category materials/i })
+    expect(within(card).getByText('None yet')).toBeInTheDocument()
+    expect(within(card).getByText('£500 budget')).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: /add to materials/i })).toBeInTheDocument()
+  })
+
+  it('category creation failure keeps the form open with entered values and shows a retryable error', async () => {
+    mockGetMemoryView.mockResolvedValue(EMPTY_MEMORY_VIEW)
+    mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
+    mockCreateBudgetCategory.mockRejectedValue(new Error('network error'))
+    renderWorkspace()
+    openTab('Spend')
+    await screen.findByText(/Nothing spent yet/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /add budget category/i }))
+    const form = screen.getByRole('form', { name: /budget category/i })
+    fireEvent.change(form.querySelector('input[name="categoryName"]')!, { target: { value: 'Materials' } })
+    fireEvent.change(form.querySelector('input[name="budgetAmount"]')!, { target: { value: '500' } })
+    fireEvent.click(screen.getByRole('button', { name: /save category/i }))
+
+    await screen.findByText(/could not add category/i)
+    // the form is still open with the entered values, not reset/closed
+    const stillOpenForm = screen.getByRole('form', { name: /budget category/i })
+    expect((stillOpenForm.querySelector('input[name="categoryName"]') as HTMLInputElement).value).toBe('Materials')
+    expect((stillOpenForm.querySelector('input[name="budgetAmount"]') as HTMLInputElement).value).toBe('500')
+    // Record stays available throughout (this test env has no mic support,
+    // so the bar renders its "not supported" copy rather than the button —
+    // the point is the bar itself is never hidden by the category failure).
+    expect(document.querySelector('.ws-record-bar')).toBeInTheDocument()
+  })
 })
 
 describe('Workspace — assign / fix / verify', () => {
