@@ -3323,11 +3323,17 @@ code {
 /* — Header — */
 .ws-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 1.1rem 0 0.6rem;
 }
+.ws-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.ws-header-top-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
 .ws-header-titles { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
 .ws-job-title {
   font-family: var(--font-display);
@@ -3337,6 +3343,7 @@ code {
   color: var(--ink-900);
   margin: 0;
   overflow-wrap: anywhere;
+  width: 100%;
 }
 .ws-job-location {
   margin: 0;
@@ -3355,23 +3362,18 @@ code {
 .ws-status-chip--active { background: #e3f3e9; color: var(--green-700); }
 .ws-status-chip--completed { background: #e7eefb; color: #2b5fb3; }
 .ws-status-chip--archived { background: var(--surface-sunk); color: var(--ink-500); }
-.ws-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
-}
+
+/* Plain text back-link, not a pill — matches "‹ Switch job" in the approved mockup */
 .btn-switch-job {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  border: none;
+  background: none;
   color: var(--ink-700);
-  border-radius: var(--r-pill);
-  padding: 0.45rem 0.85rem;
+  padding: 0.4rem 0.2rem;
   font-size: var(--text-sm);
   font-weight: 700;
   min-height: 40px;
 }
-.btn-switch-job:active { background: var(--surface-sunk); }
+.btn-switch-job:active { color: var(--ink-900); }
 
 /* Header overflow menu — Rename/Support/Log out, tucked behind "⋯" so the
    title row never competes with them for width. Mirrors .budget-cat-menu. */
@@ -3394,13 +3396,18 @@ code {
 .ws-header-menu button:active, .ws-header-menu a:active { background: var(--surface-sunk); }
 .ws-header-menu-danger { color: var(--danger); border-top: 1px solid var(--line) !important; }
 
-/* — Tab row: full-width underline tabs, brand-green active — */
+/* — Tab row: segmented pill tabs, active = solid dark pill —
+   All 5 must fit without horizontal scroll: a scrolled-off tab has no
+   visible affordance on a phone and simply stops getting used. Only the
+   active tab carries pill padding; inactive tabs are plain, tightly spaced
+   text so five labels comfortably fit at 390px width. */
 .ws-tabs {
   display: flex;
+  align-items: center;
+  gap: 0.5rem;
   width: 100%;
-  /* stretch edge-to-edge so the underline rule spans the whole width */
   margin: 0 -1rem;
-  padding: 0 1rem;
+  padding: 0.2rem 1rem 0.6rem;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -3408,25 +3415,24 @@ code {
   z-index: 5;
 }
 .ws-tab {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   border: none;
   background: none;
-  color: var(--ink-500);
-  padding: 0.75rem 0.2rem;
+  color: var(--ink-700);
+  padding: 0.5rem 0.35rem;
   font-size: var(--text-sm);
   font-weight: 700;
-  text-align: center;
   white-space: nowrap;
-  border-bottom: 2.5px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  border-radius: var(--r-pill);
+  transition: background-color 0.12s ease, color 0.12s ease, padding 0.12s ease;
 }
-.ws-tab:active { color: var(--ink-700); }
+.ws-tab:active { background: var(--surface-sunk); }
 .ws-tab--active {
-  color: var(--green-700);
-  border-bottom-color: var(--green-600);
+  background: var(--ink-900);
+  color: #fff;
+  padding: 0.5rem 0.85rem;
 }
+.ws-tab--active:active { background: var(--ink-900); }
 
 .ws-body { padding-top: 0.85rem; }
 .ws-overview { display: flex; flex-direction: column; gap: 1rem; }
@@ -3485,13 +3491,13 @@ code {
   justify-content: space-between;
   gap: 0.6rem;
 }
-.ws-jsf-label { color: var(--ink-700); font-size: var(--text-md); font-weight: 600; }
+.ws-jsf-label { color: var(--ink-700); font-size: var(--text-md); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 .ws-jsf-value {
   font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: 800;
   color: var(--ink-900);
-  white-space: nowrap;
+  text-align: right;
 }
 .ws-jsf-value-of { font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600; color: var(--ink-500); }
 .ws-jsf-divider { border-top: 1px solid var(--line); margin: 0 1rem; }

@@ -38,6 +38,30 @@ test.describe('Current job workspace', () => {
     }
   })
 
+  test('all five tabs fit on one row without horizontal scroll at phone width', async ({ page }) => {
+    // A scrolled-off tab has no visible affordance on a phone and just stops
+    // getting used — the tab bar must never need horizontal scrolling.
+    const tabs = page.locator('.ws-tabs')
+    const scrollWidth = await tabs.evaluate(el => el.scrollWidth)
+    const clientWidth = await tabs.evaluate(el => el.clientWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+    for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
+      const box = await page.getByRole('tab', { name: t }).boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(clientWidth + 1)
+    }
+  })
+
+  test('job title never wraps into a vertical character column', async ({ page }) => {
+    const title = page.locator('.ws-job-title')
+    const box = await title.boundingBox()
+    // A collapsed/crushed title renders far taller than wide relative to its
+    // own font size — guard against the flex-shrink regression seen earlier.
+    expect(box).not.toBeNull()
+    expect(box!.width).toBeGreaterThan(box!.height)
+  })
+
   test('Switch is visible from the workspace', async ({ page }) => {
     await expect(page.getByRole('button', { name: /switch/i })).toBeVisible()
   })

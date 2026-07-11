@@ -485,6 +485,31 @@ export default function CurrentJobWorkspace({
       )}
 
       <header className="ws-header">
+        <div className="ws-header-top">
+          <button type="button" className="btn-switch-job" onClick={onSwitchJob}>‹ Switch job</button>
+          <div className="ws-header-top-right">
+            {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
+            <div className="ws-header-menu-wrap">
+              <button
+                type="button"
+                className="btn-header-menu"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={headerMenuOpen}
+                onClick={() => setHeaderMenuOpen(o => !o)}
+              >⋯</button>
+              {headerMenuOpen && (
+                <div className="ws-header-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); startRename() }}>Rename job</button>
+                  {user?.role === 'INTERNAL' && (
+                    <a role="menuitem" href="/internal/support" onClick={() => setHeaderMenuOpen(false)}>Support</a>
+                  )}
+                  <button type="button" role="menuitem" className="ws-header-menu-danger" onClick={() => { setHeaderMenuOpen(false); onLogout() }}>Log out</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
         <div className="ws-header-titles">
           {renaming ? (
             <form className="ws-rename-form" aria-label="Rename job" onSubmit={e => { e.preventDefault(); void saveTitle() }}>
@@ -509,36 +534,13 @@ export default function CurrentJobWorkspace({
           ) : (
             <>
               <h1 className="ws-job-title">{job.title}</h1>
-              <span className={`ws-status-chip ws-status-chip--${job.status}`}>{jobStatusLabel(job.status)}</span>
               {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
               {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
                 <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
               )}
+              <span className={`ws-status-chip ws-status-chip--${job.status}`}>{jobStatusLabel(job.status)}</span>
             </>
           )}
-        </div>
-        <div className="ws-header-actions">
-          {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
-          <button className="btn-switch-job" onClick={onSwitchJob}>Switch ›</button>
-          <div className="ws-header-menu-wrap">
-            <button
-              type="button"
-              className="btn-header-menu"
-              aria-label="More actions"
-              aria-haspopup="menu"
-              aria-expanded={headerMenuOpen}
-              onClick={() => setHeaderMenuOpen(o => !o)}
-            >⋯</button>
-            {headerMenuOpen && (
-              <div className="ws-header-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); startRename() }}>Rename job</button>
-                {user?.role === 'INTERNAL' && (
-                  <a role="menuitem" href="/internal/support" onClick={() => setHeaderMenuOpen(false)}>Support</a>
-                )}
-                <button type="button" role="menuitem" className="ws-header-menu-danger" onClick={() => { setHeaderMenuOpen(false); onLogout() }}>Log out</button>
-              </div>
-            )}
-          </div>
         </div>
       </header>
 
