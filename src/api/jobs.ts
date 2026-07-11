@@ -1,4 +1,4 @@
-import type { Job, JobType } from '../types'
+import type { EditableJobStatus, Job, JobType } from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { mockCreateJob, mockGetCurrentJob, mockGetJobs, mockPatchJob } from './mock/jobs'
 
@@ -29,8 +29,10 @@ export async function createJob(title: string, jobType?: JobType): Promise<Job> 
   return res.json() as Promise<Job>
 }
 
-// PATCH /api/jobs/:jobId — owner-scoped job edit (title only in this slice).
-export async function patchJob(jobId: string, req: { title?: string }): Promise<Job> {
+// PATCH /api/jobs/:jobId — owner-scoped job edit (title and/or status).
+// `archived` is an archive action here, not a delete — it removes the job
+// from the normal job list but keeps its data.
+export async function patchJob(jobId: string, req: { title?: string; status?: EditableJobStatus }): Promise<Job> {
   if (USE_MOCK) return mockPatchJob(jobId, req)
   const res = await apiFetch(`/api/jobs/${jobId}`, {
     method: 'PATCH',

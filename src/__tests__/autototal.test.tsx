@@ -26,7 +26,7 @@ const mockGetBudgetSummary = vi.mocked(api.getBudgetSummary)
 const mockCreateMemoryItem = vi.mocked(api.createMemoryItem)
 const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
 
-const JOB: Job = { id: 'job-at-001', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' }
+const JOB: Job = { id: 'job-at-001', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '' }
 
 const EMPTY_BUDGET: BudgetSummaryResponse = {
   jobId: JOB.id, generatedAt: '', categories: [],

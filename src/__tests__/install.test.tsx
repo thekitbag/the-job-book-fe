@@ -50,7 +50,7 @@ const MOCK_JOB = {
   title: 'Garden Room',
   jobType: 'garden_room' as const,
   roughLocationOrLabel: 'Mrs Patel',
-  status: 'active' as const,
+  status: 'started' as const,
   createdAt: '2026-06-01T08:00:00Z',
   updatedAt: '2026-06-10T09:00:00Z',
 }

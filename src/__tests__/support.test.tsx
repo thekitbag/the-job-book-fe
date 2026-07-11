@@ -41,13 +41,13 @@ const mockGetSupportPhotos = vi.mocked(api.getSupportPhotos)
 const INTERNAL: AuthUser = { id: 'u-founder', email: 'founder@test', name: 'Founder', role: 'INTERNAL' }
 const PILOT: AuthUser = { id: 'u-mike', email: 'mike@test', name: 'Mike', role: 'PILOT' }
 
-const JOB: Job = { id: 'job-1', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '' }
+const JOB: Job = { id: 'job-1', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '' }
 
 const SUPPORT_MIKE: SupportUser = {
   id: 'u-mike', email: 'mike@test', name: 'Mike', role: 'PILOT',
   createdAt: '', updatedAt: '', jobCount: 1, lastActivityAt: '2026-07-09T08:00:00Z',
 }
-const SUPPORT_JOB = { id: 'job-1', ownerUserId: 'u-mike', title: 'Garden Room', jobType: 'garden_room', status: 'active', roughLocationOrLabel: null, createdAt: '', updatedAt: '' }
+const SUPPORT_JOB = { id: 'job-1', ownerUserId: 'u-mike', title: 'Garden Room', jobType: 'garden_room', status: 'started', roughLocationOrLabel: null, createdAt: '', updatedAt: '' }
 
 function memoryView(): MemoryViewResponse {
   return {
@@ -200,6 +200,10 @@ describe('Support mode — read-only view-as', () => {
       expect(screen.queryByRole('button', { name: /fix memory/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /remember this|dismiss|save|upload|edit details/i })).toBeNull()
       expect(document.querySelector('input, textarea, select')).toBeNull()
+      // no job status edit surface — support/view-as never mutates target data
+      expect(screen.queryByRole('button', { name: /change status/i })).toBeNull()
+      expect(screen.queryByRole('menuitem', { name: /change status/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull()
     }
     // the data itself is there: labour entry, review draft, photo
     fireEvent.click(screen.getByRole('tab', { name: 'Labour' }))

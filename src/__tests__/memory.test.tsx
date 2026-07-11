@@ -37,7 +37,7 @@ const mockPatchBudgetCategory = vi.mocked(api.patchBudgetCategory)
 
 const JOB: Job = {
   id: 'job-mem-001', title: 'Garden Room', jobType: 'garden_room',
-  roughLocationOrLabel: null, status: 'active', createdAt: '2026-06-01T08:00:00Z', updatedAt: '2026-06-10T09:00:00Z',
+  roughLocationOrLabel: null, status: 'started', createdAt: '2026-06-01T08:00:00Z', updatedAt: '2026-06-10T09:00:00Z',
 }
 
 function orderedItem(over: Partial<MemoryViewItem>): MemoryViewItem {

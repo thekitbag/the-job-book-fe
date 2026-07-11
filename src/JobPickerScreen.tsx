@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createJob } from './api'
+import { jobStatusLabel } from './jobStatus'
 import type { Job, JobType } from './types'
 
 const JOB_TYPE_OPTIONS: { value: JobType; label: string }[] = [
@@ -153,6 +154,9 @@ export default function JobPickerScreen({
                   {job.jobType && job.jobType !== 'other' && (
                     <span className="job-picker-item-type">{jobTypeLabel(job.jobType)}</span>
                   )}
+                  <span className={`job-picker-item-status job-picker-item-status--${job.status}`}>
+                    {jobStatusLabel(job.status)}
+                  </span>
                   {job.id === selectedJobId && (
                     <span className="job-picker-item-check" aria-hidden="true">✓</span>
                   )}

@@ -32,7 +32,7 @@ const mockPatchJob = vi.mocked(api.patchJob)
 
 const JOB: Job = {
   id: 'job-lc-001', title: 'Garden Room', jobType: 'garden_room',
-  roughLocationOrLabel: null, status: 'active', createdAt: '', updatedAt: '',
+  roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '',
 }
 
 function item(over: Partial<MemoryViewItem>): MemoryViewItem {

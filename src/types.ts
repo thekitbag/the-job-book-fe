@@ -42,11 +42,15 @@ export interface Job {
   id: string
   title: string
   jobType: JobType | string
-  status: 'active' | 'completed' | 'archived'
+  status: 'planning' | 'started' | 'finished' | 'archived'
   roughLocationOrLabel: string | null
   createdAt: string
   updatedAt: string
 }
+
+// All statuses are editable through PATCH /api/jobs/:jobId — archived is an
+// archive action (not a delete), so the frontend must confirm before applying it.
+export type EditableJobStatus = 'planning' | 'started' | 'finished' | 'archived'
 
 export type FactType =
   | 'ordered_material'
