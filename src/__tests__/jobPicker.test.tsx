@@ -45,7 +45,8 @@ describe('JobPickerScreen — planning/started/finished visibility', () => {
     renderPicker([STARTED, PLANNING, FINISHED])
     expect(screen.getByText('Planning')).toBeInTheDocument()
     expect(screen.getByText('Finished')).toBeInTheDocument()
-    expect(screen.getByText('Started')).toBeInTheDocument()
+    // API value 'started' renders to users as 'In progress'
+    expect(screen.getByText('In progress')).toBeInTheDocument()
   })
 
   it('never renders an archived job — the list is expected to already exclude it', () => {

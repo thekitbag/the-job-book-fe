@@ -201,8 +201,8 @@ describe('Support mode — read-only view-as', () => {
       expect(screen.queryByRole('button', { name: /remember this|dismiss|save|upload|edit details/i })).toBeNull()
       expect(document.querySelector('input, textarea, select')).toBeNull()
       // no job status edit surface — support/view-as never mutates target data
-      expect(screen.queryByRole('button', { name: /change status/i })).toBeNull()
-      expect(screen.queryByRole('menuitem', { name: /change status/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /change (job )?status/i })).toBeNull()
+      expect(screen.queryByRole('menuitem', { name: /change (job )?status/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull()
     }
     // the data itself is there: labour entry, review draft, photo

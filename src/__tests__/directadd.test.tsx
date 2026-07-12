@@ -403,7 +403,7 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
     await openTab('Spend')
     fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
     expect(screen.getByRole('dialog', { name: 'Add spend' })).toBeInTheDocument()
-    expect(document.querySelector('.add-sheet-handle')).toBeNull()
+    expect(document.querySelector('.bottom-sheet-handle')).toBeNull()
   })
 
   it('opening a sheet does not auto-focus a form field', async () => {

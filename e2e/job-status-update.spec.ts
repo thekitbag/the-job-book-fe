@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
 
-// 390×844, VITE_USE_MOCK_API=true — lightweight job status editing.
-// Statuses: Planning / Started / Finished / Archived.
+// 390×844, VITE_USE_MOCK_API=true — job status editing via the Change status
+// bottom sheet. API statuses: planning / started / finished / archived;
+// 'started' renders to users as 'In progress'.
 
 async function gotoApp(page: import('@playwright/test').Page) {
   await page.goto('/')
@@ -15,8 +16,9 @@ async function gotoApp(page: import('@playwright/test').Page) {
   }
 }
 
-async function openStatusEditor(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: /status:.*change status/i }).click()
+async function openStatusSheet(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: /change job status/i }).click()
+  await expect(page.getByRole('dialog', { name: /change status/i })).toBeVisible()
 }
 
 test.describe('Job status update', () => {
@@ -24,22 +26,35 @@ test.describe('Job status update', () => {
     await gotoApp(page)
   })
 
-  test('header shows the current status label', async ({ page }) => {
-    await expect(page.locator('.ws-header-titles')).toContainText('Started')
+  test('header shows STATUS label and the started job as "In progress"', async ({ page }) => {
+    await expect(page.locator('.ws-status-label')).toHaveText('Status')
+    await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
+  })
+
+  test('the chip opens a bottom sheet with three statuses and a separated archive action', async ({ page }) => {
+    await openStatusSheet(page)
+    const sheet = page.getByRole('dialog', { name: /change status/i })
+    for (const label of ['Planning', 'In progress', 'Finished']) {
+      await expect(sheet.getByRole('button', { name: label })).toBeVisible()
+    }
+    await expect(sheet.getByRole('button', { name: /archive job…/i })).toBeVisible()
+    // current status is marked
+    await expect(sheet.getByRole('button', { name: /in progress/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('changing status to Planning updates the header and keeps Record visible', async ({ page }) => {
-    await openStatusEditor(page)
-    await page.getByRole('button', { name: 'Planning', exact: true }).click()
+    await openStatusSheet(page)
+    await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
     await page.waitForTimeout(500)
 
-    await expect(page.locator('.ws-header-titles')).toContainText('Planning')
+    await expect(page.locator('.ws-status-chip')).toHaveText(/Planning/)
+    await expect(page.getByRole('dialog', { name: /change status/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
   test('a planning job stays visible and selectable in Switch', async ({ page }) => {
-    await openStatusEditor(page)
-    await page.getByRole('button', { name: 'Planning', exact: true }).click()
+    await openStatusSheet(page)
+    await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
     await page.waitForTimeout(500)
 
     await page.getByRole('button', { name: /switch job/i }).click()
@@ -49,35 +64,38 @@ test.describe('Job status update', () => {
   })
 
   test('changing status to Finished keeps the job selected', async ({ page }) => {
-    await openStatusEditor(page)
-    await page.getByRole('button', { name: 'Finished', exact: true }).click()
+    await openStatusSheet(page)
+    await page.getByRole('dialog').getByRole('button', { name: 'Finished', exact: true }).click()
     await page.waitForTimeout(500)
 
-    await expect(page.locator('.ws-header-titles')).toContainText('Finished')
+    await expect(page.locator('.ws-status-chip')).toHaveText(/Finished/)
     await expect(page.locator('.ws-job-title')).toHaveText('Garden Room')
   })
 
-  test('cancelling the status editor makes no change', async ({ page }) => {
-    await openStatusEditor(page)
+  test('closing the sheet makes no change', async ({ page }) => {
+    await openStatusSheet(page)
+    await page.getByRole('button', { name: /^close$/i }).click()
+    await expect(page.getByRole('dialog', { name: /change status/i })).toHaveCount(0)
+    await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
+  })
+
+  test('archiving requires confirmation — cancelling leaves the job unchanged', async ({ page }) => {
+    await openStatusSheet(page)
+    await page.getByRole('button', { name: /archive job…/i }).click()
+    // confirmation step, no request yet
+    await expect(page.getByText(/removed from your normal job list/i)).toBeVisible()
     await page.getByRole('button', { name: /cancel/i }).click()
-    await expect(page.locator('.ws-header-titles')).toContainText('Started')
-  })
+    // back on the options; close and confirm nothing changed
+    await page.getByRole('button', { name: /^close$/i }).click()
 
-  test('archiving requires confirmation — dismissing leaves the job unchanged', async ({ page }) => {
-    page.once('dialog', dialog => dialog.dismiss())
-    await openStatusEditor(page)
-    await page.getByRole('button', { name: 'Archived', exact: true }).click()
-    await page.waitForTimeout(300)
-
-    // still on the same job, still Started — no navigation happened
     await expect(page.locator('.ws-job-title')).toHaveText('Garden Room')
-    await expect(page.locator('.ws-header-titles')).toContainText('Started')
+    await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
   })
 
   test('archiving with confirmation removes the job from Switch and moves to another job', async ({ page }) => {
-    page.once('dialog', dialog => dialog.accept())
-    await openStatusEditor(page)
-    await page.getByRole('button', { name: 'Archived', exact: true }).click()
+    await openStatusSheet(page)
+    await page.getByRole('button', { name: /archive job…/i }).click()
+    await page.getByRole('button', { name: 'Archive job', exact: true }).click()
     await page.waitForTimeout(700)
 
     // moved to the other seeded job, not stuck on a broken/archived view

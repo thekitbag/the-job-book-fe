@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import AddSheet from './AddSheet'
+import BottomSheet from './BottomSheet'
 import { deriveEachTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryType } from './types'
 
@@ -341,7 +341,7 @@ export default function DirectAddForm({
         </button>
       )}
       {open && (
-        <AddSheet title={title ?? label} onClose={close} onRecordInstead={close}>
+        <BottomSheet title={title ?? label} onClose={close} onRecordInstead={close}>
           <DirectAddFields
             kind={kind}
             categories={categories}
@@ -352,7 +352,7 @@ export default function DirectAddForm({
             onSubmit={submit}
             onCancel={close}
           />
-        </AddSheet>
+        </BottomSheet>
       )}
     </div>
   )

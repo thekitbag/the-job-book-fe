@@ -27,7 +27,7 @@ test.describe('Manual Add V2', () => {
     const sheet = page.getByRole('dialog', { name: 'Add spend' })
     await expect(sheet).toBeVisible()
     // no drag/swipe handle — dismissal is ×, backdrop, Escape only
-    await expect(page.locator('.add-sheet-handle')).toHaveCount(0)
+    await expect(page.locator('.bottom-sheet-handle')).toHaveCount(0)
     // opening must not auto-focus a field (no surprise mobile keyboard)
     const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? 'BODY')
     expect(['INPUT', 'TEXTAREA', 'SELECT']).not.toContain(activeTag)

@@ -1,8 +1,11 @@
-import type { EditableJobStatus, Job } from './types'
+import type { Job } from './types'
 
+// User-facing copy for API status values. The API value 'started' deliberately
+// renders as 'In progress' (founder copy decision) — never rename the API
+// value itself; PATCH bodies must still send 'started'.
 const JOB_STATUS_LABELS: Record<Job['status'], string> = {
   planning: 'Planning',
-  started: 'Started',
+  started: 'In progress',
   finished: 'Finished',
   archived: 'Archived',
 }
@@ -18,12 +21,11 @@ export function jobStatusLabel(status: string): string {
   return JOB_STATUS_LABELS[status as Job['status']] ?? titleCase(status)
 }
 
-// All four statuses are offered in the edit surface. Archived is last and
-// treated specially by the caller (requires explicit confirmation — it's an
-// archive action, not a delete, but it does remove the job from the normal list).
-export const EDITABLE_JOB_STATUSES: { value: EditableJobStatus; label: string }[] = [
+// The three normal choices offered in the Change status sheet. Archiving is
+// not a normal status row — it removes the job from the Switch list, so the
+// sheet presents it as a separated danger action behind its own confirmation.
+export const NORMAL_JOB_STATUSES: { value: 'planning' | 'started' | 'finished'; label: string }[] = [
   { value: 'planning', label: JOB_STATUS_LABELS.planning },
   { value: 'started', label: JOB_STATUS_LABELS.started },
   { value: 'finished', label: JOB_STATUS_LABELS.finished },
-  { value: 'archived', label: JOB_STATUS_LABELS.archived },
 ]
