@@ -17,6 +17,7 @@ import {
   deriveLabourSpendGroupFromBudget,
   deriveLabourSummary,
   deriveTotalKnownCost,
+  findLabourBudgetCategory,
   hasCostLikeAmount,
   MEMORY_TYPE_TO_SECTION_KEY,
   SECTION_FULL_LABELS,
@@ -292,10 +293,23 @@ export function useJobMemory(job: Job) {
   )
   // Spend Labour group: backend budgetSummary.labour preferred; fallback derives
   // labour rows from category/uncategorised rows (deduped by memoryItemId).
-  const labourSpendGroup = useMemo<LabourSpendSummary | null>(
-    () => (budgetSummary ? (budgetSummary.labour ?? deriveLabourSpendGroupFromBudget(budgetSummary)) : null),
-    [budgetSummary],
-  )
+  //
+  // Reconciliation: a backend labour summary can come back with
+  // budgetCategory: null even though an active "Labour" category genuinely
+  // exists in budgetSummary.categories (e.g. the category was created or
+  // resolved separately from the labour aggregate). The `??` below only
+  // covers a wholly-missing labour object — it doesn't catch that case — so
+  // trusting labour.budgetCategory at face value made the Spend tab's Labour
+  // "⋯" menu (gated on this field) flicker in and out for the same
+  // underlying state. Patch in the category from the categories list
+  // whenever the backend didn't attach one itself.
+  const labourSpendGroup = useMemo<LabourSpendSummary | null>(() => {
+    if (!budgetSummary) return null
+    const group = budgetSummary.labour ?? deriveLabourSpendGroupFromBudget(budgetSummary)
+    if (group.budgetCategory) return group
+    const reconciled = findLabourBudgetCategory(budgetSummary)
+    return reconciled ? { ...group, budgetCategory: reconciled.category } : group
+  }, [budgetSummary])
 
   const sectionItems = useCallback(
     (key: string) => data?.sections.find(s => s.key === key)?.items ?? [],

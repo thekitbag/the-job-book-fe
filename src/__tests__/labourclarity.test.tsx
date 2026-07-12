@@ -173,6 +173,22 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
     expect(screen.getAllByRole('heading', { name: 'Labour', level: 3 })).toHaveLength(1)
   })
 
+  // Bug report: the Spend tab's "⋯" menu on the Labour group sometimes
+  // appeared and sometimes didn't for what should be the same state. Root
+  // cause: budgetSummary.labour.budgetCategory can come back null from the
+  // backend even though an active "Labour" category genuinely exists in
+  // budgetSummary.categories — the frontend's `??` fallback only covers a
+  // wholly-missing `labour` object, not a present-but-incomplete one, so it
+  // trusted the null. useJobMemory now reconciles budgetCategory against
+  // categories whenever the backend didn't attach one.
+  it('shows the ⋯ menu on the Labour group even when the backend labour summary omits budgetCategory', async () => {
+    mockGetBudgetSummary.mockResolvedValue({ ...budgetSummary(), labour: { ...budgetSummary().labour!, budgetCategory: null } })
+    renderWorkspace()
+    openTab('Spend')
+    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    expect(within(group).getByRole('button', { name: /actions for labour/i })).toBeInTheDocument()
+  })
+
   it('historical non-labour Labour-category spend is visible once, with Fix memory', async () => {
     renderWorkspace()
     openTab('Spend')
