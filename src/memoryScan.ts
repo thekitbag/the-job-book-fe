@@ -596,6 +596,13 @@ export function deriveLabourHoursSummary(sections: MemoryViewSection[]): LabourH
 }
 
 // ── Labour spend group fallback (Spend tab) ─────────────────────────────────
+// The one active category named "labour" (case-insensitive, trimmed), if any.
+// Shared by the local derivation below and by useJobMemory's reconciliation
+// of a backend labour summary whose budgetCategory came back null.
+export function findLabourBudgetCategory(bs: BudgetSummaryResponse): BudgetCategorySummary | null {
+  return bs.categories.find(c => c.category.name.trim().toLowerCase() === 'labour') ?? null
+}
+
 // Prefer budgetSummary.labour from the backend. For older responses, derive the
 // group from existing category/uncategorised rows: every labour monetary row,
 // de-duplicated by memoryItemId, with budget/remaining from an active category
@@ -613,7 +620,7 @@ export function deriveLabourSpendGroupFromBudget(bs: BudgetSummaryResponse): Lab
   const spend = rows.reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
   const has = rows.length > 0
 
-  const labourCat = bs.categories.find(c => c.category.name.trim().toLowerCase() === 'labour') ?? null
+  const labourCat = findLabourBudgetCategory(bs)
   const budget = labourCat?.category.budgetAmount && DECIMAL.test(labourCat.category.budgetAmount)
     ? parseFloat(labourCat.category.budgetAmount) : null
   const remaining = budget !== null ? budget - spend : null
