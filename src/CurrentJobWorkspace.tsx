@@ -12,7 +12,8 @@ import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
-import { EDITABLE_JOB_STATUSES, jobStatusLabel } from './jobStatus'
+import BottomSheet from './BottomSheet'
+import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
 import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
@@ -271,13 +272,16 @@ export default function CurrentJobWorkspace({
   // Header overflow menu — Rename/Change status/Support/Log out live behind
   // "⋯" so the title row never has to compete with them for width at phone size.
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
-  // Status editing (PATCH /api/jobs/:jobId). Failure keeps the previous
-  // confirmed status visible with a retryable inline error.
-  const [editingStatus, setEditingStatus] = useState(false)
+  // Status editing (PATCH /api/jobs/:jobId) via the Change status bottom
+  // sheet. Failure keeps the previous confirmed status visible and keeps the
+  // sheet open with a retryable inline error. Archive gets an in-sheet
+  // confirmation step before any request is sent.
+  const [statusSheetOpen, setStatusSheetOpen] = useState(false)
+  const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
 
-  const startRename = () => { setTitleDraft(job.title); setTitleError(null); setEditingStatus(false); setRenaming(true) }
+  const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
   const saveTitle = async () => {
     const title = titleDraft.trim()
     if (!title || title.length > 80 || savingTitle) return
@@ -294,7 +298,8 @@ export default function CurrentJobWorkspace({
     }
   }
 
-  const startEditStatus = () => { setStatusError(null); setRenaming(false); setEditingStatus(true) }
+  const openStatusSheet = () => { setStatusError(null); setConfirmingArchive(false); setRenaming(false); setStatusSheetOpen(true) }
+  const closeStatusSheet = () => { setStatusSheetOpen(false); setConfirmingArchive(false); setStatusError(null) }
   const saveStatus = async (status: EditableJobStatus) => {
     if (savingStatus) return
     setSavingStatus(status)
@@ -302,7 +307,7 @@ export default function CurrentJobWorkspace({
     try {
       const updated = await patchJob(job.id, { status })
       onJobUpdated(updated)
-      setEditingStatus(false)
+      closeStatusSheet()
     } catch {
       setStatusError('Could not update status — try again')
     } finally {
@@ -542,53 +547,84 @@ export default function CurrentJobWorkspace({
               {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
                 <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
               )}
-              {editingStatus ? (
-                <div className="ws-status-edit" role="group" aria-label="Change status">
-                  {EDITABLE_JOB_STATUSES.map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={`ws-status-edit-opt${job.status === opt.value ? ' ws-status-edit-opt--current' : ''}${opt.value === 'archived' ? ' ws-status-edit-opt--archive' : ''}`}
-                      disabled={savingStatus !== null}
-                      aria-pressed={job.status === opt.value}
-                      onClick={() => {
-                        // Archiving removes the job from the normal list — it's
-                        // an archive action, not a delete, but still needs
-                        // explicit confirmation before applying.
-                        if (opt.value === 'archived' && !window.confirm(
-                          `Archive "${job.title}"? It will be removed from your normal job list. Its data is kept and it stays visible to Support.`,
-                        )) return
-                        saveStatus(opt.value)
-                      }}
-                    >
-                      {savingStatus === opt.value ? 'Saving…' : opt.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="ws-status-edit-cancel"
-                    disabled={savingStatus !== null}
-                    onClick={() => { setEditingStatus(false); setStatusError(null) }}
-                  >
-                    Cancel
-                  </button>
-                  {statusError && <p className="queue-item-error" role="alert">{statusError}</p>}
-                </div>
-              ) : (
+              <div className="ws-status-block">
+                <span className="ws-status-label">Status</span>
                 <button
                   type="button"
                   className={`ws-status-chip ws-status-chip--${job.status}`}
-                  onClick={startEditStatus}
-                  aria-label={`Status: ${jobStatusLabel(job.status)} — change status`}
+                  onClick={openStatusSheet}
+                  aria-haspopup="dialog"
+                  aria-label={`Change job status, current status ${jobStatusLabel(job.status)}`}
                 >
                   {jobStatusLabel(job.status)}
                   <span className="ws-status-chip-chev" aria-hidden="true">▾</span>
                 </button>
-              )}
+              </div>
             </>
           )}
         </div>
       </header>
+
+      {statusSheetOpen && (
+        <BottomSheet title="Change status" onClose={closeStatusSheet}>
+          {confirmingArchive ? (
+            // Deliberate archive step: archiving is a status update, not a
+            // delete, but it removes the job from the normal Switch list — so
+            // it never fires from a single tap.
+            <div className="status-sheet-confirm">
+              <p className="status-sheet-confirm-copy">
+                Archive “{job.title}”? It will be removed from your normal job list.
+                Its data is kept — nothing is deleted, and it stays visible to Support.
+              </p>
+              <div className="status-sheet-confirm-actions">
+                <button
+                  type="button"
+                  className="status-sheet-confirm-archive"
+                  disabled={savingStatus !== null}
+                  onClick={() => saveStatus('archived')}
+                >
+                  {savingStatus === 'archived' ? 'Archiving…' : 'Archive job'}
+                </button>
+                <button
+                  type="button"
+                  className="status-sheet-confirm-cancel"
+                  disabled={savingStatus !== null}
+                  onClick={() => setConfirmingArchive(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="status-sheet-options">
+              {NORMAL_JOB_STATUSES.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`status-sheet-opt status-sheet-opt--${opt.value}${job.status === opt.value ? ' status-sheet-opt--current' : ''}`}
+                  disabled={savingStatus !== null}
+                  aria-pressed={job.status === opt.value}
+                  onClick={() => saveStatus(opt.value)}
+                >
+                  <span className="status-sheet-dot" aria-hidden="true" />
+                  <span className="status-sheet-opt-label">{savingStatus === opt.value ? 'Saving…' : opt.label}</span>
+                  {job.status === opt.value && <span className="status-sheet-check" aria-hidden="true">✓</span>}
+                </button>
+              ))}
+              <div className="status-sheet-divider" role="presentation" />
+              <button
+                type="button"
+                className="status-sheet-archive"
+                disabled={savingStatus !== null}
+                onClick={() => setConfirmingArchive(true)}
+              >
+                Archive job…
+              </button>
+            </div>
+          )}
+          {statusError && <p className="queue-item-error" role="alert">{statusError}</p>}
+        </BottomSheet>
+      )}
 
       {/* div, not nav: a tablist role must not override the nav landmark's
           implicit navigation role (jsx-a11y/no-noninteractive-element-to-interactive-role) */}

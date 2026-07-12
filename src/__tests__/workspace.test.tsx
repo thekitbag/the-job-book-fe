@@ -394,21 +394,34 @@ describe('CurrentJobWorkspace — job status', () => {
     vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
   })
 
-  it('shows "Started" near the title for a started job', () => {
+  it('renders API status "started" as "In progress" near the title', () => {
     renderWorkspace()
-    expect(screen.getByText('Started')).toBeInTheDocument()
+    expect(screen.getByText('In progress')).toBeInTheDocument()
+    expect(screen.queryByText('Started')).not.toBeInTheDocument()
   })
 
-  it('shows "Planning" for a planning job', () => {
+  it('shows an uppercase STATUS label above the chip', () => {
+    renderWorkspace()
+    expect(screen.getByText('Status')).toHaveClass('ws-status-label')
+  })
+
+  it('shows "Planning" with the amber planning chip class', () => {
     const job: Job = { ...JOB, status: 'planning' }
     renderWorkspace({ job })
     expect(screen.getByText('Planning')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /change job status/i })).toHaveClass('ws-status-chip--planning')
   })
 
-  it('shows "Finished" for a finished job', () => {
+  it('shows "In progress" with the green started chip class', () => {
+    renderWorkspace()
+    expect(screen.getByRole('button', { name: /change job status/i })).toHaveClass('ws-status-chip--started')
+  })
+
+  it('shows "Finished" with the quiet finished chip class', () => {
     const job: Job = { ...JOB, status: 'finished' }
     renderWorkspace({ job })
     expect(screen.getByText('Finished')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /change job status/i })).toHaveClass('ws-status-chip--finished')
   })
 
   it('shows "Archived" for an archived job', () => {
@@ -521,98 +534,141 @@ describe('CurrentJobWorkspace — status editing', () => {
     vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
   })
 
-  async function openStatusEditor(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('button', { name: /status:.*change status/i }))
+  async function openStatusSheet(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /change job status/i }))
   }
 
-  it('header displays the current status label', () => {
+  it('the chip announces the current status in its accessible name', () => {
     renderWorkspace()
-    expect(screen.getByText('Started')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Change job status, current status In progress' }),
+    ).toBeInTheDocument()
   })
 
-  it('a status edit affordance is available to a normal user, offering all four statuses', async () => {
+  it('tapping the chip opens a Change status bottom sheet with the three statuses and a separated archive action', async () => {
     const user = userEvent.setup()
     renderWorkspace()
-    await openStatusEditor(user)
-    expect(screen.getByRole('group', { name: /change status/i })).toBeInTheDocument()
-    for (const label of ['Planning', 'Started', 'Finished', 'Archived']) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
+    await openStatusSheet(user)
+    const sheet = screen.getByRole('dialog', { name: /change status/i })
+    expect(sheet).toBeInTheDocument()
+    for (const label of ['Planning', 'In progress', 'Finished']) {
+      expect(within(sheet).getByRole('button', { name: new RegExp(label, 'i') })).toBeInTheDocument()
     }
+    // Archive is not a normal status row — it sits apart as a danger action.
+    const archive = within(sheet).getByRole('button', { name: /archive job/i })
+    expect(archive).toHaveClass('status-sheet-archive')
   })
 
-  it('changing to Planning calls PATCH and adopts the returned job', async () => {
+  it('the selected status is conveyed accessibly, not only by colour', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusSheet(user)
+    const sheet = screen.getByRole('dialog', { name: /change status/i })
+    expect(within(sheet).getByRole('button', { name: /in progress/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(sheet).getByRole('button', { name: /planning/i })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('choosing Planning PATCHes the API value "planning" and adopts the returned job', async () => {
     const onJobUpdated = vi.fn()
     vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'planning' })
     const user = userEvent.setup()
     renderWorkspace({ onJobUpdated })
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Planning' }))
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /planning/i }))
     await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'planning' }))
     expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'planning' }))
+    // sheet closes on success
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /change status/i })).not.toBeInTheDocument())
   })
 
-  it('changing to Started calls PATCH and adopts the returned job', async () => {
+  it('choosing In progress PATCHes the API value "started", not the display label', async () => {
     const onJobUpdated = vi.fn()
     vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'started' })
     const user = userEvent.setup()
     renderWorkspace({ job: { ...JOB, status: 'planning' }, onJobUpdated })
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Started' }))
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /in progress/i }))
     await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'started' }))
     expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'started' }))
   })
 
-  it('changing to Finished keeps Record visible and does not navigate away', async () => {
+  it('choosing Finished PATCHes "finished" and keeps Record visible', async () => {
     vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'finished' })
     const user = userEvent.setup()
     renderWorkspace()
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Finished' }))
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /finished/i }))
     await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'finished' }))
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
   })
 
-  it('PATCH failure keeps the previous status and shows a retryable error', async () => {
+  it('PATCH failure keeps the previous status visible, keeps the sheet open with retryable copy', async () => {
     vi.mocked(patchJob).mockRejectedValue(new Error('boom'))
     const onJobUpdated = vi.fn()
     const user = userEvent.setup()
     renderWorkspace({ onJobUpdated })
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Planning' }))
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /planning/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not update status/i)
     expect(onJobUpdated).not.toHaveBeenCalled()
-    // the previous confirmed status is still shown as the "current" option
-    expect(screen.getByRole('button', { name: 'Started' })).toHaveAttribute('aria-pressed', 'true')
+    // sheet stays open so the tap can be retried; current status unchanged
+    const sheet = screen.getByRole('dialog', { name: /change status/i })
+    expect(within(sheet).getByRole('button', { name: /in progress/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('cancelling the status editor restores the plain status chip', async () => {
+  it('closing the sheet with × saves nothing and restores the chip', async () => {
     const user = userEvent.setup()
     renderWorkspace()
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: /cancel/i }))
-    expect(screen.queryByRole('group', { name: /change status/i })).not.toBeInTheDocument()
-    expect(screen.getByText('Started')).toBeInTheDocument()
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /^close$/i }))
+    expect(screen.queryByRole('dialog', { name: /change status/i })).not.toBeInTheDocument()
+    expect(patchJob).not.toHaveBeenCalled()
+    expect(screen.getByText('In progress')).toBeInTheDocument()
   })
 
-  it('archiving requires confirmation — declining leaves status unchanged', async () => {
-    const confirmMock = vi.fn(() => false)
-    window.confirm = confirmMock
+  it('Escape dismisses the sheet without saving', async () => {
     const user = userEvent.setup()
     renderWorkspace()
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Archived' }))
-    expect(confirmMock).toHaveBeenCalled()
+    await openStatusSheet(user)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: /change status/i })).not.toBeInTheDocument()
     expect(patchJob).not.toHaveBeenCalled()
   })
 
-  it('archiving with confirmation calls PATCH with status archived', async () => {
-    window.confirm = vi.fn(() => true)
+  it('Archive job… shows an explicit confirmation first and sends no PATCH yet', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /archive job…/i }))
+    expect(patchJob).not.toHaveBeenCalled()
+    // confirmation copy: removed from the normal list, data kept
+    const sheet = screen.getByRole('dialog', { name: /change status/i })
+    expect(within(sheet).getByText(/removed from your normal job list/i)).toBeInTheDocument()
+    expect(within(sheet).getByText(/kept/i)).toBeInTheDocument()
+  })
+
+  it('cancelling the archive confirmation sends no request and leaves the job unchanged', async () => {
+    const onJobUpdated = vi.fn()
+    const user = userEvent.setup()
+    renderWorkspace({ onJobUpdated })
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /archive job…/i }))
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(patchJob).not.toHaveBeenCalled()
+    expect(onJobUpdated).not.toHaveBeenCalled()
+    // back on the normal picker view
+    const sheet = screen.getByRole('dialog', { name: /change status/i })
+    expect(within(sheet).getByRole('button', { name: /in progress/i })).toBeInTheDocument()
+  })
+
+  it('confirming archive PATCHes status "archived" and adopts the returned job', async () => {
     const onJobUpdated = vi.fn()
     vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'archived' })
     const user = userEvent.setup()
     renderWorkspace({ onJobUpdated })
-    await openStatusEditor(user)
-    await user.click(screen.getByRole('button', { name: 'Archived' }))
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /archive job…/i }))
+    await user.click(screen.getByRole('button', { name: /^archive job$/i }))
     await waitFor(() => expect(patchJob).toHaveBeenCalledWith(JOB.id, { status: 'archived' }))
     expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: 'archived' }))
   })
