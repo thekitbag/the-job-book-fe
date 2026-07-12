@@ -316,7 +316,10 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
     expect(mockCreateCategory).not.toHaveBeenCalled()
   })
 
-  it('the Spend Labour group offers Set Labour budget when no category exists — never a second bucket', async () => {
+  // Bug report: the "⋯" trigger changed shape depending on whether a Labour
+  // budget existed (button vs menu), which read as flaky/inconsistent UX.
+  // The "⋯" is now always the entry point; only the menu contents adapt.
+  it('the Spend Labour group always uses the ⋯ trigger, offering "Set budget" when no category exists yet', async () => {
     const noCat = budgetSummary()
     noCat.categories = [noCat.categories[1]]
     noCat.labour = { ...noCat.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
@@ -324,8 +327,26 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
     renderWorkspace()
     openTab('Spend')
     const group = await screen.findByRole('region', { name: /^labour spend$/i })
-    expect(within(group).getByRole('button', { name: 'Set Labour budget' })).toBeInTheDocument()
+
+    // no standalone "Set Labour budget" button — only the ⋯ trigger
+    expect(within(group).queryByRole('button', { name: /set labour budget/i })).toBeNull()
+    const menuBtn = within(group).getByRole('button', { name: /actions for labour/i })
+    fireEvent.click(menuBtn)
+    fireEvent.click(within(group).getByRole('menuitem', { name: 'Set budget' }))
+    expect(within(group).getByLabelText('Labour budget (£)')).toBeInTheDocument()
+
     // exactly one Labour bucket on the page
     expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
+  })
+
+  it('the Spend Labour group ⋯ trigger stays in place once a category exists, with Edit/Remove budget', async () => {
+    renderWorkspace()
+    openTab('Spend')
+    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    const menuBtn = within(group).getByRole('button', { name: /actions for labour/i })
+    fireEvent.click(menuBtn)
+    expect(within(group).getByRole('menuitem', { name: /edit budget/i })).toBeInTheDocument()
+    expect(within(group).getByRole('menuitem', { name: /remove budget/i })).toBeInTheDocument()
+    expect(within(group).queryByRole('menuitem', { name: /^set budget$/i })).toBeNull()
   })
 })

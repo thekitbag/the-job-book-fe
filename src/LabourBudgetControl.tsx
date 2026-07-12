@@ -6,13 +6,19 @@ import type { BudgetCategory } from './types'
 // grouping: with no Labour category, saving creates one named "Labour" behind
 // the scenes; with one, saving edits its budget. Amount-only — the name is
 // not Mike's problem here.
-export default function LabourBudgetControl({ budgetCategory, onSave, error }: {
+export default function LabourBudgetControl({ budgetCategory, onSave, error, autoOpen = false, onClose }: {
   budgetCategory: BudgetCategory | null
   // Resolves true on success (the caller refetches the authoritative summary).
   onSave: (amount: string, existing: BudgetCategory | null) => Promise<boolean>
   error?: string
+  // Opens straight into the form instead of showing an inline trigger
+  // button — used when a parent's own "⋯" menu is the entry point (Spend
+  // tab's Labour group, so the affordance stays "⋯" regardless of whether a
+  // budget exists yet). The parent unmounts this component to close it.
+  autoOpen?: boolean
+  onClose?: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(autoOpen)
   const [amount, setAmount] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -23,15 +29,23 @@ export default function LabourBudgetControl({ budgetCategory, onSave, error }: {
     setOpen(true)
   }
 
+  const cancel = () => {
+    setOpen(false)
+    onClose?.()
+  }
+
   const save = async () => {
     if (saving) return
     setSaving(true)
     const ok = await onSave(amount, budgetCategory)
     setSaving(false)
-    if (ok) setOpen(false)
+    if (ok) { setOpen(false); onClose?.() }
   }
 
   if (!open) {
+    // A controlled entry point (autoOpen) has no button of its own — the
+    // parent's "⋯" menu is the trigger, and the parent unmounts us on close.
+    if (autoOpen) return null
     return (
       <button type="button" className="btn-add-inline" onClick={start}>
         {hasBudget ? 'Edit Labour budget' : 'Set Labour budget'}
@@ -54,7 +68,7 @@ export default function LabourBudgetControl({ budgetCategory, onSave, error }: {
       </label>
       <div className="queue-edit-actions">
         <button type="submit" className="btn-queue-save" disabled={saving}>{saving ? 'Saving…' : 'Save budget'}</button>
-        <button type="button" className="btn-queue-cancel" onClick={() => setOpen(false)} disabled={saving}>Cancel</button>
+        <button type="button" className="btn-queue-cancel" onClick={cancel} disabled={saving}>Cancel</button>
       </div>
       {error && <p className="queue-item-error" role="alert">{error}</p>}
     </form>
