@@ -212,6 +212,11 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
     handleAddCategory, handleEditBudget, handleArchiveCategory,
   } = mem
 
+  // Labour's "⋯" menu is always the entry point, whether or not a Labour
+  // budget category exists yet — this tracks the amount-only "Set budget"
+  // form when there's no category to key an edit off of.
+  const [settingLabourBudget, setSettingLabourBudget] = useState(false)
+
   const orderedItems = sectionItems('ordered_materials')
   const labourItems = sectionItems('labour')
   const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0
@@ -403,27 +408,35 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
           <section className="budget-cat budget-cat--labour" aria-label="Labour spend">
             <div className="budget-cat-head">
               <h3 className="budget-cat-name">Labour</h3>
-              {labourSpendGroup.budgetCategory && (
-                <div className="budget-cat-menu-wrap">
-                  <button
-                    type="button"
-                    className="btn-cat-menu"
-                    aria-label="Actions for Labour"
-                    aria-haspopup="menu"
-                    aria-expanded={openMenuCatId === labourSpendGroup.budgetCategory.id}
-                    onClick={() => setOpenMenuCatId(openMenuCatId === labourSpendGroup.budgetCategory!.id ? null : labourSpendGroup.budgetCategory!.id)}
-                  >⋯</button>
-                  {openMenuCatId === labourSpendGroup.budgetCategory.id && (
-                    <div className="budget-cat-menu" role="menu">
-                      <button type="button" role="menuitem" onClick={() => { setOpenMenuCatId(null); setEditingBudgetId(labourSpendGroup.budgetCategory!.id) }}>Edit budget</button>
-                      <button type="button" role="menuitem" className="budget-cat-menu-danger" disabled={savingCatId === labourSpendGroup.budgetCategory.id} onClick={() => {
-                        setOpenMenuCatId(null)
-                        if (window.confirm('Remove the labour budget? Labour cost still shows here.')) handleArchiveCategory(labourSpendGroup.budgetCategory!.id)
-                      }}>Remove budget</button>
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Always the "⋯" — whether or not a Labour budget category
+                  exists yet — so the entry point never changes shape. The
+                  menu contents adapt: "Set budget" first-time, "Edit/Remove
+                  budget" once one exists. */}
+              <div className="budget-cat-menu-wrap">
+                <button
+                  type="button"
+                  className="btn-cat-menu"
+                  aria-label="Actions for Labour"
+                  aria-haspopup="menu"
+                  aria-expanded={openMenuCatId === LABOUR_GROUP_KEY}
+                  onClick={() => setOpenMenuCatId(openMenuCatId === LABOUR_GROUP_KEY ? null : LABOUR_GROUP_KEY)}
+                >⋯</button>
+                {openMenuCatId === LABOUR_GROUP_KEY && (
+                  <div className="budget-cat-menu" role="menu">
+                    {labourSpendGroup.budgetCategory ? (
+                      <>
+                        <button type="button" role="menuitem" onClick={() => { setOpenMenuCatId(null); setEditingBudgetId(labourSpendGroup.budgetCategory!.id) }}>Edit budget</button>
+                        <button type="button" role="menuitem" className="budget-cat-menu-danger" disabled={savingCatId === labourSpendGroup.budgetCategory.id} onClick={() => {
+                          setOpenMenuCatId(null)
+                          if (window.confirm('Remove the labour budget? Labour cost still shows here.')) handleArchiveCategory(labourSpendGroup.budgetCategory!.id)
+                        }}>Remove budget</button>
+                      </>
+                    ) : (
+                      <button type="button" role="menuitem" onClick={() => { setOpenMenuCatId(null); setSettingLabourBudget(true) }}>Set budget</button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="budget-cat-figures">
               <div className="budget-figure"><dt>Spent</dt><dd>{labourSpendGroup.knownSpendLabel ?? 'None yet'}</dd></div>
@@ -445,11 +458,18 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
               : <p className="cat-empty">No labour cost yet — hours are remembered on the Labour tab.</p>}
             {/* Labour is managed from Labour — deliberately no Add action here. */}
             <p className="labour-group-guide">Add labour from the Labour tab so we can track hours, people, and tasks properly.</p>
-            {/* One Labour concept: with no Labour category yet, setting a budget
-                here creates the underlying "Labour" category on save; with one,
-                the ⋯ menu above edits it like any category. */}
-            {!labourSpendGroup.budgetCategory && (
-              <LabourBudgetControl budgetCategory={null} onSave={handleSetLabourBudget} error={budgetError || undefined} />
+            {/* One Labour concept: with no Labour category yet, "Set budget"
+                above opens this amount-only form, which creates the
+                underlying "Labour" category on save; with one, the ⋯ menu's
+                "Edit budget" edits it like any category. */}
+            {!labourSpendGroup.budgetCategory && settingLabourBudget && (
+              <LabourBudgetControl
+                budgetCategory={null}
+                onSave={handleSetLabourBudget}
+                error={budgetError || undefined}
+                autoOpen
+                onClose={() => setSettingLabourBudget(false)}
+              />
             )}
 
             {/* Historical (non-labour) spend already assigned to the Labour
