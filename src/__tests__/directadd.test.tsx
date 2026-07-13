@@ -86,9 +86,21 @@ beforeEach(() => {
 function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
+// Navigate to a lens in the new job-home model: sections are cards on home,
+// Used lives inside Materials, and Notes lives inside Job log.
 async function openTab(name: string) {
-  fireEvent.click(screen.getByRole('tab', { name }))
-  // let the tab's memory content settle
+  const back = screen.queryByRole('button', { name: /job home/i })
+  if (back) fireEvent.click(back)
+  if (name === 'Used') {
+    fireEvent.click(screen.getByRole('button', { name: 'Open Materials' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Used' }))
+  } else if (name === 'Notes') {
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Notes' }))
+  } else {
+    fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }))
+  }
+  // let the section's memory content settle
   await screen.findByRole('tabpanel')
 }
 
@@ -101,8 +113,9 @@ describe('Direct add — entry points', () => {
     expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
-    // Used and Left over each get their own add (leftover is otherwise unreachable).
-    expect(screen.getByRole('button', { name: 'Add leftover' })).toBeInTheDocument()
+    // Left over is its own Materials tab with its own add.
+    fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
+    expect(await screen.findByRole('button', { name: 'Add leftover' })).toBeInTheDocument()
     await openTab('Notes')
     expect(await screen.findByRole('button', { name: 'Add note' })).toBeInTheDocument()
   })
@@ -173,9 +186,10 @@ describe('Direct add — submit contracts', () => {
     expect(await screen.findByText('OSB')).toBeInTheDocument()
   })
 
-  it('leftover saves as leftover_material from the Used tab', async () => {
+  it('leftover saves as leftover_material from the Materials Left over tab', async () => {
     renderWorkspace()
     await openTab('Used')
+    fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Add leftover' }))
     const form = screen.getByRole('form', { name: 'Add leftover' })
     fireEvent.change(form.querySelector('input[name="materialName"]')!, { target: { value: 'sand' } })
@@ -331,8 +345,11 @@ describe('Manual Add V2 — empty states', () => {
     expect(within(labourPanel).getByText('No labour logged yet')).toBeInTheDocument()
 
     await openTab('Used')
-    const usedPanel = await screen.findByRole('tabpanel', { name: 'Used and left over' })
-    expect(within(usedPanel).getAllByText('Nothing logged yet')).toHaveLength(2)
+    const usedPanel = await screen.findByRole('tabpanel', { name: 'Used materials' })
+    expect(within(usedPanel).getByText('Nothing logged yet')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
+    const leftoverPanel = await screen.findByRole('tabpanel', { name: 'Left over materials' })
+    expect(within(leftoverPanel).getByText('Nothing logged yet')).toBeInTheDocument()
 
     await openTab('Notes')
     const notesPanel = await screen.findByRole('tabpanel', { name: 'Notes' })
@@ -393,7 +410,8 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
     expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add leftover' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
+    expect(await screen.findByRole('button', { name: 'Add leftover' })).toBeInTheDocument()
     await openTab('Notes')
     expect(await screen.findByRole('button', { name: 'Add note' })).toBeInTheDocument()
   })

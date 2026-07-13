@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390px, VITE_USE_MOCK_API=true. The stateful mock derives an each-line total
 // (quantity × unit cost) on create/patch when totalCostAmount is omitted.
 
@@ -18,7 +28,7 @@ async function gotoApp(page: Page) {
 test.describe('Auto-total unit cost', () => {
   test('direct-add each shows a derived total, saves it, and Fix Memory recalculates', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(600)
 
     await page.getByRole('button', { name: 'Add spend', exact: true }).click()

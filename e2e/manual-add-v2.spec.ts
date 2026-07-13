@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390×844, VITE_USE_MOCK_API=true — Manual Add V2 / direct add refinement.
 // Direct add opens in an in-context bottom sheet; Spend category cards add
 // with the category preselected; the fixed/global Record bar is the only
@@ -20,7 +30,7 @@ async function gotoApp(page: Page) {
 test.describe('Manual Add V2', () => {
   test('spend direct add opens in a bottom sheet and saves', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
     await page.getByRole('button', { name: 'Add spend', exact: true }).click()
 
@@ -44,7 +54,7 @@ test.describe('Manual Add V2', () => {
 
   test('category card add preselects the category and the item lands in it', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
 
     // electrics is a seeded category with no spend — its empty state offers the add
@@ -70,7 +80,7 @@ test.describe('Manual Add V2', () => {
 
   test('closing the sheet returns to the same section state', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
     // expand a category's notes first
     const cladding = page.getByRole('region', { name: /budget category cladding/i })
@@ -86,7 +96,9 @@ test.describe('Manual Add V2', () => {
   test('the global Record bar is the only voice action; empty states offer manual add only', async ({ page }) => {
     await gotoApp(page)
     for (const tab of ['Spend', 'Labour', 'Used', 'Notes']) {
-      await page.getByRole('tab', { name: tab }).click()
+      if (tab === 'Used') await goToSection(page, 'Materials', 'Used')
+      else if (tab === 'Notes') await goToSection(page, 'Job log', 'Notes')
+      else await goToSection(page, tab)
       await page.waitForTimeout(500)
       // exactly one record affordance on the page: the pinned global bar
       await expect(page.locator('.ws-record-bar')).toHaveCount(1)

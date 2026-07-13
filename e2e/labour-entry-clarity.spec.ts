@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390×844, VITE_USE_MOCK_API=true — Labour entry point & budget clarity.
 // Mock seed: labour category (£1500 budget) holding rated labour (£280 of £880
 // total trusted labour) AND a historical non-labour row (agency invoice £150);
@@ -14,7 +24,7 @@ async function gotoApp(page: Page) {
 test.describe('Labour entry point & budget clarity', () => {
   test('Labour tab shows hours plus labour cost, budget, and remaining', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Labour' }).click()
+    await goToSection(page, 'Labour')
     await page.waitForTimeout(900)
 
     await expect(page.getByText('24h job total')).toBeVisible()
@@ -38,7 +48,7 @@ test.describe('Labour entry point & budget clarity', () => {
 
   test('Spend shows the budget trio, includes labour, and never offers add-to-labour', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(900)
 
     // job-level trio: known spend, total budget, remaining

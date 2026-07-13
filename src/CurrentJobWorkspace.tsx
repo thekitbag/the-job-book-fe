@@ -26,69 +26,86 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   other: 'Other',
 }
 
-const USED_SECTION_KEYS = ['used_materials', 'leftovers']
 const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs']
 
-type Tab = 'overview' | 'spend' | 'labour' | 'used' | 'notes'
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'spend', label: 'Spend' },
-  { key: 'labour', label: 'Labour' },
-  { key: 'used', label: 'Used' },
-  { key: 'notes', label: 'Notes' },
-]
+// Stable section navigation: home is the root of the current-job workspace,
+// not a tab. The four sections are stable workspaces — future Payments becomes
+// a fifth card here, and Variations becomes a Job log filter, without another
+// cramped top-level tab strip.
+type Section = 'home' | 'spend' | 'labour' | 'materials' | 'joblog'
+type MaterialsTab = 'bought' | 'used' | 'leftover'
+// Receipts becomes a filter here once receipt support lands — no inert filter
+// until then.
+type JobLogFilter = 'all' | 'notes' | 'photos'
 
-// Where a latest-activity row's underlying detail lives. Tab-level navigation
-// is the v1 minimum (spec allows this); item-level reveal is a follow-up.
-const ACTIVITY_TAB: Record<LatestActivityType, Tab> = {
-  bought: 'spend',
-  used: 'used',
-  labour: 'labour',
-  note: 'notes',
-  photo: 'notes',
+const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
+  spend: 'Spend',
+  labour: 'Labour',
+  materials: 'Materials',
+  joblog: 'Job log',
 }
 
-// ── Overview: Job so far ─────────────────────────────────────────────────────
-// One consolidated card, row-per-signal — not a grid of separate stat cards.
+// Where a latest-activity row's underlying detail lives. Section-level
+// navigation (with the right inner tab/filter preselected) is the v1 minimum;
+// item-level highlight is a follow-up.
+const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'home'>; materialsTab?: MaterialsTab; joblogFilter?: JobLogFilter }> = {
+  bought: { section: 'spend' },
+  used: { section: 'materials', materialsTab: 'used' },
+  labour: { section: 'labour' },
+  note: { section: 'joblog', joblogFilter: 'notes' },
+  photo: { section: 'joblog', joblogFilter: 'photos' },
+}
 
-function JobSoFar({ total, budgetAmount, labourHours, onOpenSpend, onOpenLabour }: {
+// ── Job home: stable section cards ───────────────────────────────────────────
+// Spend/Labour carry live context (known spend vs budget, hours logged); the
+// other two describe what lives inside. Cards render even while memory is
+// loading or failed — navigation must never disappear with the data.
+
+function HomeSectionCards({ total, budgetAmount, labourHours, onOpen }: {
   total: TotalKnownCost | null
   budgetAmount: string | null
   labourHours: LabourHoursSummary | null
-  onOpenSpend: () => void
-  onOpenLabour: () => void
+  onOpen: (section: Exclude<Section, 'home'>) => void
 }) {
   const known = total?.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
   const budget = budgetAmount ? parseFloat(budgetAmount) : null
   const hasBudget = budget !== null && budget > 0
-  const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
   const hasHours = labourHours?.totalHours != null
 
+  const spendContext = total?.knownSpendAmount
+    ? `${formatMoney(known, total.knownSpendCurrency)}${hasBudget ? ` of ${formatMoney(budget!, 'GBP')}` : ''}`
+    : 'None yet'
+  const labourContext = hasHours ? `${labourHours!.totalHours}h logged` : 'None yet'
+
+  const cards: { section: Exclude<Section, 'home'>; icon: string; title: string; context: string }[] = [
+    { section: 'spend', icon: '£', title: 'Spend', context: spendContext },
+    { section: 'labour', icon: '⏱', title: 'Labour', context: labourContext },
+    { section: 'materials', icon: '🧰', title: 'Materials', context: 'Bought · used · left over' },
+    { section: 'joblog', icon: '📓', title: 'Job log', context: 'Notes · photos' },
+  ]
+
   return (
-    <section className="ws-jsf" aria-label="Job so far">
-      <h2 className="mem-section-heading">Job so far</h2>
-      <div className="ws-jsf-card">
-        <button type="button" className="ws-jsf-row" onClick={onOpenSpend} aria-label="Known spend — open Spend">
-          <span className="ws-jsf-row-top">
-            <span className="ws-jsf-label">Known spend</span>
-            <span className="ws-jsf-value">
-              {total?.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}
-              {hasBudget && <span className="ws-jsf-value-of"> of {formatMoney(budget!, 'GBP')}</span>}
-            </span>
+    <nav className="ws-home-cards" aria-label="Job sections">
+      {cards.map(c => (
+        <button
+          key={c.section}
+          type="button"
+          className="ws-home-card"
+          aria-label={`Open ${c.title}`}
+          onClick={() => onOpen(c.section)}
+        >
+          <span className="ws-home-card-icon" aria-hidden="true">{c.icon}</span>
+          <span className="ws-home-card-text">
+            <span className="ws-home-card-title">{c.title}</span>
+            <span className="ws-home-card-context">{c.context}</span>
           </span>
-          {hasBudget && <span className="ws-card-bar"><span style={{ width: `${pct}%` }} /></span>}
+          <span className="ws-home-card-chev" aria-hidden="true">›</span>
         </button>
-        <div className="ws-jsf-divider" />
-        <button type="button" className="ws-jsf-row" onClick={onOpenLabour} aria-label="Labour hours — open Labour">
-          <span className="ws-jsf-row-top">
-            <span className="ws-jsf-label">Labour hours</span>
-            <span className="ws-jsf-value">{hasHours ? `${labourHours!.totalHours}h` : 'None yet'}</span>
-          </span>
-        </button>
-      </div>
-    </section>
+      ))}
+    </nav>
   )
 }
+
 
 function LatestActivity({ items, onOpenItem }: { items: LatestActivityItem[]; onOpenItem: (item: LatestActivityItem) => void }) {
   if (items.length === 0) return null
@@ -254,7 +271,9 @@ export default function CurrentJobWorkspace({
   // app can refresh the job list and offline cache.
   onJobUpdated?: (job: Job) => void
 }) {
-  const [tab, setTab] = useState<Tab>('overview')
+  const [section, setSection] = useState<Section>('home')
+  const [materialsTab, setMaterialsTab] = useState<MaterialsTab>('bought')
+  const [joblogFilter, setJoblogFilter] = useState<JobLogFilter>('all')
   // clientNoteId of the note just recorded — drives the capture confirmation.
   const [justCapturedId, setJustCapturedId] = useState<string | null>(null)
   const [notes, setNotes] = useState<LocalNote[]>([])
@@ -281,6 +300,26 @@ export default function CurrentJobWorkspace({
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+
+  // Switching jobs always lands on the new job's home — never a section of
+  // the previous job.
+  useEffect(() => {
+    setSection('home')
+    setMaterialsTab('bought')
+    setJoblogFilter('all')
+  }, [job.id])
+
+  const openSection = useCallback((s: Exclude<Section, 'home'>) => {
+    track('job_section_opened', { section: s })
+    setSection(s)
+  }, [])
+
+  const openActivityItem = useCallback((item: LatestActivityItem) => {
+    const dest = ACTIVITY_DEST[item.type]
+    if (dest.materialsTab) setMaterialsTab(dest.materialsTab)
+    if (dest.joblogFilter) setJoblogFilter(dest.joblogFilter)
+    openSection(dest.section)
+  }, [openSection])
 
   const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
   const saveTitle = async () => {
@@ -452,6 +491,15 @@ export default function CurrentJobWorkspace({
     [mem.data, photos],
   )
 
+  // Job log "All": every note-type memory item and photo, merged newest-first.
+  // Bought/used/labour stay in their own sections — the log is the narrative
+  // record (notes, photos, receipts), not a duplicate of the money lenses.
+  const jobLogItems = useMemo(
+    () => mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 500), photos, 500)
+      .filter(i => i.type === 'note' || i.type === 'photo'),
+    [mem.data, photos],
+  )
+
   // Photo link targets: trusted memory items only — review-queue drafts are
   // never offered as link targets (v1 rule). Labels are the items' CURRENT
   // display identity (post-correction), not original extraction text.
@@ -508,6 +556,22 @@ export default function CurrentJobWorkspace({
         />
       )}
 
+      {section !== 'home' ? (
+        // Section workspace header: back to job home + section title, with the
+        // job title kept as context. No global tab strip anywhere.
+        <header className="ws-header ws-header--section">
+          <div className="ws-header-top">
+            <button type="button" className="btn-switch-job" onClick={() => setSection('home')}>‹ Job home</button>
+            <div className="ws-header-top-right">
+              {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
+            </div>
+          </div>
+          <div className="ws-header-titles">
+            <h1 className="ws-job-title">{SECTION_TITLES[section]}</h1>
+            <p className="ws-job-location">{job.title}</p>
+          </div>
+        </header>
+      ) : (
       <header className="ws-header">
         <div className="ws-header-top">
           <button type="button" className="btn-switch-job" onClick={onSwitchJob}>‹ Switch job</button>
@@ -579,6 +643,7 @@ export default function CurrentJobWorkspace({
           )}
         </div>
       </header>
+      )}
 
       {statusSheetOpen && (
         <BottomSheet title="Change status" onClose={closeStatusSheet}>
@@ -641,32 +706,19 @@ export default function CurrentJobWorkspace({
         </BottomSheet>
       )}
 
-      {/* div, not nav: a tablist role must not override the nav landmark's
-          implicit navigation role (jsx-a11y/no-noninteractive-element-to-interactive-role) */}
-      <div className="ws-tabs" role="tablist" aria-label="Job lenses">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            role="tab"
-            aria-selected={tab === t.key}
-            className={`ws-tab${tab === t.key ? ' ws-tab--active' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       <div className="ws-body">
         {showBanner && (
           <InstallBanner isIosSafari={isIosSafari} onInstall={triggerInstall} onDismiss={dismissInstall} />
         )}
         {showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
 
-        {tab === 'overview' && (
-          <div className="ws-overview" role="tabpanel" aria-label="Overview">
+        {section === 'home' && (
+          <div className="ws-overview">
             {renderThingsToCheck()}
 
+            {/* Section cards are the navigation — they render even while the
+                memory view is loading or failed. The error block above them
+                offers the retry; the cards just show quieter context. */}
             {mem.loadState === 'error' ? (
               <div className="mem-error" role="alert">
                 <p>Couldn’t load job details.</p>
@@ -674,18 +726,16 @@ export default function CurrentJobWorkspace({
               </div>
             ) : mem.loadState === 'loading' && !mem.data ? (
               <p className="mem-loading">Loading…</p>
-            ) : (
-              <>
-                <JobSoFar
-                  total={mem.totalKnownCost}
-                  budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
-                  labourHours={mem.labourHours}
-                  onOpenSpend={() => setTab('spend')}
-                  onOpenLabour={() => setTab('labour')}
-                />
-                <LatestActivity items={latest} onOpenItem={item => setTab(ACTIVITY_TAB[item.type])} />
-              </>
-            )}
+            ) : null}
+
+            <HomeSectionCards
+              total={mem.totalKnownCost}
+              budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
+              labourHours={mem.labourHours}
+              onOpen={openSection}
+            />
+
+            <LatestActivity items={latest} onOpenItem={openActivityItem} />
 
             <SourceHistory
               notes={notes}
@@ -700,27 +750,102 @@ export default function CurrentJobWorkspace({
           </div>
         )}
 
-        {tab === 'spend' && renderMemoryTab(<SpendTab mem={mem} />)}
-        {tab === 'labour' && renderMemoryTab(<LabourTab mem={mem} />)}
-        {tab === 'used' && renderMemoryTab(
-          <MemorySectionTab
-            mem={mem}
-            sectionKeys={USED_SECTION_KEYS}
-            ariaLabel="Used and left over"
-            sectionAdds={{
-              used_materials: { kind: 'used', label: 'Add used item' },
-              leftovers: { kind: 'leftover', label: 'Add leftover' },
-            }}
-          />,
+        {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} />)}
+        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} />)}
+
+        {section === 'materials' && (
+          <>
+            <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Materials views">
+              {([['bought', 'Bought'], ['used', 'Used'], ['leftover', 'Left over']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={materialsTab === key}
+                  className={`ws-tab${materialsTab === key ? ' ws-tab--active' : ''}`}
+                  onClick={() => setMaterialsTab(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {renderMemoryTab(
+              materialsTab === 'bought' ? (
+                <MemorySectionTab
+                  mem={mem}
+                  sectionKeys={['ordered_materials']}
+                  ariaLabel="Bought materials"
+                  sectionAdds={{ ordered_materials: { kind: 'spend', label: 'Add bought item' } }}
+                />
+              ) : materialsTab === 'used' ? (
+                <MemorySectionTab
+                  mem={mem}
+                  sectionKeys={['used_materials']}
+                  ariaLabel="Used materials"
+                  sectionAdds={{ used_materials: { kind: 'used', label: 'Add used item' } }}
+                />
+              ) : (
+                <MemorySectionTab
+                  mem={mem}
+                  sectionKeys={['leftovers']}
+                  ariaLabel="Left over materials"
+                  sectionAdds={{ leftovers: { kind: 'leftover', label: 'Add leftover' } }}
+                />
+              ),
+            )}
+          </>
         )}
-        {tab === 'notes' && renderMemoryTab(
-          <MemorySectionTab
-            mem={mem}
-            sectionKeys={NOTES_SECTION_KEYS}
-            ariaLabel="Notes"
-            directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }}
-            footer={<JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />}
-          />,
+
+        {section === 'joblog' && (
+          <>
+            <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Job log filters">
+              {([['all', 'All'], ['notes', 'Notes'], ['photos', 'Photos']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={joblogFilter === key}
+                  className={`ws-tab${joblogFilter === key ? ' ws-tab--active' : ''}`}
+                  onClick={() => setJoblogFilter(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {joblogFilter === 'all' && renderMemoryTab(
+              jobLogItems.length === 0 ? (
+                <p className="mem-tab-empty">Nothing in the job log yet. Notes and photos land here.</p>
+              ) : (
+                <ul className="ws-latest-card ws-joblog-feed" aria-label="Job log">
+                  {jobLogItems.map(item => (
+                    <li key={item.memoryItemId}>
+                      <button
+                        type="button"
+                        className="ws-latest-row"
+                        onClick={() => setJoblogFilter(item.type === 'photo' ? 'photos' : 'notes')}
+                        aria-label={`${item.typeLabel}: ${item.headline}`}
+                      >
+                        <span className="ws-latest-top">
+                          <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
+                          <span className="ws-latest-headline">{item.headline}</span>
+                        </span>
+                        <span className="ws-latest-time">{formatSavedStamp(item.effectiveAt)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ),
+            )}
+            {joblogFilter === 'notes' && renderMemoryTab(
+              <MemorySectionTab
+                mem={mem}
+                sectionKeys={NOTES_SECTION_KEYS}
+                ariaLabel="Notes"
+                directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }}
+              />,
+            )}
+            {joblogFilter === 'photos' && (
+              <JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />
+            )}
+          </>
         )}
       </div>
 

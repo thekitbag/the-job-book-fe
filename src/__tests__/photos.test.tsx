@@ -82,8 +82,12 @@ function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 
+// Photos now live in Job log → Photos (name kept so call sites read the same).
 function openNotesTab() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Notes' }))
+  const back = screen.queryByRole('button', { name: /job home/i })
+  if (back) fireEvent.click(back)
+  fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
+  fireEvent.click(screen.getByRole('tab', { name: 'Photos' }))
 }
 
 async function photosSection() {
@@ -223,7 +227,8 @@ describe('Job photos — section and upload', () => {
 
     // no spend/budget refresh is triggered — photos are evidence, not spend
     expect(mockGetBudgetSummary.mock.calls.length).toBe(budgetCallsBefore)
-    fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
+    fireEvent.click(screen.getByRole('button', { name: /job home/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
     const hero = await screen.findByRole('region', { name: /^known spend$/i })
     expect(within(hero).getByText(/£600/)).toBeInTheDocument()
   })

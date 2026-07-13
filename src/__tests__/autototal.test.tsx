@@ -78,7 +78,7 @@ function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 async function openAddSpend() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
   return screen.getByRole('form', { name: 'Add spend' })
 }
@@ -143,7 +143,7 @@ describe('Auto-total — Fix Memory', () => {
       },
     })
     renderWorkspace()
-    fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
     const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
     fireEvent.click(within(counted).getByRole('button', { name: /fix memory/i }))
 
