@@ -25,6 +25,13 @@ vi.mock('../api', () => ({
   resolveApiUrl: (url: string) => url,
 }))
 
+// Track through the analytics wrapper so the status events can be asserted;
+// the real bucket helpers are kept.
+vi.mock('../analytics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../analytics')>()
+  return { ...actual, track: vi.fn(), identifyAnalyticsUser: vi.fn(), resetAnalyticsUser: vi.fn() }
+})
+
 vi.mock('../useRecorder', () => {
   const mockRecorder: UseRecorderReturn = {
     state: 'idle',
@@ -659,6 +666,43 @@ describe('CurrentJobWorkspace — status editing', () => {
     // back on the normal picker view
     const sheet = screen.getByRole('dialog', { name: /change status/i })
     expect(within(sheet).getByRole('button', { name: /in progress/i })).toBeInTheDocument()
+  })
+
+  it('a successful status change tracks job_status_changed with API enum values only', async () => {
+    const { track } = await import('../analytics')
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'planning' })
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /planning/i }))
+    await waitFor(() => expect(track).toHaveBeenCalledWith('job_status_changed', {
+      job_id: JOB.id, from_status: 'started', to_status: 'planning',
+    }))
+    // no payload ever carries the job title or location
+    expect(JSON.stringify(vi.mocked(track).mock.calls)).not.toMatch(/Garden Room|Oakfield/)
+  })
+
+  it('a failed status change tracks nothing', async () => {
+    const { track } = await import('../analytics')
+    vi.mocked(track).mockClear()
+    vi.mocked(patchJob).mockRejectedValue(new Error('boom'))
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /planning/i }))
+    await screen.findByRole('alert')
+    expect(track).not.toHaveBeenCalled()
+  })
+
+  it('confirming archive tracks job_archived with the job id only', async () => {
+    const { track } = await import('../analytics')
+    vi.mocked(patchJob).mockResolvedValue({ ...JOB, status: 'archived' })
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openStatusSheet(user)
+    await user.click(screen.getByRole('button', { name: /archive job…/i }))
+    await user.click(screen.getByRole('button', { name: /^archive job$/i }))
+    await waitFor(() => expect(track).toHaveBeenCalledWith('job_archived', { job_id: JOB.id }))
   })
 
   it('confirming archive PATCHes status "archived" and adopts the returned job', async () => {

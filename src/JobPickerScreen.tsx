@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createJob } from './api'
+import { track } from './analytics'
 import { jobStatusLabel } from './jobStatus'
 import type { Job, JobType } from './types'
 
@@ -34,6 +35,7 @@ function AddJobForm({
     setError(null)
     try {
       const job = await createJob(title, jobType)
+      track('job_created', { job_id: job.id, job_type: job.jobType })
       onAdded(job)
     } catch {
       setError('Could not add job — check your connection and try again')

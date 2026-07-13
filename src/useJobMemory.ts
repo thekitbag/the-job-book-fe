@@ -9,6 +9,7 @@ import {
   updateMemoryItem,
   verifyMemoryItem,
 } from './api'
+import { track } from './analytics'
 import type { MemoryCardProps } from './MemoryCard'
 import { memoryItemToEdit } from './memoryEdit'
 import {
@@ -143,6 +144,12 @@ export function useJobMemory(job: Job) {
   // budget totals. Throws on create failure so the form can keep the values.
   const addMemoryItem = useCallback(async (req: CreateMemoryItemRequest): Promise<MemoryViewItem> => {
     const created = await createMemoryItem(job.id, req)
+    track('manual_add_saved', {
+      job_id: job.id,
+      memory_type: req.memoryType,
+      has_cost: Boolean(req.costAmount || req.totalCostAmount),
+      has_budget_category: Boolean(req.budgetCategoryId),
+    })
     await refetch()
     void loadBudget()
     return created
@@ -153,6 +160,7 @@ export function useJobMemory(job: Job) {
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
       const updated = await assignMemoryItemCategory(job.id, memoryItemId, categoryId)
+      track('budget_category_assigned', { job_id: job.id, memory_type: updated.memoryType })
       if (currentJobIdRef.current !== job.id) return
       setData(prev => prev ? {
         ...prev,
@@ -174,6 +182,7 @@ export function useJobMemory(job: Job) {
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
       const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
+      track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
       setData(prev => {
         if (!prev) return prev
         let prevItem: MemoryViewItem | undefined
@@ -203,6 +212,7 @@ export function useJobMemory(job: Job) {
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
       await verifyMemoryItem(job.id, memoryItemId)
+      track('memory_verified', { job_id: job.id })
       setData(prev => prev ? {
         ...prev,
         sections: prev.sections.map(s => ({
@@ -224,6 +234,7 @@ export function useJobMemory(job: Job) {
     setSavingNewCategory(true); setBudgetError('')
     try {
       await createBudgetCategory(job.id, { name: name.trim(), budgetAmount: amount.trim() || null })
+      track('budget_category_created', { job_id: job.id, has_budget_amount: Boolean(amount.trim()) })
       setAddingCategory(false)
       await loadBudget()
     } catch { setBudgetError('Could not add category — try again') }
@@ -234,6 +245,7 @@ export function useJobMemory(job: Job) {
     setSavingCatId(categoryId); setBudgetError('')
     try {
       await patchBudgetCategory(job.id, categoryId, { name: name.trim(), budgetAmount: amount.trim() || null })
+      track('budget_category_updated', { job_id: job.id, has_budget_amount: Boolean(amount.trim()) })
       setEditingBudgetId(null)
       await loadBudget()
     } catch { setBudgetError('Could not save category — try again') }
@@ -244,6 +256,7 @@ export function useJobMemory(job: Job) {
     setSavingCatId(categoryId); setBudgetError('')
     try {
       await patchBudgetCategory(job.id, categoryId, { isArchived: true })
+      track('budget_category_archived', { job_id: job.id })
       await loadBudget()
     } catch { setBudgetError('Could not remove category — try again') }
     finally { setSavingCatId(null) }
@@ -258,6 +271,7 @@ export function useJobMemory(job: Job) {
     try {
       if (existing) await patchBudgetCategory(job.id, existing.id, { name: existing.name, budgetAmount: amount.trim() || null })
       else await createBudgetCategory(job.id, { name: 'Labour', budgetAmount: amount.trim() || null })
+      track('labour_budget_updated', { job_id: job.id, has_budget_amount: Boolean(amount.trim()) })
       await loadBudget()
       return true
     } catch {

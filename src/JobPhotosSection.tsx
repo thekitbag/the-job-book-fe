@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getJobPhotos, patchJobPhoto, resolveApiUrl, uploadJobPhoto } from './api'
+import { mimeTypeFamily, sizeBucket, track } from './analytics'
 import type { JobPhoto, MemoryViewItem, PatchJobPhotoRequest } from './types'
 
 // Photos are supporting job context (never a gallery destination, never spend):
@@ -230,17 +231,21 @@ export default function JobPhotosSection({ jobId, linkTargets, onPhotosChanged =
     if (!file || uploading) return
     setUploading(true)
     setUploadError(null)
+    const safeMeta = { job_id: jobId, mime_type_family: mimeTypeFamily(file.type), size_bucket: sizeBucket(file.size) }
+    track('photo_upload_started', safeMeta)
     try {
       await uploadJobPhoto(jobId, {
         file,
         descriptor: descriptor.trim() || null,
         linkedMemoryItemId: linkId || null,
       })
+      track('photo_upload_succeeded', { ...safeMeta, linked_to: linkId ? 'memory_item' : 'none' })
       resetForm()
       setOpen(false)
       await load()
       onPhotosChanged()
     } catch {
+      track('photo_upload_failed', safeMeta)
       setUploadError('Could not upload — check your connection and try again')
     } finally {
       setUploading(false)
@@ -249,6 +254,12 @@ export default function JobPhotosSection({ jobId, linkTargets, onPhotosChanged =
 
   const handlePatch = async (photoId: string, req: PatchJobPhotoRequest) => {
     const updated = await patchJobPhoto(jobId, photoId, req)
+    if ('linkedMemoryItemId' in req || 'linkedNoteId' in req) {
+      track('photo_link_updated', {
+        job_id: jobId,
+        linked_to: updated.linkedMemoryItemId ? 'memory_item' : updated.linkedNoteId ? 'note' : 'none',
+      })
+    }
     setPhotos(prev => prev ? prev.map(p => p.id === photoId ? updated : p) : prev)
   }
 

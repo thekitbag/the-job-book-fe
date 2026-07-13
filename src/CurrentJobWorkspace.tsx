@@ -13,6 +13,7 @@ import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
+import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
 import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
 
@@ -306,6 +307,11 @@ export default function CurrentJobWorkspace({
     setStatusError(null)
     try {
       const updated = await patchJob(job.id, { status })
+      if (status === 'archived') {
+        track('job_archived', { job_id: job.id })
+      } else {
+        track('job_status_changed', { job_id: job.id, from_status: job.status, to_status: status })
+      }
       onJobUpdated(updated)
       closeStatusSheet()
     } catch {
@@ -399,7 +405,12 @@ export default function CurrentJobWorkspace({
   }, [refreshStatus, readyExtractionCount, fetchFacts])
 
   const handleRecord = useCallback(async () => {
-    await recorder.start(async (result) => {
+    const started = await recorder.start(async (result) => {
+      track('record_completed', {
+        job_id: job.id,
+        duration_bucket: durationBucket(result.durationMs),
+        mime_type_family: mimeTypeFamily(result.mimeType),
+      })
       const clientNoteId = crypto.randomUUID()
       const note: LocalNote = {
         clientNoteId,
@@ -425,6 +436,10 @@ export default function CurrentJobWorkspace({
       syncAll()
       loadQueue()
     })
+    // The UI has no cancel affordance mid-recording; the only way a tapped
+    // Record produces no note is a failed start (mic permission denied).
+    if (started) track('record_started', { job_id: job.id })
+    else track('record_cancelled', { job_id: job.id, error_kind: 'PERMISSION_DENIED' })
   }, [recorder, job.id, refreshNotes, syncAll, loadQueue])
 
   const dismissExplainer = useCallback(() => {

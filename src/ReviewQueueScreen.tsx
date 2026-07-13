@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
+import { track } from './analytics'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
 import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, friendlyDayLabel, hourlyTotalGaps, joinWithAnd, formatCostLabel, formatMoney, formatTotalLabel, localDateKey, localNoonISO, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
@@ -725,6 +726,8 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
 
   useEffect(() => { loadQueue() }, [loadQueue])
 
+  useEffect(() => { track('review_queue_opened', { job_id: job.id }) }, [job.id])
+
   const activeCategories: BudgetCategory[] = queue?.budgetCategories ?? []
 
   const handleDecision = useCallback(async (
@@ -754,6 +757,13 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         // Confirming/correcting a Worth-checking draft settles its uncertainty.
         uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
         budgetCategoryId: category,
+      })
+      track('review_decision_submitted', {
+        job_id: job.id,
+        section_key: queue.sections.find(s => s.items.some(it => it.id === itemId))?.key ?? null,
+        action,
+        memory_type: finalType ?? null,
+        has_correction: !!corrected,
       })
       setQueue(q => {
         if (!q) return q
@@ -785,6 +795,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     try {
       // A normal Fix memory save also clears the Worth-checking warning.
       const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
+      track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
       setQueue(q => {
         if (!q) return q
         return {
@@ -807,6 +818,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     setMemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
       await verifyMemoryItem(job.id, memoryItemId)
+      track('memory_verified', { job_id: job.id })
       setQueue(q => {
         if (!q) return q
         return {

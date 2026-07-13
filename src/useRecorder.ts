@@ -36,7 +36,9 @@ export interface UseRecorderReturn {
   elapsedMs: number
   mimeType: string
   permissionError: string | null
-  start: (onComplete: (result: RecordingResult) => void) => Promise<void>
+  // Resolves true once recording has actually started, false when it could
+  // not start (e.g. microphone permission denied).
+  start: (onComplete: (result: RecordingResult) => void) => Promise<boolean>
   stop: () => void
 }
 
@@ -67,7 +69,7 @@ export function useRecorder(): UseRecorderReturn {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Microphone access denied'
       setPermissionError(msg)
-      return
+      return false
     }
 
     const options: MediaRecorderOptions = mimeType ? { mimeType } : {}
@@ -105,6 +107,7 @@ export function useRecorder(): UseRecorderReturn {
         clearTimer()
       }
     }, 250)
+    return true
   }, [mimeType, clearTimer])
 
   const stop = useCallback(() => {

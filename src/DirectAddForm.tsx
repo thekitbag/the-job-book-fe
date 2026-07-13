@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { track } from './analytics'
 import BottomSheet from './BottomSheet'
 import { deriveEachTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryType } from './types'
@@ -324,7 +325,7 @@ export default function DirectAddForm({
               type="button"
               className="btn-lens-add-text"
               aria-expanded={open}
-              onClick={() => { setError(null); setOpen(true) }}
+              onClick={() => { setError(null); setOpen(true); track('manual_add_opened', { kind }) }}
             >
               {label}
             </button>
@@ -335,7 +336,7 @@ export default function DirectAddForm({
           type="button"
           className="btn-add-inline"
           aria-expanded={open}
-          onClick={() => { setError(null); setOpen(true) }}
+          onClick={() => { setError(null); setOpen(true); track('manual_add_opened', { kind }) }}
         >
           {buttonLabel ?? label}
         </button>

@@ -11,6 +11,7 @@ import {
   getSupportUsers,
   resolveApiUrl,
 } from './api'
+import { identifyAnalyticsUser, track } from './analytics'
 import AuthScreen from './AuthScreen'
 import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, formatCostLabel, friendlyDayLabel } from './memoryScan'
 import type {
@@ -555,6 +556,11 @@ export default function SupportModePage() {
     getCurrentUser()
       .then(user => {
         setMe(user)
+        if (user.role === 'INTERNAL') {
+          identifyAnalyticsUser(user)
+          // Role literal only — never the support target's identity.
+          track('support_opened', { role: 'INTERNAL' })
+        }
         setAuthState(user.role === 'INTERNAL' ? 'ready' : 'forbidden')
       })
       .catch((err: unknown) => {
@@ -608,7 +614,7 @@ export default function SupportModePage() {
           <SupportJobList
             user={view.user}
             onInspect={job => setView({ kind: 'inspect', user: view.user, job })}
-            onViewAs={job => setView({ kind: 'viewas', user: view.user, job })}
+            onViewAs={job => { track('support_view_as_opened', { role: 'INTERNAL' }); setView({ kind: 'viewas', user: view.user, job }) }}
             onNoAccess={handleNoAccess}
           />
         </>
@@ -619,7 +625,12 @@ export default function SupportModePage() {
       )}
 
       {view.kind === 'viewas' && (
-        <SupportViewAs user={view.user} job={view.job} onExit={() => exitToJobs(view.user)} onNoAccess={handleNoAccess} />
+        <SupportViewAs
+          user={view.user}
+          job={view.job}
+          onExit={() => { track('support_view_as_exited', { role: 'INTERNAL' }); exitToJobs(view.user) }}
+          onNoAccess={handleNoAccess}
+        />
       )}
     </div>
   )
