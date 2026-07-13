@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { getDraftFacts, getJobPhotos, getReviewQueue, patchJob, resolveApiUrl } from './api'
+import { getDraftFacts, getJobPhotos, getReviewQueue, patchJob } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
@@ -34,7 +34,9 @@ const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'custome
 // cramped top-level tab strip.
 type Section = 'home' | 'spend' | 'labour' | 'materials' | 'joblog'
 type MaterialsTab = 'bought' | 'used' | 'leftover'
-type JobLogFilter = 'all' | 'notes' | 'photos' | 'receipts'
+// Receipts becomes a filter here once receipt support lands — no inert filter
+// until then.
+type JobLogFilter = 'all' | 'notes' | 'photos'
 
 const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
   spend: 'Spend',
@@ -79,7 +81,7 @@ function HomeSectionCards({ total, budgetAmount, labourHours, onOpen }: {
     { section: 'spend', icon: '£', title: 'Spend', context: spendContext },
     { section: 'labour', icon: '⏱', title: 'Labour', context: labourContext },
     { section: 'materials', icon: '🧰', title: 'Materials', context: 'Bought · used · left over' },
-    { section: 'joblog', icon: '📓', title: 'Job log', context: 'Notes · photos · receipts' },
+    { section: 'joblog', icon: '📓', title: 'Job log', context: 'Notes · photos' },
   ]
 
   return (
@@ -104,40 +106,6 @@ function HomeSectionCards({ total, budgetAmount, labourHours, onOpen }: {
   )
 }
 
-// ── Job log: Receipts filter ─────────────────────────────────────────────────
-// A receipt is a photo linked to a bought (ordered material) item — an explicit
-// evidence link the user made, never inferred from descriptors or file
-// contents. No link, no receipt.
-
-function isReceiptPhoto(p: JobPhoto): boolean {
-  return p.linkedMemoryItem?.memoryType === 'ordered_material'
-}
-
-function ReceiptsFilter({ photos }: { photos: JobPhoto[] }) {
-  const receipts = photos.filter(isReceiptPhoto)
-  if (receipts.length === 0) {
-    return (
-      <div className="ws-receipts-empty">
-        <p className="empty-title">No receipts yet</p>
-        <p className="empty-hint">Photos linked to a bought item show up here as receipts. Add a photo in Job log and link it to the spend it proves.</p>
-      </div>
-    )
-  }
-  return (
-    <ul className="ws-receipts-list">
-      {receipts.map(p => (
-        <li key={p.id} className="ws-receipt-row">
-          <img className="ws-receipt-thumb" src={resolveApiUrl(p.imageUrl)} alt={p.descriptor ?? 'Receipt photo'} />
-          <span className="ws-receipt-text">
-            <span className="ws-receipt-headline">{p.descriptor ?? 'Receipt photo'}</span>
-            {p.linkedMemoryItem && <span className="ws-receipt-link">Proof for: {p.linkedMemoryItem.summary}</span>}
-            <span className="ws-receipt-time">{formatSavedStamp(p.uploadedAt)}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 function LatestActivity({ items, onOpenItem }: { items: LatestActivityItem[]; onOpenItem: (item: LatestActivityItem) => void }) {
   if (items.length === 0) return null
@@ -830,7 +798,7 @@ export default function CurrentJobWorkspace({
         {section === 'joblog' && (
           <>
             <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Job log filters">
-              {([['all', 'All'], ['notes', 'Notes'], ['photos', 'Photos'], ['receipts', 'Receipts']] as const).map(([key, label]) => (
+              {([['all', 'All'], ['notes', 'Notes'], ['photos', 'Photos']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   role="tab"
@@ -877,7 +845,6 @@ export default function CurrentJobWorkspace({
             {joblogFilter === 'photos' && (
               <JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />
             )}
-            {joblogFilter === 'receipts' && <ReceiptsFilter photos={photos} />}
           </>
         )}
       </div>

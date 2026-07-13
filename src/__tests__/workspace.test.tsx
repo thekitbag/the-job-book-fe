@@ -572,14 +572,15 @@ describe('CurrentJobWorkspace — Job log workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Open Job log' }))
   }
 
-  it('contains All / Notes / Photos / Receipts filters with All first and no Variations', async () => {
+  it('contains All / Notes / Photos filters with All first — no Receipts or Variations until supported', async () => {
     const user = userEvent.setup()
     renderWorkspace()
     await openJobLog(user)
-    for (const f of ['All', 'Notes', 'Photos', 'Receipts']) {
+    for (const f of ['All', 'Notes', 'Photos']) {
       expect(screen.getByRole('tab', { name: f })).toBeInTheDocument()
     }
     expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('tab', { name: /receipts/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /variations/i })).not.toBeInTheDocument()
   })
 
@@ -609,26 +610,6 @@ describe('CurrentJobWorkspace — Job log workspace', () => {
     expect(screen.getByText('Back fence before ripping out')).toBeInTheDocument()
   })
 
-  it('Receipts shows only photos linked to a bought item — no guessing from other photos', async () => {
-    const user = userEvent.setup()
-    renderWorkspace()
-    await openJobLog(user)
-    await user.click(screen.getByRole('tab', { name: 'Receipts' }))
-    await waitFor(() => expect(screen.getByText('Sydenhams receipt')).toBeInTheDocument())
-    expect(screen.queryByText('Back fence before ripping out')).not.toBeInTheDocument()
-  })
-
-  it('Receipts shows a safe empty state when no photo is linked to a bought item', async () => {
-    vi.mocked(getJobPhotos).mockResolvedValue({
-      jobId: JOB.id,
-      photos: [photo({ id: 'ph-fence', descriptor: 'Back fence before ripping out' })],
-    })
-    const user = userEvent.setup()
-    renderWorkspace()
-    await openJobLog(user)
-    await user.click(screen.getByRole('tab', { name: 'Receipts' }))
-    expect(await screen.findByText(/no receipts yet/i)).toBeInTheDocument()
-  })
 })
 
 describe('CurrentJobWorkspace — latest activity', () => {
