@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390px, VITE_USE_MOCK_API=true. The mock create-memory endpoint is stateful per
 // page load, so direct entries appear on refetch alongside the seeded fixture.
 
@@ -18,7 +28,7 @@ async function gotoApp(page: Page) {
 test.describe('Direct add job detail', () => {
   test('add spend appears in Spend and Record stays visible', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add spend', exact: true }).click()
     const form = page.getByRole('form', { name: 'Add spend' })
@@ -32,7 +42,7 @@ test.describe('Direct add job detail', () => {
 
   test('add labour appears in Labour', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Labour' }).click()
+    await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add labour' }).click()
     const form = page.getByRole('form', { name: 'Add labour' })
@@ -44,7 +54,7 @@ test.describe('Direct add job detail', () => {
 
   test('add used item appears in Used and does not change if reopened', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Used' }).click()
+    await goToSection(page, 'Materials', 'Used')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add used item' }).click()
     const form = page.getByRole('form', { name: 'Add used item' })
@@ -54,9 +64,9 @@ test.describe('Direct add job detail', () => {
     await expect(page.getByText('scaffold boards')).toBeVisible()
   })
 
-  test('add leftover appears under Left over on the Used tab', async ({ page }) => {
+  test('add leftover appears under the Materials Left over tab', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Used' }).click()
+    await goToSection(page, 'Materials', 'Left over')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add leftover' }).click()
     const form = page.getByRole('form', { name: 'Add leftover' })
@@ -67,7 +77,7 @@ test.describe('Direct add job detail', () => {
 
   test('add plain note appears in Notes and is editable', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Notes' }).click()
+    await goToSection(page, 'Job log', 'Notes')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add note' }).click()
     const form = page.getByRole('form', { name: 'Add note' })
@@ -83,7 +93,7 @@ test.describe('Direct add job detail', () => {
 
   test('cancel closes the form without adding', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Notes' }).click()
+    await goToSection(page, 'Job log', 'Notes')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add note' }).click()
     await page.getByRole('form', { name: 'Add note' }).getByRole('button', { name: /cancel/i }).click()

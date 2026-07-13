@@ -123,12 +123,20 @@ describe('CurrentJobWorkspace — shell', () => {
     expect(screen.getByText('14 Oakfield Rd')).toBeInTheDocument()
   })
 
-  it('opens on Overview and exposes the five lens tabs', () => {
+  it('opens on job home with the stable section cards and no global tab strip', () => {
     renderWorkspace()
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
-    for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
-      expect(screen.getByRole('tab', { name: t })).toBeInTheDocument()
+    // the old Overview | Spend | Labour | Used | Notes strip is gone
+    expect(screen.queryByRole('tablist', { name: /job lenses/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
+    for (const card of ['Open Spend', 'Open Labour', 'Open Materials', 'Open Job log']) {
+      expect(screen.getByRole('button', { name: card })).toBeInTheDocument()
     }
+  })
+
+  it('shows no Payments card and no Variations anywhere', () => {
+    renderWorkspace()
+    expect(screen.queryByText(/payments/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/variations?/i)).not.toBeInTheDocument()
   })
 
   it('Switch is always available', () => {
@@ -136,18 +144,35 @@ describe('CurrentJobWorkspace — shell', () => {
     expect(screen.getByRole('button', { name: /switch/i })).toBeInTheDocument()
   })
 
-  it('Record is visible from every tab, and is the ONLY voice action', async () => {
+  it('Record is visible on home and every section workspace, and is the ONLY voice action', async () => {
     const user = userEvent.setup()
     renderWorkspace()
-    for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
-      await user.click(screen.getByRole('tab', { name: t }))
-      // exactly one global Record — no section-level record buttons anywhere
+    expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
+    for (const card of ['Open Spend', 'Open Labour', 'Open Materials', 'Open Job log']) {
+      await user.click(screen.getByRole('button', { name: card }))
       expect(screen.getAllByRole('button', { name: /record/i })).toHaveLength(1)
       expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /job home/i }))
     }
   })
 
-  it('has no category picker on the Overview', () => {
+  it('each section card opens its workspace with a back affordance to job home', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    for (const [card, heading] of [
+      ['Open Spend', 'Spend'], ['Open Labour', 'Labour'],
+      ['Open Materials', 'Materials'], ['Open Job log', 'Job log'],
+    ] as const) {
+      await user.click(screen.getByRole('button', { name: card }))
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+      // the job title stays visible as workspace context
+      expect(screen.getByText('Garden Room')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /job home/i }))
+      expect(screen.getByRole('button', { name: 'Open Spend' })).toBeInTheDocument()
+    }
+  })
+
+  it('has no category picker on the job home', () => {
     renderWorkspace()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
@@ -444,13 +469,13 @@ describe('CurrentJobWorkspace — job status', () => {
   })
 })
 
-describe('CurrentJobWorkspace — Job so far', () => {
+describe('CurrentJobWorkspace — home card context', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
   })
 
-  it('shows known spend (bought + labour) against total budget', async () => {
+  it('the Spend card shows known spend (bought + labour) against total budget', async () => {
     vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
       costSummary: {
         orderedMaterials: { knownSpendAmount: '336', knownSpendCurrency: 'GBP', knownSpendLabel: null, includedMemoryItemIds: [], missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], rows: [] },
@@ -462,16 +487,147 @@ describe('CurrentJobWorkspace — Job so far', () => {
       totals: { budgetAmount: '5000', budgetCurrency: 'GBP', knownSpendAmount: '2270', knownSpendCurrency: 'GBP', remainingAmount: '2730', remainingLabel: null, overBudget: false },
     })
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText(/£2270/)).toBeInTheDocument())
-    expect(screen.getByText(/£5000/)).toBeInTheDocument()
+    const card = screen.getByRole('button', { name: 'Open Spend' })
+    await waitFor(() => expect(card).toHaveTextContent(/£2270/))
+    expect(card).toHaveTextContent(/£5000/)
   })
 
-  it('shows the job-total labour hours, not just today', async () => {
+  it('the Labour card shows the job-total labour hours, not just today', async () => {
     vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
       labourHoursSummary: { totalHours: '24', totalLabel: '24h job total', days: [] },
     }))
     renderWorkspace()
-    await waitFor(() => expect(screen.getByRole('button', { name: /labour hours — open labour/i })).toHaveTextContent('24h'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open Labour' })).toHaveTextContent(/24h/))
+  })
+})
+
+describe('CurrentJobWorkspace — Materials workspace', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
+    vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
+      sections: [
+        { key: 'ordered_materials', label: 'Ordered materials', items: [memItem({ id: 'b1', memoryType: 'ordered_material', summary: '12× OSB sheet' })] },
+        { key: 'used_materials', label: 'Used materials', items: [memItem({ id: 'u1', memoryType: 'used_material', summary: '1× Hardcore' })] },
+        { key: 'leftovers', label: 'Leftovers', items: [memItem({ id: 'l1', memoryType: 'leftover_material', summary: 'Half bag of cement' })] },
+      ],
+    }))
+  })
+
+  async function openMaterials(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Open Materials' }))
+  }
+
+  it('contains Bought / Used / Left over inner tabs with Bought first', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openMaterials(user)
+    for (const t of ['Bought', 'Used', 'Left over']) {
+      expect(screen.getByRole('tab', { name: t })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('tab', { name: 'Bought' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('bought, used, and leftover data all remain reachable', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openMaterials(user)
+    await waitFor(() => expect(screen.getByText('12× OSB sheet')).toBeInTheDocument())
+    await user.click(screen.getByRole('tab', { name: 'Used' }))
+    expect(screen.getByText('1× Hardcore')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Left over' }))
+    expect(screen.getByText('Half bag of cement')).toBeInTheDocument()
+  })
+
+  it('used and leftover items stay addable from their tabs', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openMaterials(user)
+    await user.click(screen.getByRole('tab', { name: 'Used' }))
+    expect(screen.getByRole('button', { name: /add used item/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Left over' }))
+    expect(screen.getByRole('button', { name: /add leftover/i })).toBeInTheDocument()
+  })
+})
+
+describe('CurrentJobWorkspace — Job log workspace', () => {
+  beforeEach(() => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
+    vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
+      sections: [
+        { key: 'general_notes', label: 'Notes', items: [memItem({ id: 'n1', memoryType: 'general_note', summary: 'Customer wants 3× more spots', createdAt: '2026-07-08T10:00:00.000Z' })] },
+      ],
+    }))
+    vi.mocked(getJobPhotos).mockResolvedValue({
+      jobId: JOB.id,
+      photos: [
+        photo({ id: 'ph-receipt', descriptor: 'Sydenhams receipt', linkedMemoryItemId: 'b1', linkedMemoryItem: { id: 'b1', memoryType: 'ordered_material', summary: '12× OSB sheet' } }),
+        photo({ id: 'ph-fence', descriptor: 'Back fence before ripping out' }),
+      ],
+    })
+  })
+
+  async function openJobLog(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Open Job log' }))
+  }
+
+  it('contains All / Notes / Photos / Receipts filters with All first and no Variations', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openJobLog(user)
+    for (const f of ['All', 'Notes', 'Photos', 'Receipts']) {
+      expect(screen.getByRole('tab', { name: f })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('tab', { name: /variations/i })).not.toBeInTheDocument()
+  })
+
+  it('All shows notes and photos together', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openJobLog(user)
+    await waitFor(() => expect(screen.getByText(/customer wants 3× more spots/i)).toBeInTheDocument())
+    expect(screen.getByText(/back fence before ripping out/i)).toBeInTheDocument()
+  })
+
+  it('existing notes remain reachable and addable under Notes', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openJobLog(user)
+    await user.click(screen.getByRole('tab', { name: 'Notes' }))
+    await waitFor(() => expect(screen.getByText(/customer wants 3× more spots/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /add note/i })).toBeInTheDocument()
+  })
+
+  it('existing photos remain reachable under Photos', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openJobLog(user)
+    await user.click(screen.getByRole('tab', { name: 'Photos' }))
+    await waitFor(() => expect(screen.getByText('Sydenhams receipt')).toBeInTheDocument())
+    expect(screen.getByText('Back fence before ripping out')).toBeInTheDocument()
+  })
+
+  it('Receipts shows only photos linked to a bought item — no guessing from other photos', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openJobLog(user)
+    await user.click(screen.getByRole('tab', { name: 'Receipts' }))
+    await waitFor(() => expect(screen.getByText('Sydenhams receipt')).toBeInTheDocument())
+    expect(screen.queryByText('Back fence before ripping out')).not.toBeInTheDocument()
+  })
+
+  it('Receipts shows a safe empty state when no photo is linked to a bought item', async () => {
+    vi.mocked(getJobPhotos).mockResolvedValue({
+      jobId: JOB.id,
+      photos: [photo({ id: 'ph-fence', descriptor: 'Back fence before ripping out' })],
+    })
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openJobLog(user)
+    await user.click(screen.getByRole('tab', { name: 'Receipts' }))
+    expect(await screen.findByText(/no receipts yet/i)).toBeInTheDocument()
   })
 })
 
@@ -491,7 +647,7 @@ describe('CurrentJobWorkspace — latest activity', () => {
     expect(screen.getByText('Photo')).toBeInTheDocument()
   })
 
-  it('tapping a labour activity row switches to the Labour tab', async () => {
+  it('tapping a labour activity row opens the Labour workspace', async () => {
     vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
       sections: [{
         key: 'labour', label: 'Labour',
@@ -502,10 +658,10 @@ describe('CurrentJobWorkspace — latest activity', () => {
     renderWorkspace()
     const row = await screen.findByRole('button', { name: /labour.*footings/i })
     await user.click(row)
-    expect(screen.getByRole('tab', { name: 'Labour' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Labour' })).toBeInTheDocument()
   })
 
-  it('tapping a photo activity row switches to the Notes tab', async () => {
+  it('tapping a photo activity row opens Job log on the Photos filter', async () => {
     vi.mocked(getJobPhotos).mockResolvedValue({
       jobId: JOB.id,
       photos: [photo({ id: 'photo-9', descriptor: 'Jewson receipt', uploadedAt: '2026-07-08T09:15:00.000Z' })],
@@ -514,7 +670,23 @@ describe('CurrentJobWorkspace — latest activity', () => {
     renderWorkspace()
     const row = await screen.findByRole('button', { name: /photo.*jewson receipt/i })
     await user.click(row)
-    expect(screen.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Job log' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Photos' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('tapping a used-material activity row opens Materials on the Used tab', async () => {
+    vi.mocked(getMemoryView).mockResolvedValue(memoryViewWith({
+      sections: [{
+        key: 'used_materials', label: 'Used materials',
+        items: [memItem({ id: 'u1', memoryType: 'used_material', summary: '1× Hardcore', createdAt: '2026-07-08T09:00:00.000Z' })],
+      }],
+    }))
+    const user = userEvent.setup()
+    renderWorkspace()
+    const row = await screen.findByRole('button', { name: /used.*hardcore/i })
+    await user.click(row)
+    expect(screen.getByRole('heading', { name: 'Materials' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Used' })).toHaveAttribute('aria-selected', 'true')
   })
 })
 

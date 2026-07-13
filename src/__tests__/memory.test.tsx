@@ -140,25 +140,37 @@ beforeEach(() => {
 function renderWorkspace(job: Job = JOB) {
   return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={onOpenReviewQueue} onSwitchJob={onSwitchJob} />)
 }
-// Navigate to a lens tab.
-function openTab(name: RegExp | string) {
-  fireEvent.click(screen.getByRole('tab', { name }))
+// Navigate to a lens in the new job-home model: sections are cards on home,
+// Used lives inside Materials, and Notes lives inside Job log.
+function openTab(name: string) {
+  const back = screen.queryByRole('button', { name: /job home/i })
+  if (back) fireEvent.click(back)
+  if (name === 'Used') {
+    fireEvent.click(screen.getByRole('button', { name: 'Open Materials' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Used' }))
+  } else if (name === 'Notes') {
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Notes' }))
+  } else {
+    fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }))
+  }
 }
 // The Spend tab's Known-spend hero region.
 const spendHero = () => screen.findByRole('region', { name: /^known spend$/i })
 
-describe('Workspace — shell / tabs', () => {
-  it('shows the job title and the five lens tabs', async () => {
+describe('Workspace — shell / home', () => {
+  it('shows the job title and the stable section cards', async () => {
     renderWorkspace()
     expect(screen.getByRole('heading', { name: 'Garden Room' })).toBeTruthy()
-    for (const t of ['Overview', 'Spend', 'Labour', 'Used', 'Notes']) {
-      expect(screen.getByRole('tab', { name: t })).toBeTruthy()
+    for (const card of ['Open Spend', 'Open Labour', 'Open Materials', 'Open Job log']) {
+      expect(screen.getByRole('button', { name: card })).toBeTruthy()
     }
   })
 
-  it('opens on Overview by default', async () => {
+  it('opens on job home by default with no global tab strip', async () => {
     renderWorkspace()
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open Spend' })).toBeTruthy()
   })
 
   it('Switch calls onSwitchJob', async () => {

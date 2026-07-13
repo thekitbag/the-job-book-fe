@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390×844, VITE_USE_MOCK_API=true. Garden-room is seeded with budget categories
 // (timber/cladding/electrics). The review queue includes a bought timber draft
 // (suggests 'timber') and a bought hardcore draft (no suggestion). Job memory's
@@ -32,7 +42,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     // Back to capture, open Job memory — the confirmed timber spend (£120) now
     // sits under the timber budget category.
     await page.getByRole('button', { name: /back/i }).click()
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(900)
     const timberCat = page.getByRole('region', { name: /budget category timber/i })
     await expect(timberCat.getByText('£120 known spend')).toBeVisible()
@@ -57,7 +67,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
   test('Job memory Spend tab shows one Known spend with category cards', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(900)
 
     // single job-level Known spend (bought £1390 + labour £880 = £2270)

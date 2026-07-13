@@ -100,7 +100,7 @@ function renderWorkspace(job: Job = JOB) {
   return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 async function openSpend() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
   return screen.findByRole('region', { name: /not counted yet/i })
 }
 

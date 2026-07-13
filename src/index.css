@@ -3587,57 +3587,82 @@ code {
   padding: 0.2rem 0.1rem;
 }
 
-/* — Job so far: one consolidated card, row-per-signal — */
-.ws-jsf { display: flex; flex-direction: column; gap: 0.5rem; }
-.ws-jsf-card {
+/* — Job home: stable section cards — */
+.ws-home-cards { display: flex; flex-direction: column; gap: 0.6rem; }
+.ws-home-card {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 0.9rem 1rem;
+  min-height: 64px;
+  cursor: pointer;
+}
+.ws-home-card:active { background: var(--surface-sunk); }
+.ws-home-card-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink-700);
+}
+.ws-home-card-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.ws-home-card-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--ink-900);
+}
+.ws-home-card-context {
+  font-size: var(--text-sm);
+  color: var(--ink-500);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-home-card-chev { margin-left: auto; color: var(--ink-400); font-size: 1.2rem; font-weight: 700; }
+
+/* — Section workspace header + inner tabs — */
+.ws-header--section .ws-job-title { font-size: var(--text-xl); }
+.ws-tabs--inner { position: static; border-bottom: none; padding-top: 0; margin-top: -0.35rem; }
+
+/* — Job log: receipts filter — */
+.ws-receipts-empty { padding: 0.4rem 0.2rem; }
+.ws-receipts-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.ws-receipt-row {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
-  overflow: hidden;
+  padding: 0.7rem 0.8rem;
 }
-.ws-jsf-row {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  border: none;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  padding: 0.9rem 1rem;
+.ws-receipt-thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+  background: var(--surface-sunk);
 }
-.ws-jsf-row:active { background: var(--surface-sunk); }
-.ws-jsf-row-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-.ws-jsf-label { color: var(--ink-700); font-size: var(--text-md); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-.ws-jsf-value {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 800;
-  color: var(--ink-900);
-  text-align: right;
-}
-.ws-jsf-value-of { font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600; color: var(--ink-500); }
-.ws-jsf-divider { border-top: 1px solid var(--line); margin: 0 1rem; }
-.ws-card-bar {
-  display: block;
-  width: 100%;
-  height: 7px;
-  border-radius: var(--r-pill);
-  background: var(--line-strong);
-  overflow: hidden;
-  margin: 0.5rem 0 0;
-}
-.ws-card-bar > span {
-  display: block;
-  height: 100%;
-  background: var(--green-600);
-  border-radius: var(--r-pill);
-}
+.ws-receipt-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.ws-receipt-headline { font-weight: 700; color: var(--ink-900); }
+.ws-receipt-link { font-size: var(--text-sm); color: var(--ink-500); }
+.ws-receipt-time { font-size: var(--text-xs); color: var(--ink-400); }
 
 /* — Latest on this job — */
 .ws-latest { display: flex; flex-direction: column; gap: 0.5rem; }

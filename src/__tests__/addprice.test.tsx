@@ -82,7 +82,7 @@ function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 async function openNotCounted() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Spend' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
   return screen.findByRole('region', { name: /not counted yet/i })
 }
 

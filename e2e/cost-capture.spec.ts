@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390px, VITE_USE_MOCK_API=true. Job memory "What I've bought" tab.
 // Seeded garden-room: Known spend £1390 (hardcore £40 + plasterboard £1200 + agency invoice £150),
 // budgets timber £4000 + cladding £2000 (£6000). Not counted: timber (no price,
@@ -9,7 +19,7 @@ async function openBought(page: Page) {
   await page.goto('/')
   const explainer = page.getByRole('button', { name: /got it/i })
   if (await explainer.isVisible().catch(() => false)) await explainer.click()
-  await page.getByRole('tab', { name: 'Spend' }).click()
+  await goToSection(page, 'Spend')
   await page.waitForTimeout(800)
 }
 

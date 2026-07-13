@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390px, VITE_USE_MOCK_API=true. The seeded garden-room ordered materials include
 // insulation (£120, approx, 4 packs) and sealant (£15, no quantity) — both have a
 // money amount but an unclear cost basis, so they are excluded from known spend
@@ -15,7 +25,7 @@ async function openSpend(page: Page) {
     await page.getByRole('button', { name: /sign in/i }).click()
     await page.waitForTimeout(400)
   }
-  await page.getByRole('tab', { name: 'Spend' }).click()
+  await goToSection(page, 'Spend')
   await page.waitForTimeout(700)
 }
 

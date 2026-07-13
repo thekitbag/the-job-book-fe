@@ -5,6 +5,7 @@ import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
 
 const SECTION_HEADINGS: Record<string, string> = {
+  ordered_materials: 'Bought',
   used_materials: 'Used',
   leftovers: 'Left over',
   general_notes: 'Notes',
@@ -16,6 +17,7 @@ const SECTION_HEADINGS: Record<string, string> = {
 // Plain-language empty copy per addable section (Manual Add V2). Manual add is
 // the only action offered — Record stays global.
 const SECTION_EMPTY: Record<string, { title: string; hint: string }> = {
+  ordered_materials: { title: 'Nothing bought yet', hint: 'Say what you bought or ordered for this job, or add it yourself.' },
   used_materials: { title: 'Nothing logged yet', hint: 'Say what you used on this job, or add it yourself.' },
   leftovers: { title: 'Nothing logged yet', hint: 'Note what’s left over so it isn’t wasted.' },
 }

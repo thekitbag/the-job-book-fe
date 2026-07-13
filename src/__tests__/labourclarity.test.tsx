@@ -96,7 +96,9 @@ function renderWorkspace(job: Job = JOB) {
   return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} onJobUpdated={onJobUpdated} />)
 }
 function openTab(name: string) {
-  fireEvent.click(screen.getByRole('tab', { name }))
+  const back = screen.queryByRole('button', { name: /job home/i })
+  if (back) fireEvent.click(back)
+  fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }))
 }
 
 describe('Labour tab — budget context from budgetSummary.labour', () => {

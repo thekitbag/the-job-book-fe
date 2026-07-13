@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390px, VITE_USE_MOCK_API=true. Job memory now lives as lens tabs inside the
 // current-job workspace: Overview · Spend · Labour · Used · Notes. Mock
 // garden-room fixture: bought (hardcore/plasterboard/timber/insulation/
@@ -20,7 +30,7 @@ async function gotoApp(page: Page) {
 
 async function openSpend(page: Page) {
   await gotoApp(page)
-  await page.getByRole('tab', { name: 'Spend' }).click()
+  await goToSection(page, 'Spend')
   await page.waitForTimeout(800)
 }
 
@@ -32,21 +42,22 @@ test.describe('Job memory lens tabs', () => {
 
   test('opens the Spend tab with a single Known spend figure', async ({ page }) => {
     await openSpend(page)
-    await expect(page.getByRole('tab', { name: 'Spend' })).toBeVisible()
+    await expect(page.locator('.ws-job-title')).toHaveText('Spend')
     await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2270/)).toBeVisible()
   })
 
-  test('Used tab lists used + leftover, flagging worth-checking', async ({ page }) => {
+  test('Materials keeps used and leftover reachable, flagging worth-checking', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Used' }).click()
+    await goToSection(page, 'Materials', 'Used')
     await expect(page.getByText('OSB')).toBeVisible()
+    await page.getByRole('tab', { name: 'Left over' }).click()
     const sand = page.locator('.mem-card', { hasText: 'in the van' })
     await expect(sand.getByText('Worth checking')).toBeVisible()
   })
 
   test('Notes tab shows supplier notes and watch-outs', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Notes' }).click()
+    await goToSection(page, 'Job log', 'Notes')
     await expect(page.getByText(/uneven floor near back door/i)).toBeVisible()
   })
 

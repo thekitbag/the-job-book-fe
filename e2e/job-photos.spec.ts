@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390×844, VITE_USE_MOCK_API=true — Photos in the job record.
 // Mock seed (garden-room job): a "Jewson receipt" photo (descriptor, today),
 // a photo linked to the plasterboard memory item, and an unlinked photo.
@@ -24,7 +34,7 @@ async function gotoApp(page: Page) {
 }
 
 async function openPhotos(page: Page) {
-  await page.getByRole('tab', { name: 'Notes' }).click()
+  await goToSection(page, 'Job log', 'Photos')
   await page.waitForTimeout(700)
   return page.getByRole('region', { name: /job photos/i })
 }
@@ -43,7 +53,7 @@ test.describe('Job photos', () => {
     await gotoApp(page)
 
     // baseline known spend from the Spend hero
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
     const hero = page.getByRole('region', { name: /^known spend$/i })
     await expect(hero.getByText(/£2270/)).toBeVisible()
@@ -59,7 +69,7 @@ test.describe('Job photos', () => {
     await expect(section.locator('.photo-card').first().locator('img[alt="Job photo"]')).toBeVisible()
 
     // receipt/photo upload must not change known spend
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
     await expect(hero.getByText(/£2270/)).toBeVisible()
   })

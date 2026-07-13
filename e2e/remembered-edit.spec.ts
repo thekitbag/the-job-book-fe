@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390px (playwright.config.ts), VITE_USE_MOCK_API=true.
 // Mock memory view: Ordered (hardcore) + Used (OSB).
 // Mock review queue remembered: scaffolding (ordered) + uneven floor (watch-out).
@@ -19,7 +29,7 @@ async function signIn(page: Page) {
 test.describe('Remembered-memory edit & focus', () => {
   test('Job memory: Fix memory updates a bought note in place', async ({ page }) => {
     await signIn(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
 
     // hardcore is the uncategorised counted bought note.
@@ -38,7 +48,7 @@ test.describe('Remembered-memory edit & focus', () => {
 
   test('Job memory: changing a bought note type moves it to the Notes tab', async ({ page }) => {
     await signIn(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
 
     const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
@@ -49,7 +59,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await page.waitForTimeout(600)
 
     // It left the bought tab; it now appears under the Notes tab's Customer changes.
-    await page.getByRole('tab', { name: /notes/i }).click()
+    await goToSection(page, 'Job log', 'Notes')
     await expect(page.getByRole('heading', { name: 'Customer changes' })).toBeVisible()
   })
 

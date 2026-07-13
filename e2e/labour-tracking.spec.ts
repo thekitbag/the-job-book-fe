@@ -1,5 +1,15 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390×844, VITE_USE_MOCK_API=true — Labour Tracking V2.
 // Mock seed (garden-room job): labour today = Mike 4h + Kurt 6h (one note) +
 // Tom 8h electrics (£280, labour category) + worth-checking "about 5"; labour
@@ -21,7 +31,7 @@ async function gotoApp(page: Page) {
 test.describe('Labour tab — daily view', () => {
   test('groups labour by day with day totals and a job total', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Labour' }).click()
+    await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
 
     // Job total: today 4+6+8 = 18h, yesterday 6h → 24h (worth-checking excluded).
@@ -45,7 +55,7 @@ test.describe('Labour tab — daily view', () => {
 
   test('direct-add labour for another day appears under that day', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Labour' }).click()
+    await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
     await page.getByRole('button', { name: 'Add labour' }).click()
     const form = page.getByRole('form', { name: 'Add labour' })
@@ -68,7 +78,7 @@ test.describe('Labour tab — daily view', () => {
 
   test('edit labour day/hours/task moves the entry and updates totals', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Labour' }).click()
+    await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
 
     // fix Mike's entry: 4h → 7h and move it to yesterday
@@ -108,7 +118,7 @@ test.describe('Labour tab — daily view', () => {
     await page.waitForTimeout(400)
 
     await page.getByRole('button', { name: /back/i }).click()
-    await page.getByRole('tab', { name: 'Labour' }).click()
+    await goToSection(page, 'Labour')
     await page.waitForTimeout(700)
     // confirmed drafts join today's group: 18h seed + 4 + 6 = 28h
     const today = page.getByRole('region', { name: 'Labour Today' })
@@ -119,7 +129,7 @@ test.describe('Labour tab — daily view', () => {
 test.describe('Spend tab — Labour group', () => {
   test('trusted labour shows once under Labour with the category budget; hours-only is not spend', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(900)
 
     // Labour group: £280 (rated, categorised) + £600 (total, NO category) = £880,

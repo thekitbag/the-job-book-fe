@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 // 390×844, VITE_USE_MOCK_API=true — regression: budget categories must be
 // creatable before any spend/labour exists. A freshly created job starts
 // with genuinely no remembered spend (see mock/state.ts MOCK_SEED_JOB_ID),
@@ -32,7 +42,7 @@ test.describe('Budget setup before spend', () => {
 
   test('a brand new job with no spend still offers a way to add a budget category', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion')
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(700)
 
     await expect(page.getByText(/nothing spent yet/i)).toBeVisible()
@@ -41,7 +51,7 @@ test.describe('Budget setup before spend', () => {
 
   test('adding a category before any spend shows an empty category card, and Add to <category> still works', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion 2')
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(700)
 
     await page.getByRole('button', { name: /add budget category/i }).click()
@@ -64,7 +74,7 @@ test.describe('Budget setup before spend', () => {
 
   test('Record stays visible throughout the empty-Spend budget setup flow', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion 3')
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(700)
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
 

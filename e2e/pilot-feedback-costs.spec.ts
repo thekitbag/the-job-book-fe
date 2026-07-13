@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test'
 
+// New job-home navigation: sections are cards on home; Used/Left over live in
+// Materials, Notes/Photos live in Job log.
+async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+  const back = page.getByRole('button', { name: /job home/i })
+  if (await back.isVisible().catch(() => false)) await back.click()
+  await page.getByRole('button', { name: `Open ${section}` }).click()
+  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
+}
+
+
 test.describe('Pilot feedback: memory detail and costs', () => {
   test('queue card shows labelled cost rows without expanding source', async ({ page }) => {
     await page.goto('/')
@@ -63,7 +73,7 @@ test.describe('Pilot feedback: memory detail and costs', () => {
 
   test('Fix 3: bought tab renders Known spend and bought notes with cost', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await goToSection(page, 'Spend')
     await page.waitForTimeout(800)
 
     await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2270/)).toBeVisible()
