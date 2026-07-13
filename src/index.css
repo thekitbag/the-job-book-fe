@@ -3698,6 +3698,101 @@ code {
 .ws-type-chip--labour { background: #eae6fb; color: #5a44b3; }
 .ws-type-chip--note   { background: #eef1f4; color: var(--ink-700); }
 .ws-type-chip--photo  { background: #fdeee0; color: #b3612b; }
+.ws-type-chip--payment { background: #e3f3e9; color: var(--green-700); }
+
+/* — Payments workspace (money in — visually separate from Spend) — */
+.pay-section { display: flex; flex-direction: column; gap: 1rem; }
+.pay-summary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.pay-summary-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+.pay-summary-label { color: var(--ink-700); font-size: var(--text-md); font-weight: 600; }
+.pay-summary-value {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--ink-900);
+}
+.pay-overpaid {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--r-md);
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-line);
+  color: var(--amber-fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.pay-edit-total {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--green-700);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: 0.2rem 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.pay-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.pay-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.pay-row-main { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+.pay-row-amount { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 800; color: var(--ink-900); }
+.pay-row-when { font-size: var(--text-xs); color: var(--ink-500); }
+.pay-row-meta { margin: 0; font-size: var(--text-sm); color: var(--ink-700); }
+.pay-row-actions { display: flex; align-items: center; gap: 0.6rem; }
+.pay-row-action {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-700);
+  border-radius: var(--r-pill);
+  padding: 0.3rem 0.75rem;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  min-height: 32px;
+  cursor: pointer;
+}
+.pay-row-action--danger { color: var(--red-600); border-color: var(--red-500); }
+.pay-delete-copy { font-size: var(--text-sm); color: var(--ink-700); font-weight: 600; }
+.pay-delete-confirm {
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--red-600);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  padding: 0.35rem 0.8rem;
+  min-height: 32px;
+  cursor: pointer;
+}
+.pay-form { display: flex; flex-direction: column; gap: 0.8rem; }
+.pay-form-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.pay-clear-total {
+  border: 1px solid var(--red-500);
+  background: var(--surface);
+  color: var(--red-600);
+  border-radius: var(--r-pill);
+  padding: 0.45rem 0.9rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
 
 .mem-section-summary {
   font-weight: 800;

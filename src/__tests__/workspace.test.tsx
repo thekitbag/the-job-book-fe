@@ -22,6 +22,18 @@ vi.mock('../api', () => ({
   getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001', title: 'Garden Room', jobType: 'garden_room', roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] }, costSummary: undefined })),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
   patchJob: vi.fn(),
+  getJobPayments: vi.fn(() => Promise.resolve({
+    jobId: 'job-test-001', generatedAt: '',
+    customerTotalAmount: null, customerTotalCurrency: null, customerTotalLabel: null,
+    totalPaidAmount: null, totalPaidCurrency: null, totalPaidLabel: null,
+    stillOwedAmount: null, stillOwedCurrency: null, stillOwedLabel: null,
+    overpaid: false, overpaidAmount: null, overpaidLabel: null,
+    payments: [],
+  })),
+  patchCustomerTotal: vi.fn(),
+  createJobPayment: vi.fn(),
+  patchJobPayment: vi.fn(),
+  deleteJobPayment: vi.fn(),
   resolveApiUrl: (url: string) => url,
 }))
 
@@ -128,14 +140,13 @@ describe('CurrentJobWorkspace — shell', () => {
     // the old Overview | Spend | Labour | Used | Notes strip is gone
     expect(screen.queryByRole('tablist', { name: /job lenses/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
-    for (const card of ['Open Spend', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Spend', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
       expect(screen.getByRole('button', { name: card })).toBeInTheDocument()
     }
   })
 
-  it('shows no Payments card and no Variations anywhere', () => {
+  it('shows no Variations anywhere', () => {
     renderWorkspace()
-    expect(screen.queryByText(/payments/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/variations?/i)).not.toBeInTheDocument()
   })
 
@@ -148,7 +159,7 @@ describe('CurrentJobWorkspace — shell', () => {
     const user = userEvent.setup()
     renderWorkspace()
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
-    for (const card of ['Open Spend', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Spend', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
       await user.click(screen.getByRole('button', { name: card }))
       expect(screen.getAllByRole('button', { name: /record/i })).toHaveLength(1)
       expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
@@ -160,7 +171,7 @@ describe('CurrentJobWorkspace — shell', () => {
     const user = userEvent.setup()
     renderWorkspace()
     for (const [card, heading] of [
-      ['Open Spend', 'Spend'], ['Open Labour', 'Labour'],
+      ['Open Spend', 'Spend'], ['Open Payments', 'Payments'], ['Open Labour', 'Labour'],
       ['Open Materials', 'Materials'], ['Open Job log', 'Job log'],
     ] as const) {
       await user.click(screen.getByRole('button', { name: card }))
