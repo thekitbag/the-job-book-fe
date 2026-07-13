@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { signup, login, requestPasswordReset, confirmPasswordReset, ApiError } from './api'
+import { identifyAnalyticsUser, track } from './analytics'
 import type { AuthUser } from './types'
 
 type Mode = 'login' | 'signup' | 'reset-request' | 'reset-confirm'
@@ -38,6 +39,8 @@ export default function AuthScreen({ onAuthSuccess }: { onAuthSuccess: (user: Au
     setSubmitting(true)
     try {
       const user = await login(email.trim(), password)
+      identifyAnalyticsUser(user)
+      track('auth_login_succeeded', { role: user.role })
       onAuthSuccess(user)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : NETWORK_ERROR)
@@ -52,6 +55,8 @@ export default function AuthScreen({ onAuthSuccess }: { onAuthSuccess: (user: Au
     setSubmitting(true)
     try {
       const user = await signup(email.trim(), password, name.trim() || undefined)
+      identifyAnalyticsUser(user)
+      track('auth_signup_succeeded', { role: user.role })
       onAuthSuccess(user)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : NETWORK_ERROR)
@@ -67,6 +72,7 @@ export default function AuthScreen({ onAuthSuccess }: { onAuthSuccess: (user: Au
     try {
       // Backend always resolves here — never reveals whether the email exists.
       await requestPasswordReset(email.trim())
+      track('auth_password_reset_requested')
       setResetRequestSent(true)
     } catch {
       setError(NETWORK_ERROR)
@@ -83,6 +89,8 @@ export default function AuthScreen({ onAuthSuccess }: { onAuthSuccess: (user: Au
     try {
       // A successful confirm sets the session cookie — log straight in.
       const user = await confirmPasswordReset(resetToken, newPassword)
+      identifyAnalyticsUser(user)
+      track('auth_password_reset_confirmed', { role: user.role })
       onAuthSuccess(user)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : NETWORK_ERROR)

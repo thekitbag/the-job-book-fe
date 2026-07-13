@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getCurrentUser, getJobs, logout, onUnauthorized, ApiError } from './api'
+import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
@@ -124,7 +125,14 @@ export default function App() {
   // just means no internal extras are shown.
   useEffect(() => {
     if (appState !== 'ready' && appState !== 'noJobs') return
-    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null))
+    getCurrentUser()
+      .then(u => {
+        setCurrentUser(u)
+        // Restored sessions never pass through AuthScreen — identify here so a
+        // returning user's events are attributed (id + role only, never email).
+        identifyAnalyticsUser(u)
+      })
+      .catch(() => setCurrentUser(null))
   }, [appState])
 
   // A job edit (title rename, status change) must update everywhere the job
@@ -160,7 +168,12 @@ export default function App() {
     })
   }
 
-  function handleSelectJob(job: Job) {
+  // `cause` keeps job_switched meaning a deliberate switch: selecting the job
+  // that was just created is part of job_created, not a switch.
+  function handleSelectJob(job: Job, cause: 'switch' | 'created' = 'switch') {
+    if (cause === 'switch' && selectedJob && selectedJob.id !== job.id) {
+      track('job_switched', { job_id: job.id })
+    }
     setSelectedJob(job)
     localStorage.setItem(SELECTED_JOB_ID_KEY, job.id)
     setView('workspace')
@@ -171,17 +184,21 @@ export default function App() {
     setJobs(updated)
     localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(updated))
     setAppState('ready')
-    handleSelectJob(job)
+    handleSelectJob(job, 'created')
   }
 
   // Clear local state regardless of whether the backend call succeeds — the
   // priority is never showing this account's data again once Mike has logged out.
   async function handleLogout() {
+    track('auth_logout')
     try {
       await logout()
     } catch {
       // ignored — local state is cleared unconditionally below
     }
+    // Reset after the logout event so it is still attributed to the user,
+    // and before local state clears so no later event carries this identity.
+    resetAnalyticsUser()
     clearLocalJobData()
     setJobs([])
     setSelectedJob(null)

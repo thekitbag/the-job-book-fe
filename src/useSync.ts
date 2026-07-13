@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getAllNotes, getPendingNotes, patchNote, resetInterruptedUploads } from './db'
 import { uploadNote as apiUploadNote } from './api'
+import { mimeTypeFamily, safeErrorKind, track } from './analytics'
 import type { LocalNote } from './types'
 
 const MAX_ATTEMPTS = 5
@@ -20,13 +21,16 @@ export function useSync(onNotesChanged: () => void) {
       lastUploadAttemptAt: new Date().toISOString(),
     })
     onChangedRef.current()
+    track('note_upload_started', { job_id: note.jobId, mime_type_family: mimeTypeFamily(note.mimeType) })
 
     try {
       const { noteId } = await apiUploadNote(note)
       await patchNote(note.clientNoteId, { localState: 'uploaded', serverNoteId: noteId })
+      track('note_upload_succeeded', { job_id: note.jobId, mime_type_family: mimeTypeFamily(note.mimeType) })
     } catch (err) {
       const newCount = note.uploadAttemptCount + 1
       const code = err instanceof Error ? err.message : 'UNKNOWN'
+      track('note_upload_failed', { job_id: note.jobId, error_kind: safeErrorKind(code) })
       await patchNote(note.clientNoteId, {
         localState: newCount >= MAX_ATTEMPTS ? 'upload_needs_attention' : 'upload_failed',
         uploadAttemptCount: newCount,
