@@ -663,7 +663,7 @@ export interface LabourTodaySummary {
   perPerson: { person: string; hours: number }[]
 }
 
-export type LatestActivityType = 'bought' | 'used' | 'labour' | 'note' | 'photo'
+export type LatestActivityType = 'bought' | 'used' | 'labour' | 'note' | 'photo' | 'payment'
 
 export interface LatestActivityItem {
   memoryItemId: string
@@ -827,4 +827,67 @@ export interface SupportJob {
 export interface SupportUserJobsResponse {
   user: SupportUser
   jobs: SupportJob[]
+}
+
+// ── Customer payments (money in — deliberately separate from spend) ──────────
+
+// GET /api/jobs/:jobId/payments — summary plus active history, newest first.
+export interface JobPaymentsResponse {
+  jobId: string
+  generatedAt: string
+
+  customerTotalAmount: string | null
+  customerTotalCurrency: 'GBP' | null
+  customerTotalLabel: string | null
+
+  totalPaidAmount: string | null
+  totalPaidCurrency: 'GBP' | null
+  totalPaidLabel: string | null
+
+  stillOwedAmount: string | null
+  stillOwedCurrency: 'GBP' | null
+  stillOwedLabel: string | null
+
+  overpaid: boolean
+  overpaidAmount: string | null
+  overpaidLabel: string | null
+
+  payments: JobPayment[]
+}
+
+export interface JobPayment {
+  id: string
+  jobId: string
+  amount: string
+  currency: 'GBP'
+  amountLabel: string
+  paidAt: string
+  note: string | null
+  reference: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// PATCH /api/jobs/:jobId/payments/customer-total — null clears the total.
+export interface PatchCustomerTotalRequest {
+  customerTotalAmount: string | null
+  customerTotalCurrency?: 'GBP'
+}
+
+// POST /api/jobs/:jobId/payments
+export interface CreateJobPaymentRequest {
+  amount: string
+  currency?: 'GBP'
+  paidAt: string // ISO datetime or YYYY-MM-DD
+  note?: string | null
+  reference?: string | null
+}
+
+// PATCH /api/jobs/:jobId/payments/:paymentId — omitted preserves, null clears.
+export interface PatchJobPaymentRequest {
+  amount?: string
+  currency?: 'GBP'
+  paidAt?: string
+  note?: string | null
+  reference?: string | null
 }

@@ -13,9 +13,10 @@ import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
+import PaymentsSection, { usePayments } from './PaymentsSection'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobPaymentsResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -32,7 +33,7 @@ const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'custome
 // not a tab. The four sections are stable workspaces — future Payments becomes
 // a fifth card here, and Variations becomes a Job log filter, without another
 // cramped top-level tab strip.
-type Section = 'home' | 'spend' | 'labour' | 'materials' | 'joblog'
+type Section = 'home' | 'spend' | 'payments' | 'labour' | 'materials' | 'joblog'
 type MaterialsTab = 'bought' | 'used' | 'leftover'
 // Receipts becomes a filter here once receipt support lands — no inert filter
 // until then.
@@ -40,6 +41,7 @@ type JobLogFilter = 'all' | 'notes' | 'photos'
 
 const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
   spend: 'Spend',
+  payments: 'Payments',
   labour: 'Labour',
   materials: 'Materials',
   joblog: 'Job log',
@@ -54,6 +56,7 @@ const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'hom
   labour: { section: 'labour' },
   note: { section: 'joblog', joblogFilter: 'notes' },
   photo: { section: 'joblog', joblogFilter: 'photos' },
+  payment: { section: 'payments' },
 }
 
 // ── Job home: stable section cards ───────────────────────────────────────────
@@ -61,10 +64,11 @@ const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'hom
 // other two describe what lives inside. Cards render even while memory is
 // loading or failed — navigation must never disappear with the data.
 
-function HomeSectionCards({ total, budgetAmount, labourHours, onOpen }: {
+function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, onOpen }: {
   total: TotalKnownCost | null
   budgetAmount: string | null
   labourHours: LabourHoursSummary | null
+  paymentsSummary: JobPaymentsResponse | null
   onOpen: (section: Exclude<Section, 'home'>) => void
 }) {
   const known = total?.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
@@ -77,8 +81,17 @@ function HomeSectionCards({ total, budgetAmount, labourHours, onOpen }: {
     : 'None yet'
   const labourContext = hasHours ? `${labourHours!.totalHours}h logged` : 'None yet'
 
+  // Payments card: money in — worded as "received" so it can never read as
+  // spend. Falls back quietly while the summary loads or if it failed.
+  const paid = paymentsSummary?.totalPaidAmount
+  const customerTotal = paymentsSummary?.customerTotalAmount
+  const paymentsContext = paid
+    ? `${formatMoney(parseFloat(paid), 'GBP')} received${customerTotal ? ` of ${formatMoney(parseFloat(customerTotal), 'GBP')}` : ''}`
+    : 'No payments yet'
+
   const cards: { section: Exclude<Section, 'home'>; icon: string; title: string; context: string }[] = [
     { section: 'spend', icon: '£', title: 'Spend', context: spendContext },
+    { section: 'payments', icon: '🧾', title: 'Payments', context: paymentsContext },
     { section: 'labour', icon: '⏱', title: 'Labour', context: labourContext },
     { section: 'materials', icon: '🧰', title: 'Materials', context: 'Bought · used · left over' },
     { section: 'joblog', icon: '📓', title: 'Job log', context: 'Notes · photos' },
@@ -369,6 +382,9 @@ export default function CurrentJobWorkspace({
   const [queueLoadState, setQueueLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
 
   const mem = useJobMemory(job)
+  // Money in — loaded independently of memory/budget so a payments failure
+  // never hides the money-out lenses (and vice versa).
+  const payments = usePayments(job.id)
 
   const refreshNotes = useCallback(async () => {
     const fresh = await getNotesForJob(job.id)
@@ -486,10 +502,22 @@ export default function CurrentJobWorkspace({
     setShowExplainer(false)
   }, [])
 
-  const latest = useMemo(
-    () => mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 20), photos),
-    [mem.data, photos],
-  )
+  // Payments appear in home latest activity as their own type. Merged after
+  // the memory/photo merge so the newest-first order covers all three sources.
+  const latest = useMemo(() => {
+    const memoryAndPhotos = mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 20), photos, 20)
+    const paymentItems: LatestActivityItem[] = (payments.data?.payments ?? []).map(p => ({
+      memoryItemId: p.id,
+      type: 'payment' as const,
+      typeLabel: 'Payment',
+      headline: p.note ? `${p.amountLabel} received — ${p.note}` : `${p.amountLabel} received`,
+      costLabel: null,
+      effectiveAt: p.paidAt,
+    }))
+    return [...memoryAndPhotos, ...paymentItems]
+      .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
+      .slice(0, 5)
+  }, [mem.data, photos, payments.data])
 
   // Job log "All": every note-type memory item and photo, merged newest-first.
   // Bought/used/labour stay in their own sections — the log is the narrative
@@ -732,6 +760,7 @@ export default function CurrentJobWorkspace({
               total={mem.totalKnownCost}
               budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
               labourHours={mem.labourHours}
+              paymentsSummary={payments.data}
               onOpen={openSection}
             />
 
@@ -751,6 +780,7 @@ export default function CurrentJobWorkspace({
         )}
 
         {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} />)}
+        {section === 'payments' && <PaymentsSection jobId={job.id} payments={payments} />}
         {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} />)}
 
         {section === 'materials' && (

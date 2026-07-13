@@ -13,6 +13,11 @@ export { getBudgetCategories, createBudgetCategory, patchBudgetCategory, getBudg
 export { getInspectionData } from './api/inspection'
 export { getJobPhotos, uploadJobPhoto, patchJobPhoto } from './api/photos'
 export {
+  getJobPayments, patchCustomerTotal, createJobPayment, patchJobPayment, deleteJobPayment,
+  getSupportJobPayments,
+} from './api/payments'
+export { _resetMockPaymentsForTesting } from './api/mock/payments'
+export {
   getSupportUsers, getSupportUserJobs, getSupportJobInspection,
   getSupportMemoryView, getSupportBudgetSummary, getSupportReviewQueue, getSupportPhotos,
 } from './api/support'
