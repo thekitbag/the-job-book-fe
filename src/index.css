@@ -2460,6 +2460,114 @@ code {
   margin-top: 0.15rem;
 }
 
+/* Type label and date sit on one line; the date is a quiet memory cue, so it
+   never competes with the item itself. */
+.mem-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.mem-card-head > :first-child { flex: 1 1 auto; min-width: 0; }
+
+.mem-card-date {
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--ink-500);
+  white-space: nowrap;
+}
+
+/* Item actions (Move / Fix / Remove) share the right of the footer. */
+.mem-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.mem-card-actions .btn-mem-fix { margin-left: 0; }
+
+.btn-mem-move {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-700);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--r-pill);
+}
+
+.btn-mem-move:active { background: var(--surface-sunk); }
+.btn-mem-move:disabled { opacity: 0.5; }
+
+/* Removal is destructive but ordinary — readable, not alarming. */
+.btn-mem-remove {
+  background: none;
+  border: none;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0.35rem 0.4rem;
+  text-decoration: underline;
+}
+
+.btn-mem-remove:active { color: var(--red-600); }
+.btn-mem-remove:disabled { opacity: 0.5; }
+
+.mem-remove-confirm {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+}
+
+.mem-remove-question {
+  font-size: var(--text-sm);
+  font-weight: 800;
+  color: var(--ink-900);
+}
+
+.mem-remove-consequence {
+  margin-top: 0.25rem;
+  font-size: var(--text-xs);
+  color: var(--ink-700);
+}
+
+.mem-remove-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.btn-mem-remove-confirm {
+  background: var(--red-600);
+  color: #fff;
+  border: none;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: 0.4rem 0.95rem;
+  border-radius: var(--r-pill);
+}
+
+.btn-mem-remove-confirm:active { background: var(--red-700); }
+.btn-mem-remove-confirm:disabled { opacity: 0.5; }
+
+.btn-mem-cancel {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-700);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0.4rem 0.95rem;
+  border-radius: var(--r-pill);
+}
+
+.btn-mem-cancel:active { background: var(--surface-sunk); }
+.btn-mem-cancel:disabled { opacity: 0.5; }
+
 /* Light edit affordance for trusted memory */
 .btn-mem-fix {
   flex: 0 0 auto;

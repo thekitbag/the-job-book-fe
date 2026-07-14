@@ -2,13 +2,33 @@ import { useState } from 'react'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
-import { costDetailRows, labourExclusionCopy, spendExclusionCopy } from './memoryScan'
-import type { BudgetCategory, MemoryItemEdit, MemoryViewItem } from './types'
+import { costDetailRows, effectiveItemDate, itemDateLabel, labourExclusionCopy, spendExclusionCopy } from './memoryScan'
+import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem } from './types'
 
 // Types shown with a structured type label + detail rows (not a prose summary).
 export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material', 'labour'])
 // Types that can carry a budget category (a picker is offered for these).
 export const CATEGORY_TYPES = new Set<string>(['ordered_material', 'labour'])
+// Types that count towards known spend — these carry the date cue and the
+// "no longer count in known spend" warning when removed.
+const SPEND_TYPES = new Set<string>(['ordered_material', 'labour'])
+// A Used item is really a Left over misheard, and vice versa — the one
+// correction worth a dedicated one-tap move rather than a trip through Fix.
+const MOVE_TARGET: Record<string, { type: MemoryType; label: string }> = {
+  used_material: { type: 'leftover_material', label: 'Move to Left over' },
+  leftover_material: { type: 'used_material', label: 'Move to Used' },
+}
+
+// What removing this item actually costs Mike, in his terms. The source line
+// matters most: removing a fact must never read as deleting the voice note.
+function removalConsequences(item: MemoryViewItem): string[] {
+  const lines: string[] = []
+  if (SPEND_TYPES.has(item.memoryType)) lines.push('It will no longer count in known spend.')
+  else if (item.memoryType === 'general_note') lines.push('It will be removed from the job log.')
+  else lines.push('It will be removed from this job.')
+  if (item.source) lines.push('The original voice note will be kept.')
+  return lines
+}
 
 const MATERIAL_TYPE_LABEL: Record<string, string> = {
   ordered_material: 'Bought / ordered',
@@ -86,11 +106,14 @@ export interface MemoryCardProps {
   categories: BudgetCategory[]
   assigningCategory: boolean
   excludedReason?: string | null
+  mutating: boolean
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
   onVerify: () => void
   onAssignCategory: (categoryId: string | null) => void
+  onRemove: () => void
+  onMove: (memoryType: MemoryType) => void
 }
 
 export default function MemoryCard({
@@ -102,11 +125,14 @@ export default function MemoryCard({
   categories,
   assigningCategory,
   excludedReason,
+  mutating,
   onStartEdit,
   onCancelEdit,
   onSave,
   onVerify,
   onAssignCategory,
+  onRemove,
+  onMove,
 }: MemoryCardProps) {
   const isStructured = STRUCTURED_TYPES.has(item.memoryType)
   const hasFields = !!(
@@ -121,6 +147,9 @@ export default function MemoryCard({
     ? (item.memoryType === 'labour' ? labourExclusionCopy(excludedReason) : spendExclusionCopy(excludedReason))
     : null
   const [ackUnsure, setAckUnsure] = useState(false)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const dateLabel = SPEND_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
+  const move = MOVE_TARGET[item.memoryType]
 
   if (isEditing) {
     return (
@@ -133,10 +162,13 @@ export default function MemoryCard({
 
   return (
     <div className={`mem-card${uncertain ? ' mem-card--unresolved' : ''}`}>
-      {isStructured
-        ? <p className="mem-card-type-label">{MATERIAL_TYPE_LABEL[item.memoryType]}</p>
-        : <p className="mem-card-summary">{item.summary}</p>
-      }
+      <div className="mem-card-head">
+        {isStructured
+          ? <p className="mem-card-type-label">{MATERIAL_TYPE_LABEL[item.memoryType]}</p>
+          : <p className="mem-card-summary">{item.summary}</p>
+        }
+        {dateLabel && <span className="mem-card-date">{dateLabel}</span>}
+      </div>
       <StructuredFields item={item} />
       {isStructured && !hasFields && <p className="mem-card-summary">{item.summary}</p>}
 
@@ -172,10 +204,39 @@ export default function MemoryCard({
         </label>
       )}
 
-      <div className="mem-card-footer">
-        <SourceContext item={item} />
-        <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
-      </div>
+      {confirmingRemove ? (
+        // Explicit but lightweight: name the consequence, then two plain buttons.
+        // No modal — the card Mike is about to remove stays in front of him.
+        <div className="mem-remove-confirm">
+          <p className="mem-remove-question">Remove this item?</p>
+          {removalConsequences(item).map(line => (
+            <p key={line} className="mem-remove-consequence">{line}</p>
+          ))}
+          <div className="mem-remove-actions">
+            <button type="button" className="btn-mem-remove-confirm" disabled={mutating} onClick={onRemove}>
+              {mutating ? 'Removing…' : 'Remove'}
+            </button>
+            <button type="button" className="btn-mem-cancel" disabled={mutating} onClick={() => setConfirmingRemove(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mem-card-footer">
+          <SourceContext item={item} />
+          <div className="mem-card-actions">
+            {move && (
+              <button type="button" className="btn-mem-move" disabled={mutating} onClick={() => onMove(move.type)}>
+                {mutating ? 'Moving…' : move.label}
+              </button>
+            )}
+            <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
+            <button type="button" className="btn-mem-remove" disabled={mutating} onClick={() => setConfirmingRemove(true)}>
+              Remove item
+            </button>
+          </div>
+        </div>
+      )}
       {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
     </div>
   )

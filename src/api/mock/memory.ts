@@ -80,6 +80,16 @@ export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: 
   return { ...updated }
 }
 
+// Soft removal, mock-side: the item leaves the active sections (and therefore
+// every derived total, since the mock derives summaries live from sections).
+// The mock never had a separate source-note store to delete, which matches the
+// backend rule that removal must not touch source evidence.
+export function mockRemoveMemoryItem(jobId: string, memoryItemId: string): void {
+  const sections = mockSectionsFor(jobId)
+  if (!findMockItem(sections, memoryItemId)) throw new ApiError('Memory item not found', 404)
+  for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
+}
+
 export function mockVerifyMemoryItem(jobId: string, memoryItemId: string): void {
   const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
   if (item) item.uncertaintyFlags = []

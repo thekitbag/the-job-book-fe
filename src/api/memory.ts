@@ -1,7 +1,7 @@
 import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse } from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
-import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView, mockUpdateMemoryItem, mockVerifyMemoryItem } from './mock/memory'
+import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView, mockRemoveMemoryItem, mockUpdateMemoryItem, mockVerifyMemoryItem } from './mock/memory'
 
 // GET /api/jobs/:jobId/memory-view — trusted memory for the job, grouped by section.
 export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> {
@@ -83,6 +83,23 @@ export async function createMemoryItem(jobId: string, req: CreateMemoryItemReque
   if (res.status === 404) throw new ApiError('Job not found', 404)
   if (!res.ok) throw new ApiError(`POST memory-item → ${res.status}`, res.status)
   return res.json() as Promise<MemoryViewItem>
+}
+
+// DELETE /api/jobs/:jobId/memory-items/:memoryItemId — remove a confirmed item
+// from the active job record. Soft-remove server-side: the source note/audio/
+// transcript and review trail are preserved; only the structured fact leaves
+// the active views. Repeat delete → 404, matching payment delete.
+export async function removeMemoryItem(jobId: string, memoryItemId: string): Promise<void> {
+  if (USE_MOCK) {
+    await delay(300)
+    mockRemoveMemoryItem(jobId, memoryItemId)
+    return
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}`, { method: 'DELETE' })
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Memory item not found', 404)
+  if (!res.ok && res.status !== 204) throw new ApiError(`DELETE memory-item → ${res.status}`, res.status)
 }
 
 // PATCH /api/jobs/:jobId/memory-items/:memoryItemId — assign/clear category only.

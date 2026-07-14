@@ -6,6 +6,7 @@ import {
   getBudgetSummary,
   getMemoryView,
   patchBudgetCategory,
+  removeMemoryItem,
   updateMemoryItem,
   verifyMemoryItem,
 } from './api'
@@ -33,6 +34,7 @@ import type {
   LabourHoursSummary,
   LabourSpendSummary,
   MemoryItemEdit,
+  MemoryType,
   MemoryViewItem,
   MemoryViewResponse,
   OrderedCostSummary,
@@ -62,6 +64,7 @@ export function useJobMemory(job: Job) {
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [assigningCategoryId, setAssigningCategoryId] = useState<string | null>(null)
+  const [mutatingId, setMutatingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
 
   // Budget management (Spend tab) UI state.
@@ -228,6 +231,58 @@ export function useJobMemory(job: Job) {
       setVerifyingId(null)
     }
   }, [job.id, refreshSummary, loadBudget])
+
+  const findItem = useCallback((memoryItemId: string): MemoryViewItem | undefined => {
+    for (const s of data?.sections ?? []) {
+      const found = s.items.find(it => it.id === memoryItemId)
+      if (found) return found
+    }
+    return undefined
+  }, [data])
+
+  // Remove a confirmed item from the active job record. Nothing is removed
+  // locally up-front: the item stays on screen until the backend has accepted
+  // the delete, so a failure can never look like a successful removal. The
+  // authoritative memory-view (and budget, since any item may be carrying spend)
+  // is refetched rather than patched, so totals come back from the backend.
+  const handleRemoveItem = useCallback(async (memoryItemId: string) => {
+    setMutatingId(memoryItemId)
+    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      const item = findItem(memoryItemId)
+      await removeMemoryItem(job.id, memoryItemId)
+      track('memory_item_removed', { job_id: job.id, memory_type: item?.memoryType ?? null })
+      if (currentJobIdRef.current !== job.id) return
+      await refetch()
+      void loadBudget()
+    } catch {
+      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not remove — tap to retry' }))
+    } finally {
+      setMutatingId(null)
+    }
+  }, [job.id, findItem, refetch, loadBudget])
+
+  // Move Used ↔ Left over: a reclassify through the normal item PATCH, sending
+  // the item's current fields with the new memoryType. Deliberately not routed
+  // through handleSaveEdit — that marks uncertainty 'resolved', and moving a
+  // misfiled item says nothing about whether its cost/quantity are right.
+  const handleMoveItem = useCallback(async (memoryItemId: string, memoryType: MemoryType) => {
+    const item = findItem(memoryItemId)
+    if (!item) return
+    setMutatingId(memoryItemId)
+    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
+    try {
+      await updateMemoryItem(job.id, memoryItemId, { ...memoryItemToEdit(item), memoryType })
+      track('memory_item_moved', { job_id: job.id, from: item.memoryType, to: memoryType })
+      if (currentJobIdRef.current !== job.id) return
+      await refetch()
+      void loadBudget()
+    } catch {
+      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not move — tap to retry' }))
+    } finally {
+      setMutatingId(null)
+    }
+  }, [job.id, findItem, refetch, loadBudget])
 
   // ── Budget category management (Spend tab) ────────────────────────────────
   const handleAddCategory = useCallback(async (name: string, amount: string) => {
@@ -409,12 +464,15 @@ export function useJobMemory(job: Job) {
     errorMsg: itemErrors[item.id] ?? null,
     categories: withPicker ? budgetCategories : [],
     assigningCategory: assigningCategoryId === item.id,
+    mutating: mutatingId === item.id,
     onStartEdit: () => setEditingId(item.id),
     onCancelEdit: () => setEditingId(null),
     onSave: (edit: MemoryItemEdit) => handleSaveEdit(item.id, edit),
     onVerify: () => handleVerify(item.id),
     onAssignCategory: (c: string | null) => handleAssignCategory(item.id, c),
-  }), [editingId, submittingId, verifyingId, itemErrors, budgetCategories, assigningCategoryId, handleSaveEdit, handleVerify, handleAssignCategory])
+    onRemove: () => handleRemoveItem(item.id),
+    onMove: (memoryType: MemoryType) => handleMoveItem(item.id, memoryType),
+  }), [editingId, submittingId, verifyingId, itemErrors, budgetCategories, assigningCategoryId, mutatingId, handleSaveEdit, handleVerify, handleAssignCategory, handleRemoveItem, handleMoveItem])
 
   return {
     data, loadState, errorMsg, reload, refreshError, refreshSummary, refetch,

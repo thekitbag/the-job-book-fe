@@ -213,7 +213,7 @@ describe('Support mode — read-only view-as', () => {
     expect(screen.queryByRole('button', { name: /edit|delete|set customer total|clear total/i })).toBeNull()
   })
 
-  it('renders target data with no Record/Add/Fix/review/photo-upload controls on any tab', async () => {
+  it('renders target data with no Record/Add/Fix/remove/move/review/photo-upload controls on any tab', async () => {
     await enterViewAs()
     expect(await screen.findByText(/£320/)).toBeInTheDocument()
     for (const t of ['Spend', 'Payments', 'Labour', 'Used', 'Notes', /To check/]) {
@@ -221,6 +221,8 @@ describe('Support mode — read-only view-as', () => {
       expect(screen.queryByRole('button', { name: /record/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /^add /i })).toBeNull()
       expect(screen.queryByRole('button', { name: /fix memory/i })).toBeNull()
+      // correction/removal is an owner action — never offered in view-as
+      expect(screen.queryByRole('button', { name: /remove item|move to/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /remember this|dismiss|save|upload|edit details/i })).toBeNull()
       expect(document.querySelector('input, textarea, select')).toBeNull()
       // no job status edit surface — support/view-as never mutates target data
