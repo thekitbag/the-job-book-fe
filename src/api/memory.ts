@@ -1,7 +1,7 @@
-import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse } from '../types'
+import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, ReturnMaterialRequest, ReturnMaterialResponse } from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
-import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView, mockRemoveMemoryItem, mockUpdateMemoryItem, mockVerifyMemoryItem } from './mock/memory'
+import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView, mockRemoveMemoryItem, mockReturnMemoryItem, mockUpdateMemoryItem, mockVerifyMemoryItem } from './mock/memory'
 
 // GET /api/jobs/:jobId/memory-view — trusted memory for the job, grouped by section.
 export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> {
@@ -100,6 +100,34 @@ export async function removeMemoryItem(jobId: string, memoryItemId: string): Pro
   if (res.status === 403) throw new ApiError('Forbidden', 403)
   if (res.status === 404) throw new ApiError('Memory item not found', 404)
   if (!res.ok && res.status !== 204) throw new ApiError(`DELETE memory-item → ${res.status}`, res.status)
+}
+
+// POST /api/jobs/:jobId/memory-items/:memoryItemId/return — move all or part of
+// a Left over item to Returned, in one transaction. The source item must be an
+// active leftover_material; returning more than is left over is a 400 that
+// mutates nothing. Returns the new returned item and what's left over (null on
+// a full return) — but the caller still refetches, because a trusted refund
+// also moves job-level spend.
+export async function returnMemoryItem(
+  jobId: string,
+  memoryItemId: string,
+  req: ReturnMaterialRequest,
+): Promise<ReturnMaterialResponse> {
+  if (USE_MOCK) {
+    await delay(300)
+    return mockReturnMemoryItem(jobId, memoryItemId, req)
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}/return`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (res.status === 400) throw new ApiError('Invalid return', 400)
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Memory item not found', 404)
+  if (!res.ok) throw new ApiError(`POST return memory-item → ${res.status}`, res.status)
+  return res.json() as Promise<ReturnMaterialResponse>
 }
 
 // PATCH /api/jobs/:jobId/memory-items/:memoryItemId — assign/clear category only.

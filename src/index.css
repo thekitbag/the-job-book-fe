@@ -2453,12 +2453,18 @@ code {
   border-left-color: var(--green-600);
 }
 
+/* Wraps so the source toggle keeps its own line rather than being squeezed to
+   two words wide: a Left over item carries three actions (return, move, fix)
+   plus Remove, which overruns a single row at phone width. */
 .mem-card-footer {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 0.15rem;
 }
+
+.mem-card-footer .mem-source { flex-shrink: 0; }
 
 /* Type label and date sit on one line; the date is a quiet memory cue, so it
    never competes with the item itself. */
@@ -2501,6 +2507,24 @@ code {
 
 .btn-mem-move:active { background: var(--surface-sunk); }
 .btn-mem-move:disabled { opacity: 0.5; }
+
+/* "Mark as returned" — a real job event, so it reads as an action of the same
+   weight as Move, not as a variant of Remove. */
+.btn-mem-return {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-700);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--r-pill);
+}
+.btn-mem-return:active { background: var(--surface-sunk); }
+.btn-mem-return:disabled { opacity: 0.5; }
+
+/* Return sheet */
+.return-form-identity { margin: 0 0 0.75rem; font-size: var(--text-sm); font-weight: 700; color: var(--ink-700); }
+.return-form-hint { margin: -0.35rem 0 0.75rem; font-size: var(--text-xs); color: var(--ink-500); }
 
 /* Removal is destructive but ordinary — readable, not alarming. */
 .btn-mem-remove {
@@ -3318,6 +3342,32 @@ code {
 .mem-hero-bar > span { display: block; height: 100%; background: #fff; border-radius: var(--r-pill); }
 .mem-hero--over .mem-hero-bar > span { background: #ffd0c4; }
 
+/* Refund breakdown: shows how gross spend became the net headline above. */
+.mem-hero-breakdown { margin: 0.55rem 0 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.mem-hero-line {
+  display: flex; justify-content: space-between; gap: 0.75rem;
+  font-size: var(--text-sm); color: rgba(255,255,255,0.92);
+}
+/* The global `dt { color: #666 }` is unreadable on the green hero, and inherited
+   colour can't beat it — set it here. */
+.mem-hero-line dt, .mem-hero-line dd { margin: 0; color: rgba(255,255,255,0.85); }
+.mem-hero-line dd { font-weight: 700; white-space: nowrap; }
+.mem-hero-line--refund dd { color: #d6f5e0; }
+
+/* ── Spend: refunds (money back — never styled like a spend row) ── */
+.spend-refunds { margin-bottom: 1rem; }
+.spend-refund-list { list-style: none; margin: 0 1rem; padding: 0; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
+.spend-refund-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.spend-refund-row:last-child { border-bottom: none; }
+.spend-refund-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.spend-refund-item { font-size: var(--text-sm); font-weight: 700; color: var(--ink-900); }
+.spend-refund-detail { font-size: var(--text-xs); color: var(--ink-500); }
+.spend-refund-amount { flex-shrink: 0; font-size: var(--text-sm); font-weight: 800; color: var(--green-700); }
+
 /* section labels within the bought tab */
 .mem-section-label {
   margin: 0 1rem 0.5rem; font-size: var(--text-2xs); font-weight: 800;
@@ -3803,6 +3853,7 @@ code {
   background: #e7eefb;
   color: #2b5fb3;
 }
+.ws-type-chip--returned { background: #e3f3e9; color: var(--green-700); }
 .ws-type-chip--labour { background: #eae6fb; color: #5a44b3; }
 .ws-type-chip--note   { background: #eef1f4; color: var(--ink-700); }
 .ws-type-chip--photo  { background: #fdeee0; color: #b3612b; }

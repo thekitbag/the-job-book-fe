@@ -6,6 +6,10 @@ const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'used_material', label: 'Used material' },
   { value: 'ordered_material', label: 'Ordered material' },
   { value: 'leftover_material', label: 'Leftover material' },
+  // Present so Fix memory on a returned item shows its real type instead of an
+  // empty select. Refund amount is not editable here — correcting a refund
+  // means removing the return and recording it again.
+  { value: 'returned_material', label: 'Returned material' },
   { value: 'labour', label: 'Labour' },
   { value: 'general_note', label: 'Note' },
   { value: 'supplier_delivery_note', label: 'Supplier / delivery note' },

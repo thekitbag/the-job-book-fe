@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import MemoryEditForm from './MemoryEditForm'
+import ReturnMaterialSheet from './ReturnMaterialSheet'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
-import { costDetailRows, effectiveItemDate, itemDateLabel, labourExclusionCopy, spendExclusionCopy } from './memoryScan'
-import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem } from './types'
+import { costDetailRows, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
+import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
 
 // Types shown with a structured type label + detail rows (not a prose summary).
-export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material', 'labour'])
+export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material', 'returned_material', 'labour'])
 // Types that can carry a budget category (a picker is offered for these).
 export const CATEGORY_TYPES = new Set<string>(['ordered_material', 'labour'])
 // Types that count towards known spend — these carry the date cue and the
 // "no longer count in known spend" warning when removed.
 const SPEND_TYPES = new Set<string>(['ordered_material', 'labour'])
+// Types whose date is worth showing on the card. A return is a dated event in
+// its own right ("Returned 8 Jul"), even though it is not spend.
+const DATED_TYPES = new Set<string>([...SPEND_TYPES, 'returned_material'])
 // A Used item is really a Left over misheard, and vice versa — the one
 // correction worth a dedicated one-tap move rather than a trip through Fix.
 const MOVE_TARGET: Record<string, { type: MemoryType; label: string }> = {
@@ -24,6 +28,12 @@ const MOVE_TARGET: Record<string, { type: MemoryType; label: string }> = {
 function removalConsequences(item: MemoryViewItem): string[] {
   const lines: string[] = []
   if (SPEND_TYPES.has(item.memoryType)) lines.push('It will no longer count in known spend.')
+  else if (item.memoryType === 'returned_material') {
+    // Removing a return is for a return that never happened. Say what comes
+    // back, so it can't be mistaken for undoing the purchase.
+    lines.push('It will no longer show as returned.')
+    if (safeRefund(item)) lines.push('Its refund will stop coming off your known spend.')
+  }
   else if (item.memoryType === 'general_note') lines.push('It will be removed from the job log.')
   else lines.push('It will be removed from this job.')
   if (item.source) lines.push('The original voice note will be kept.')
@@ -34,7 +44,25 @@ const MATERIAL_TYPE_LABEL: Record<string, string> = {
   ordered_material: 'Bought / ordered',
   used_material: 'Used',
   leftover_material: 'Left over',
+  returned_material: 'Returned',
   labour: 'Labour',
+}
+
+// Returned-item rows in builder language: what went back, where to, and what
+// came back. A refund is labelled as a refund — never folded in with the cost
+// rows, where it would read as more money out.
+function returnedRows(item: MemoryViewItem): [string, string][] {
+  const rows: [string, string][] = []
+  if (item.materialName) rows.push(['Item', item.materialName])
+  const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
+  if (qty) rows.push(['Returned', qty])
+  if (item.supplierName) rows.push(['Returned to', item.supplierName])
+  const refund = formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
+  if (refund) rows.push(['Refund', `${refund} refund`])
+  // No refund figure yet: say so, rather than leave a silent gap that looks
+  // like the money simply vanished from the job.
+  else rows.push(['Refund', 'None recorded — spend is unchanged'])
+  return rows
 }
 
 function StructuredFields({ item }: { item: MemoryViewItem }) {
@@ -43,6 +71,8 @@ function StructuredFields({ item }: { item: MemoryViewItem }) {
     if (item.labourHours) rows.push(['Hours', item.labourHours])
     if (item.labourPerson) rows.push(['Person', item.labourPerson])
     if (item.labourTask) rows.push(['Task', item.labourTask])
+  } else if (item.memoryType === 'returned_material') {
+    rows.push(...returnedRows(item))
   } else {
     if (item.materialName) rows.push(['Item', item.materialName])
     const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
@@ -51,7 +81,7 @@ function StructuredFields({ item }: { item: MemoryViewItem }) {
     if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
     if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
   }
-  rows.push(...costDetailRows(item))
+  if (item.memoryType !== 'returned_material') rows.push(...costDetailRows(item))
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
 
   if (rows.length === 0 && !uncertain) return null
@@ -114,6 +144,8 @@ export interface MemoryCardProps {
   onAssignCategory: (categoryId: string | null) => void
   onRemove: () => void
   onMove: (memoryType: MemoryType) => void
+  // Left over items only. Rejects on failure so the sheet keeps Mike's values.
+  onReturn: (req: ReturnMaterialRequest) => Promise<unknown>
 }
 
 export default function MemoryCard({
@@ -133,6 +165,7 @@ export default function MemoryCard({
   onAssignCategory,
   onRemove,
   onMove,
+  onReturn,
 }: MemoryCardProps) {
   const isStructured = STRUCTURED_TYPES.has(item.memoryType)
   const hasFields = !!(
@@ -148,8 +181,11 @@ export default function MemoryCard({
     : null
   const [ackUnsure, setAckUnsure] = useState(false)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const dateLabel = SPEND_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
+  const dateLabel = DATED_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
   const move = MOVE_TARGET[item.memoryType]
+  // Returning is a real job event, so it is only offered where one can happen:
+  // a Left over item Mike still has. Delete stays for mistakes.
+  const canReturn = item.memoryType === 'leftover_material'
 
   if (isEditing) {
     return (
@@ -225,6 +261,7 @@ export default function MemoryCard({
         <div className="mem-card-footer">
           <SourceContext item={item} />
           <div className="mem-card-actions">
+            {canReturn && <ReturnMaterialSheet item={item} onReturn={onReturn} />}
             {move && (
               <button type="button" className="btn-mem-move" disabled={mutating} onClick={() => onMove(move.type)}>
                 {mutating ? 'Moving…' : move.label}

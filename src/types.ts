@@ -69,8 +69,11 @@ export type CostQualifier = 'each' | 'total' | 'approx' | 'unknown' | 'per_hour'
 
 // ── Review queue types ────────────────────────────────────────────────────────
 
-// Trusted memory must be a concrete type — unclear items must be corrected or dismissed.
-export type MemoryType = Exclude<FactType, 'unclear'>
+// Trusted memory must be a concrete type — unclear items must be corrected or
+// dismissed. 'returned_material' is a memory type but deliberately not a
+// FactType: returns are recorded by Mike through the return action, never
+// inferred from a voice note ("I'm going to take these back" is not a refund).
+export type MemoryType = Exclude<FactType, 'unclear'> | 'returned_material'
 
 // A deterministic, response-time category suggestion for a review item. Never
 // stored on the candidate fact — computed from the job's active categories.
@@ -369,6 +372,15 @@ export interface MemoryViewItem {
   // Effective event date (direct-add). Display date preference:
   // happenedAt ?? source.capturedAt ?? createdAt.
   happenedAt?: string | null
+  // ── Returned materials (memoryType 'returned_material') ──────────────────
+  // Money back, deliberately NOT costAmount/totalCostAmount: those mean money
+  // out for a bought/labour line, and overloading them would make a refund
+  // read as ordinary positive spend.
+  refundAmount?: string | null
+  refundCurrency?: string | null
+  // The Left over item this was returned from, when the return went through the
+  // Left over action. Traceability only — a plain id, not a loaded relation.
+  returnedFromMemoryItemId?: string | null
   // true for items added directly (not voice-extracted). Optional until backend ships it.
   isManual?: boolean
   createdAt: string
@@ -492,12 +504,46 @@ export interface TotalKnownCost {
   knownSpendLabel: string | null
   includedMemoryItemIds: string[]
 }
+// Trusted money out before refunds — the figure totalKnownCost was until
+// returned materials landed. Shown as the "Bought and labour" line so a net
+// total can never drop without saying why.
+export interface GrossKnownCost {
+  amount: string | null
+  currency: string | null
+  label: string | null
+}
+// One trusted refund from a returned material. Never a spend row: it is money
+// back, and the Spend lens renders it as a signed reduction.
+export interface ReturnedRefundRow {
+  memoryItemId: string
+  itemLabel: string
+  materialName: string | null
+  quantity: string | null
+  unit: string | null
+  supplierName: string | null
+  refundAmount: string
+  refundCurrency: 'GBP'
+  refundLabel: string // e.g. "£80 refund"
+  happenedAt: string | null
+}
+export interface RefundsSummary {
+  knownRefundAmount: string | null
+  knownRefundCurrency: 'GBP' | null
+  knownRefundLabel: string | null // e.g. "£80 refunded"
+  rows: ReturnedRefundRow[]
+}
 export interface CostSummary {
   orderedMaterials: OrderedCostSummary
   // Additive: present once the backend supports labour money.
   labour?: LabourCostSummary
-  // Additive: bought + labour trusted monetary cost; drives the spend hero.
+  // Bought + labour trusted monetary cost, NET of trusted refunds since
+  // returned materials. Drives the spend hero.
   totalKnownCost?: TotalKnownCost
+  // Additive (returned materials): gross (pre-refund) and the refunds that
+  // take it down to totalKnownCost. Absent on older backends → no refunds
+  // exist, so the hero shows the total with no breakdown.
+  grossKnownCost?: GrossKnownCost
+  refunds?: RefundsSummary
 }
 
 // ── Labour daily view (Labour Tracking V2) ──────────────────────────────────
@@ -663,7 +709,7 @@ export interface LabourTodaySummary {
   perPerson: { person: string; hours: number }[]
 }
 
-export type LatestActivityType = 'bought' | 'used' | 'labour' | 'note' | 'photo' | 'payment'
+export type LatestActivityType = 'bought' | 'used' | 'returned' | 'labour' | 'note' | 'photo' | 'payment'
 
 export interface LatestActivityItem {
   memoryItemId: string
@@ -729,6 +775,29 @@ export interface MemoryItemEdit {
   uncertaintyResolution?: UncertaintyResolution
   // Assign/clear the item's budget category. Omitted leaves it unchanged.
   budgetCategoryId?: string | null
+}
+
+// ── Returned materials ────────────────────────────────────────────────────────
+// POST /api/jobs/:jobId/memory-items/:memoryItemId/return — move all or part of
+// a Left over item to Returned. A dedicated operation, not a client-side split:
+// creating the returned item and reducing the leftover must be one transaction.
+// Returning is not deleting — the original purchase history stays intact.
+
+export interface ReturnMaterialRequest {
+  quantity: string
+  // Defaults to the source leftover's unit when omitted.
+  unit?: string | null
+  supplierName?: string | null
+  // Omitted/null → returned, but no trusted refund: it does not reduce spend.
+  refundAmount?: string | null
+  refundCurrency?: 'GBP' | null
+  happenedAt?: string | null // ISO datetime or YYYY-MM-DD
+}
+
+export interface ReturnMaterialResponse {
+  returnedItem: MemoryViewItem
+  // null on a full return — the leftover left the active record entirely.
+  remainingLeftoverItem: MemoryViewItem | null
 }
 
 // ── Job photos ────────────────────────────────────────────────────────────────

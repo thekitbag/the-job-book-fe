@@ -8,6 +8,7 @@ const SECTION_HEADINGS: Record<string, string> = {
   ordered_materials: 'Bought',
   used_materials: 'Used',
   leftovers: 'Left over',
+  returned_materials: 'Returned',
   general_notes: 'Notes',
   supplier_delivery_notes: 'Supplier notes',
   customer_changes: 'Customer changes',
@@ -36,6 +37,7 @@ export default function MemorySectionTab({
   ariaLabel,
   directAdd,
   sectionAdds,
+  emptyText,
   footer,
 }: {
   mem: JobMemory
@@ -43,6 +45,9 @@ export default function MemorySectionTab({
   ariaLabel: string
   directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
   sectionAdds?: Partial<Record<string, SectionAdd>>
+  // Empty copy for a lens with no add action of its own (e.g. Returned, which
+  // is only reachable from a Left over item). Falls back to generic copy.
+  emptyText?: string
   // Extra job-context content rendered at the end of the lens (e.g. Job photos
   // on the Notes tab). Rendered regardless of whether sections have items.
   footer?: ReactNode
@@ -73,7 +78,7 @@ export default function MemorySectionTab({
             action={<DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} onAdd={addMemoryItem} />}
           />
         ) : (
-          !footer && <p className="mem-tab-empty">Nothing remembered here yet.</p>
+          !footer && <p className="mem-tab-empty">{emptyText ?? 'Nothing remembered here yet.'}</p>
         )
       ) : (
         rows.map(s => {
