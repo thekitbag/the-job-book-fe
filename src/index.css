@@ -1529,6 +1529,16 @@ code {
   color: #555;
 }
 
+/* A field whose value is fixed and shown rather than edited (e.g. the type of a
+   returned item). Reads as settled fact, not a disabled input to fight with. */
+.queue-field-static {
+  margin: 0;
+  padding: 0.45rem 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--ink-700);
+}
+
 .queue-field-input {
   padding: 0.45rem 0.6rem;
   border: 1px solid #d1d5db;

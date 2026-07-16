@@ -221,6 +221,41 @@ describe('Returned materials — Materials navigation', () => {
   })
 })
 
+// Returned is created by the return flow alone: it carries a refund and a
+// matching reduction in the Left over it came from, neither of which a generic
+// retype can produce.
+describe('Returned materials — not a reclassification target', () => {
+  it('Fix memory on any other item cannot retype it to Returned', async () => {
+    renderWorkspace()
+    await openSection('Materials', 'Left over')
+    await screen.findByText('fence posts')
+    fireEvent.click(within(card('fence posts')).getByRole('button', { name: /fix memory/i }))
+
+    const types = within(await screen.findByRole('combobox', { name: /type/i }))
+    expect(types.getByRole('option', { name: /leftover material/i })).toBeInTheDocument()
+    expect(types.queryByRole('option', { name: /returned/i })).not.toBeInTheDocument()
+  })
+
+  it('Fix memory on a returned item keeps its type fixed and offers no cost fields', async () => {
+    returnInView('left-posts', { quantity: '4', supplierName: 'Jewson', refundAmount: '80', refundCurrency: 'GBP', happenedAt: null })
+    renderWorkspace()
+    await openSection('Materials', 'Returned')
+    await screen.findByText('£80 refund')
+    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+
+    const form = within(await screen.findByRole('form', { name: /edit memory/i }))
+    // Type is stated, not a picker that could silently retype it.
+    expect(form.getByText('Returned material')).toBeInTheDocument()
+    expect(form.queryByRole('combobox', { name: /type/i })).not.toBeInTheDocument()
+    // A return's money is its refund, which this form doesn't edit — so it must
+    // not offer a cost field that would land nowhere.
+    expect(form.queryByRole('textbox', { name: /cost/i })).not.toBeInTheDocument()
+    // The details worth correcting are still editable.
+    expect(form.getByRole('textbox', { name: /material/i })).toHaveValue('fence posts')
+    expect(form.getByRole('textbox', { name: /quantity/i })).toHaveValue('4')
+  })
+})
+
 // ── Partial and full returns ─────────────────────────────────────────────────
 
 describe('Returned materials — returning a leftover', () => {
