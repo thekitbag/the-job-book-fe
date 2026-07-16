@@ -5,9 +5,9 @@ import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
 import LabourBudgetControl from './LabourBudgetControl'
 import { memoryItemToEdit } from './memoryEdit'
-import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount } from './memoryScan'
+import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount, itemDateLabel } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
-import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, GrossKnownCost, MemoryViewItem, RefundsSummary, TotalKnownCost } from './types'
 
 const POS_DECIMAL = /^\d+(\.\d+)?$/
 
@@ -175,14 +175,23 @@ function CategoryForm({
   )
 }
 
-// Hero: one job-level Known spend (bought + rated labour), against the total
-// budget when one exists.
-function KnownSpendHero({ total, totals }: { total: TotalKnownCost; totals: BudgetSummaryResponse['totals'] | null }) {
+// Hero: one job-level Known spend (bought + rated labour, less trusted
+// refunds), against the total budget when one exists. When refunds exist the
+// headline is a net figure, so it always carries the two lines that explain it —
+// a total that quietly drops by £80 is worse than no total at all.
+function KnownSpendHero({ total, gross, refunds, totals }: {
+  total: TotalKnownCost
+  gross: GrossKnownCost | null
+  refunds: RefundsSummary | null
+  totals: BudgetSummaryResponse['totals'] | null
+}) {
   const known = total.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
   const budget = totals?.budgetAmount ? parseFloat(totals.budgetAmount) : null
   const hasBudget = budget !== null && budget > 0
   const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
   const over = !!totals?.overBudget
+  const refunded = refunds?.knownRefundAmount ? parseFloat(refunds.knownRefundAmount) : 0
+  const showBreakdown = refunded > 0
   return (
     <section className={`mem-hero${over ? ' mem-hero--over' : ''}`} aria-label="Known spend">
       <p className="mem-hero-cap">Known spend{hasBudget ? ' vs budget' : ''}</p>
@@ -190,6 +199,18 @@ function KnownSpendHero({ total, totals }: { total: TotalKnownCost; totals: Budg
         {total.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}
         {hasBudget && <span className="mem-hero-of"> of {formatMoney(budget!, 'GBP')}</span>}
       </p>
+      {showBreakdown && (
+        <dl className="mem-hero-breakdown">
+          <div className="mem-hero-line">
+            <dt>Bought and labour</dt>
+            <dd>{gross?.label ?? formatMoney(known + refunded, 'GBP')}</dd>
+          </div>
+          <div className="mem-hero-line mem-hero-line--refund">
+            <dt>Refunds</dt>
+            <dd>−{formatMoney(refunded, 'GBP')}</dd>
+          </div>
+        </dl>
+      )}
       {hasBudget
         ? <>
             <p className="mem-hero-sub">{over ? `${formatMoney(known - budget!, 'GBP')} over budget` : (totals?.remainingLabel ?? '')}</p>
@@ -200,9 +221,37 @@ function KnownSpendHero({ total, totals }: { total: TotalKnownCost; totals: Budg
   )
 }
 
+// The refunds behind the hero's net figure, named one by one. Deliberately its
+// own area and never a category row: a refund is money back, and putting it
+// among the spend rows would make it read as another purchase.
+function RefundsSection({ refunds }: { refunds: RefundsSummary }) {
+  return (
+    <section className="spend-refunds" aria-label="Refunds">
+      <p className="mem-section-label">Refunds</p>
+      <p className="mem-section-note">Taken off your known spend. The original purchases are still in Bought.</p>
+      <ul className="spend-refund-list">
+        {refunds.rows.map(row => {
+          const date = itemDateLabel(row.happenedAt)
+          const detail = [row.supplierName ? `Returned to ${row.supplierName}` : 'Returned', date ? `Returned ${date}` : null]
+            .filter(Boolean).join(' · ')
+          return (
+            <li key={row.memoryItemId} className="spend-refund-row">
+              <span className="spend-refund-text">
+                <span className="spend-refund-item">{row.itemLabel}</span>
+                <span className="spend-refund-detail">{detail}</span>
+              </span>
+              <span className="spend-refund-amount">−{formatMoney(parseFloat(row.refundAmount), row.refundCurrency)}</span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 export default function SpendTab({ mem }: { mem: JobMemory }) {
   const {
-    totalKnownCost, budgetSummary, refreshError, refetch, addMemoryItem,
+    totalKnownCost, grossKnownCost, refunds, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, cardProps,
     notCountedItems, resolveCostBasis, addPrice,
     budgetCategories, expandedCats, toggleCat, labourSpendGroup, handleSetLabourBudget,
@@ -219,7 +268,10 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
 
   const orderedItems = sectionItems('ordered_materials')
   const labourItems = sectionItems('labour')
-  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0
+  const hasRefunds = (refunds?.rows.length ?? 0) > 0
+  // A job whose only money fact is a refund still has spend to show — the hero
+  // has to render, or the refund would reduce a total Mike can't see.
+  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0 || hasRefunds
 
   // Trusted labour money lives in the Labour group (backend budgetSummary.labour
   // or the derived fallback). Its row ids drive de-duplication: a labour spend
@@ -339,7 +391,16 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
-      {hasSpendContent && totalKnownCost && <KnownSpendHero total={totalKnownCost} totals={budgetSummary?.totals ?? null} />}
+      {hasSpendContent && totalKnownCost && (
+        <KnownSpendHero
+          total={totalKnownCost}
+          gross={grossKnownCost}
+          refunds={refunds}
+          totals={budgetSummary?.totals ?? null}
+        />
+      )}
+
+      {hasRefunds && refunds && <RefundsSection refunds={refunds} />}
 
       {notCountedItems.length > 0 && (
         <section className="cost-check" aria-label="Not counted yet">

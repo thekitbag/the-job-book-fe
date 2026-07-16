@@ -34,7 +34,10 @@ const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'custome
 // a fifth card here, and Variations becomes a Job log filter, without another
 // cramped top-level tab strip.
 type Section = 'home' | 'spend' | 'payments' | 'labour' | 'materials' | 'joblog'
-type MaterialsTab = 'bought' | 'used' | 'leftover'
+// Returned is a peer state, not something tucked inside Left over: material
+// that went back to the merchant really left the job, and hiding it under the
+// stock he still has would be a different (wrong) claim.
+type MaterialsTab = 'bought' | 'used' | 'leftover' | 'returned'
 // Receipts becomes a filter here once receipt support lands — no inert filter
 // until then.
 type JobLogFilter = 'all' | 'notes' | 'photos'
@@ -53,6 +56,7 @@ const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
 const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'home'>; materialsTab?: MaterialsTab; joblogFilter?: JobLogFilter }> = {
   bought: { section: 'spend' },
   used: { section: 'materials', materialsTab: 'used' },
+  returned: { section: 'materials', materialsTab: 'returned' },
   labour: { section: 'labour' },
   note: { section: 'joblog', joblogFilter: 'notes' },
   photo: { section: 'joblog', joblogFilter: 'photos' },
@@ -93,7 +97,7 @@ function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, o
     { section: 'spend', icon: '£', title: 'Spend', context: spendContext },
     { section: 'payments', icon: '🧾', title: 'Payments', context: paymentsContext },
     { section: 'labour', icon: '⏱', title: 'Labour', context: labourContext },
-    { section: 'materials', icon: '🧰', title: 'Materials', context: 'Bought · used · left over' },
+    { section: 'materials', icon: '🧰', title: 'Materials', context: 'Bought · used · left over · returned' },
     { section: 'joblog', icon: '📓', title: 'Job log', context: 'Notes · photos' },
   ]
 
@@ -786,7 +790,7 @@ export default function CurrentJobWorkspace({
         {section === 'materials' && (
           <>
             <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Materials views">
-              {([['bought', 'Bought'], ['used', 'Used'], ['leftover', 'Left over']] as const).map(([key, label]) => (
+              {([['bought', 'Bought'], ['used', 'Used'], ['leftover', 'Left over'], ['returned', 'Returned']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   role="tab"
@@ -813,12 +817,23 @@ export default function CurrentJobWorkspace({
                   ariaLabel="Used materials"
                   sectionAdds={{ used_materials: { kind: 'used', label: 'Add used item' } }}
                 />
-              ) : (
+              ) : materialsTab === 'leftover' ? (
                 <MemorySectionTab
                   mem={mem}
                   sectionKeys={['leftovers']}
                   ariaLabel="Left over materials"
                   sectionAdds={{ leftovers: { kind: 'leftover', label: 'Add leftover' } }}
+                />
+              ) : (
+                // Deliberately no direct add: a return starts from the Left over
+                // item it came out of, so the quantity leaves Left over in the
+                // same move. A standalone "add returned item" would let the two
+                // states disagree about the same material.
+                <MemorySectionTab
+                  mem={mem}
+                  sectionKeys={['returned_materials']}
+                  ariaLabel="Returned materials"
+                  emptyText="Nothing returned yet. Take something back to the merchant? Mark it as returned from Left over."
                 />
               ),
             )}

@@ -2,6 +2,11 @@ import { useState } from 'react'
 import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatMoney, localDateKey, localNoonISO } from './memoryScan'
 import type { BudgetCategory, CostQualifier, MemoryItemEdit, MemoryType } from './types'
 
+// Reclassification targets. Deliberately excludes 'returned_material': a return
+// carries semantics this form can't produce — a refund, and a matching reduction
+// in the Left over it came out of — so Returned is only ever created through
+// Left over → Mark as returned. An item that already IS returned keeps its type
+// (the picker is replaced by a static label below) and stays editable/removable.
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'used_material', label: 'Used material' },
   { value: 'ordered_material', label: 'Ordered material' },
@@ -56,6 +61,9 @@ export default function MemoryEditForm({
   const isLabour = form.memoryType === 'labour'
   // A plain note is edited as free text (its summary) — no material/cost fields.
   const isNote = form.memoryType === 'general_note'
+  // A returned item: fixed type, and no cost fields — its money is a refund,
+  // which this form doesn't edit (remove the return and record it again).
+  const isReturned = form.memoryType === 'returned_material'
   // A clear `each` material line or `per_hour` labour line: the total is derived
   // (quantity × unit cost, or hours × rate) on save, so we omit totalCostAmount
   // (backend recalculates) and preview it instead of an explicit total field.
@@ -124,16 +132,26 @@ export default function MemoryEditForm({
       aria-label="Edit memory"
       onSubmit={e => { e.preventDefault(); handleSubmit() }}
     >
-      <label className="queue-field">
-        <span className="queue-field-label">Type</span>
-        <select
-          className="queue-field-input"
-          value={form.memoryType}
-          onChange={e => setType(e.target.value as MemoryType)}
-        >
-          {MEMORY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </label>
+      {isReturned ? (
+        // Fixed type: Returned isn't a reclassification target, and rendering a
+        // select whose value has no option would show an empty picker that
+        // silently retypes the item on any change.
+        <div className="queue-field">
+          <span className="queue-field-label">Type</span>
+          <p className="queue-field-static">Returned material</p>
+        </div>
+      ) : (
+        <label className="queue-field">
+          <span className="queue-field-label">Type</span>
+          <select
+            className="queue-field-input"
+            value={form.memoryType}
+            onChange={e => setType(e.target.value as MemoryType)}
+          >
+            {MEMORY_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      )}
       {showCategory && (
         <label className="queue-field">
           <span className="queue-field-label">Budget category</span>
@@ -207,7 +225,7 @@ export default function MemoryEditForm({
           </label>
         </>
       )}
-      {!isNote && (
+      {!isNote && !isReturned && (
         <>
           {/* One cost figure on screen at a time: an editable rate/cost amount
               plus a derived preview for `each`/`per_hour`, or a single editable

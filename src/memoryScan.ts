@@ -1,4 +1,4 @@
-import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, JobPhoto, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, GrossKnownCost, JobPhoto, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, RefundsSummary, ReturnedRefundRow, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -402,11 +402,17 @@ export function deriveBudgetSummary(
   const uncatSpend = sumRows(uncategorizedRows)
   const hasUncat = uncategorizedRows.length > 0
 
-  // Totals: budget = sum of active category budgets; known spend = all safe rows.
+  // Totals: budget = sum of active category budgets; known spend = all safe rows,
+  // net of trusted refunds. Refunds are deliberately NOT subtracted from any
+  // category: a returned material's refund can't be safely attributed back to
+  // the category its purchase was filed under, and guessing would corrupt a
+  // category figure Mike relies on. Job-level net is safe; category-level is not.
   const totalBudget = active.reduce((n, c) =>
     n + (c.budgetAmount && DECIMAL.test(c.budgetAmount) ? parseFloat(c.budgetAmount) : 0), 0)
   const anyBudget = active.some(c => c.budgetAmount && DECIMAL.test(c.budgetAmount))
-  const totalSpend = categorySummaries.reduce((n, c) => n + sumRows(c.rows), 0) + uncatSpend
+  const refunds = deriveRefundsSummary(sections)
+  const refundTotal = refunds.knownRefundAmount ? parseFloat(refunds.knownRefundAmount) : 0
+  const totalSpend = categorySummaries.reduce((n, c) => n + sumRows(c.rows), 0) + uncatSpend - refundTotal
   const totalRemaining = anyBudget ? totalBudget - totalSpend : null
 
   const response: BudgetSummaryResponse = {
@@ -479,17 +485,99 @@ export function deriveLabourSummary(sections: MemoryViewSection[]): LabourCostSu
   }
 }
 
-// Total trusted monetary cost = bought/ordered safe spend + labour safe spend.
-// Drives the spend hero so rated labour is included, hours-only labour is not.
-export function deriveTotalKnownCost(sections: MemoryViewSection[]): TotalKnownCost {
+// ── Returned materials & refunds ────────────────────────────────────────────
+
+/**
+ * Trusted refund on a single returned-material item, mirroring the backend
+ * rule. Returns null unless the item is a returned material in GBP with a
+ * strict positive refund amount and no unresolved flags — a return Mike hasn't
+ * confirmed a refund for is real, but it is not money back, so it must never
+ * move his spend.
+ */
+export function safeRefund(item: MemoryViewItem): { amount: number; currency: string } | null {
+  if (item.memoryType !== 'returned_material') return null
+  if ((item.uncertaintyFlags ?? []).length > 0) return null
+  if (item.refundCurrency !== 'GBP') return null
+  if (!POS_DECIMAL(item.refundAmount)) return null
+  return { amount: parseFloat(item.refundAmount!), currency: 'GBP' }
+}
+
+// Builder-facing identity for a returned row: "4 fence posts".
+function returnedItemLabel(item: MemoryViewItem): string {
+  const qtyUnit = [item.quantity, item.unit].filter(Boolean).join(' ')
+  return [qtyUnit, item.materialName].filter(Boolean).join(' ').trim() ||
+    item.materialName?.trim() || item.summary?.trim() || 'Returned item'
+}
+
+/**
+ * Frontend fallback mirroring the backend costSummary.refunds contract.
+ * Returned items without a trusted refund appear in Materials/Returned but
+ * contribute nothing here, so they cannot quietly reduce spend.
+ */
+export function deriveRefundsSummary(sections: MemoryViewSection[]): RefundsSummary {
+  const returned = sections.find(s => s.key === 'returned_materials')?.items ?? []
+  const rows: ReturnedRefundRow[] = []
+  let total = 0
+
+  for (const item of returned) {
+    const refund = safeRefund(item)
+    if (!refund) continue
+    total += refund.amount
+    rows.push({
+      memoryItemId: item.id,
+      itemLabel: returnedItemLabel(item),
+      materialName: item.materialName,
+      quantity: item.quantity,
+      unit: item.unit,
+      supplierName: item.supplierName,
+      refundAmount: String(Math.round(refund.amount * 100) / 100),
+      refundCurrency: 'GBP',
+      refundLabel: `${formatMoney(refund.amount, 'GBP')} refund`,
+      happenedAt: item.happenedAt ?? null,
+    })
+  }
+
+  const has = rows.length > 0
+  return {
+    knownRefundAmount: has ? String(Math.round(total * 100) / 100) : null,
+    knownRefundCurrency: has ? 'GBP' : null,
+    knownRefundLabel: has ? `${formatMoney(total, 'GBP')} refunded` : null,
+    rows,
+  }
+}
+
+// Gross trusted money out = bought/ordered safe spend + labour safe spend,
+// before any refund. Rated labour is included; hours-only labour is not.
+export function deriveGrossKnownCost(sections: MemoryViewSection[]): GrossKnownCost {
   const currency = 'GBP'
   const ordered = deriveCostSummary(sections)
   const labour = deriveLabourSummary(sections)
   const orderedAmt = ordered.knownSpendAmount ? parseFloat(ordered.knownSpendAmount) : 0
   const labourAmt = labour.knownSpendAmount ? parseFloat(labour.knownSpendAmount) : 0
   const total = orderedAmt + labourAmt
+  const has = ordered.includedMemoryItemIds.length + labour.includedMemoryItemIds.length > 0
+  return {
+    amount: has ? String(Math.round(total * 100) / 100) : null,
+    currency: has ? currency : null,
+    label: has ? formatMoney(total, currency) : null,
+  }
+}
+
+// Net trusted monetary cost: gross bought + labour spend, less trusted refunds
+// from returned materials. Drives the spend hero. includedMemoryItemIds stays
+// the money-OUT contributors — a refund reduces the figure but is not spend, so
+// it is never folded into the included set.
+export function deriveTotalKnownCost(sections: MemoryViewSection[]): TotalKnownCost {
+  const currency = 'GBP'
+  const ordered = deriveCostSummary(sections)
+  const labour = deriveLabourSummary(sections)
+  const refunds = deriveRefundsSummary(sections)
+  const orderedAmt = ordered.knownSpendAmount ? parseFloat(ordered.knownSpendAmount) : 0
+  const labourAmt = labour.knownSpendAmount ? parseFloat(labour.knownSpendAmount) : 0
+  const refundAmt = refunds.knownRefundAmount ? parseFloat(refunds.knownRefundAmount) : 0
+  const total = orderedAmt + labourAmt - refundAmt
   const ids = [...ordered.includedMemoryItemIds, ...labour.includedMemoryItemIds]
-  const has = ids.length > 0
+  const has = ids.length > 0 || refunds.rows.length > 0
   return {
     knownSpendAmount: has ? String(Math.round(total * 100) / 100) : null,
     knownSpendCurrency: has ? currency : null,
@@ -711,6 +799,7 @@ export const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
   ordered_material: 'ordered_materials',
   used_material: 'used_materials',
   leftover_material: 'leftovers',
+  returned_material: 'returned_materials',
   supplier_delivery_note: 'supplier_delivery_notes',
   customer_change: 'customer_changes',
   watch_out: 'watch_outs',
@@ -719,7 +808,7 @@ export const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
 }
 
 export const SECTION_ORDER = [
-  'ordered_materials', 'labour', 'used_materials', 'leftovers',
+  'ordered_materials', 'labour', 'used_materials', 'leftovers', 'returned_materials',
   'general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs',
 ]
 
@@ -728,6 +817,7 @@ export const SECTION_FULL_LABELS: Record<string, string> = {
   labour: 'Labour',
   used_materials: 'Used materials',
   leftovers: 'Leftovers',
+  returned_materials: 'Returned materials',
   general_notes: 'Notes',
   supplier_delivery_notes: 'Supplier delivery notes',
   customer_changes: 'Customer changes',
@@ -750,6 +840,7 @@ const SCAN_GROUPS: ScanGroupConfig[] = [
   { key: 'ordered_materials', label: 'Bought / ordered', kind: 'material', consolidate: true },
   { key: 'used_materials', label: 'Used', kind: 'material', consolidate: false },
   { key: 'leftovers', label: 'Left over', kind: 'material', consolidate: false },
+  { key: 'returned_materials', label: 'Returned', kind: 'material', consolidate: false },
   { key: 'supplier_delivery_notes', label: 'Supplier notes', kind: 'prose', consolidate: false },
   { key: 'customer_changes', label: 'Customer changes', kind: 'prose', consolidate: false },
   { key: 'watch_outs', label: 'Watch-outs', kind: 'prose', consolidate: false },
@@ -925,6 +1016,7 @@ const LATEST_ACTIVITY_TYPE: Record<string, { type: LatestActivityType; label: st
   ordered_material: { type: 'bought', label: 'Bought' },
   used_material: { type: 'used', label: 'Used' },
   leftover_material: { type: 'used', label: 'Used' },
+  returned_material: { type: 'returned', label: 'Returned' },
   labour: { type: 'labour', label: 'Labour' },
   general_note: { type: 'note', label: 'Note' },
   supplier_delivery_note: { type: 'note', label: 'Note' },
@@ -935,6 +1027,10 @@ const LATEST_ACTIVITY_TYPE: Record<string, { type: LatestActivityType; label: st
 function latestHeadline(item: MemoryViewItem): string {
   if (item.memoryType === 'labour') {
     return [item.labourHours ? `${item.labourHours}h` : null, item.labourTask].filter(Boolean).join(' · ') || item.summary
+  }
+  if (item.memoryType === 'returned_material') {
+    const base = returnedItemLabel(item)
+    return item.supplierName ? `${base} — back to ${item.supplierName}` : base
   }
   if (item.memoryType === 'ordered_material' || item.memoryType === 'used_material' || item.memoryType === 'leftover_material') {
     const qtyName = [item.quantity ? `${item.quantity}×` : null, item.materialName].filter(Boolean).join(' ')
@@ -949,6 +1045,12 @@ function latestHeadline(item: MemoryViewItem): string {
 // else the unit/basis cost. Uncertain-basis costs still show (they are evidence
 // on a card, not a trusted spend total here).
 function latestCost(item: MemoryViewItem): string | null {
+  // A refund is money back, so it is labelled as one rather than sitting in the
+  // same column as spend with no sign of which way it went.
+  if (item.memoryType === 'returned_material') {
+    const refund = formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
+    return refund ? `${refund} refund` : null
+  }
   return formatTotalLabel(item.totalCostAmount, item.costCurrency) ??
     formatCostLabel(item.costAmount, item.costCurrency, item.costQualifier)
 }

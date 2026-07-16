@@ -7,6 +7,7 @@ import {
   getMemoryView,
   patchBudgetCategory,
   removeMemoryItem,
+  returnMemoryItem,
   updateMemoryItem,
   verifyMemoryItem,
 } from './api'
@@ -15,9 +16,11 @@ import type { MemoryCardProps } from './MemoryCard'
 import { memoryItemToEdit } from './memoryEdit'
 import {
   deriveCostSummary,
+  deriveGrossKnownCost,
   deriveLabourHoursSummary,
   deriveLabourSpendGroupFromBudget,
   deriveLabourSummary,
+  deriveRefundsSummary,
   deriveTotalKnownCost,
   findLabourBudgetCategory,
   hasCostLikeAmount,
@@ -29,6 +32,7 @@ import type {
   BudgetCategory,
   BudgetSummaryResponse,
   CreateMemoryItemRequest,
+  GrossKnownCost,
   Job,
   LabourCostSummary,
   LabourHoursSummary,
@@ -38,6 +42,8 @@ import type {
   MemoryViewItem,
   MemoryViewResponse,
   OrderedCostSummary,
+  RefundsSummary,
+  ReturnMaterialRequest,
   TotalKnownCost,
 } from './types'
 
@@ -284,6 +290,26 @@ export function useJobMemory(job: Job) {
     }
   }, [job.id, findItem, refetch, loadBudget])
 
+  // Return all or part of a Left over item to the merchant. Like removal,
+  // nothing moves locally first: the quantity stays on screen until the backend
+  // has accepted the return, so a failure can never look like a completed one.
+  // Both authoritative summaries are refetched — a trusted refund changes
+  // job-level spend, not just the Materials sections. Throws on failure so the
+  // return sheet can stay open with Mike's entered values.
+  const handleReturnItem = useCallback(async (memoryItemId: string, req: ReturnMaterialRequest) => {
+    const item = findItem(memoryItemId)
+    await returnMemoryItem(job.id, memoryItemId, req)
+    track('material_returned', {
+      job_id: job.id,
+      has_refund: Boolean(req.refundAmount),
+      has_supplier: Boolean(req.supplierName),
+      full_return: item?.quantity === req.quantity,
+    })
+    if (currentJobIdRef.current !== job.id) return
+    await refetch()
+    void loadBudget()
+  }, [job.id, findItem, refetch, loadBudget])
+
   // ── Budget category management (Spend tab) ────────────────────────────────
   const handleAddCategory = useCallback(async (name: string, amount: string) => {
     setSavingNewCategory(true); setBudgetError('')
@@ -350,8 +376,20 @@ export function useJobMemory(job: Job) {
     () => (data ? (data.costSummary?.labour ?? deriveLabourSummary(data.sections)) : null),
     [data],
   )
+  // Net of trusted refunds since returned materials landed.
   const totalKnownCost = useMemo<TotalKnownCost | null>(
     () => (data ? (data.costSummary?.totalKnownCost ?? deriveTotalKnownCost(data.sections)) : null),
+    [data],
+  )
+  // The gross/refund pair that explains the net figure above. On a backend
+  // without them there are no returned materials either, so the local
+  // derivation yields no refunds and Spend shows no breakdown.
+  const grossKnownCost = useMemo<GrossKnownCost | null>(
+    () => (data ? (data.costSummary?.grossKnownCost ?? deriveGrossKnownCost(data.sections)) : null),
+    [data],
+  )
+  const refunds = useMemo<RefundsSummary | null>(
+    () => (data ? (data.costSummary?.refunds ?? deriveRefundsSummary(data.sections)) : null),
     [data],
   )
   // Daily labour view: backend labourHoursSummary preferred; local fallback for
@@ -472,13 +510,14 @@ export function useJobMemory(job: Job) {
     onAssignCategory: (c: string | null) => handleAssignCategory(item.id, c),
     onRemove: () => handleRemoveItem(item.id),
     onMove: (memoryType: MemoryType) => handleMoveItem(item.id, memoryType),
-  }), [editingId, submittingId, verifyingId, itemErrors, budgetCategories, assigningCategoryId, mutatingId, handleSaveEdit, handleVerify, handleAssignCategory, handleRemoveItem, handleMoveItem])
+    onReturn: (req: ReturnMaterialRequest) => handleReturnItem(item.id, req),
+  }), [editingId, submittingId, verifyingId, itemErrors, budgetCategories, assigningCategoryId, mutatingId, handleSaveEdit, handleVerify, handleAssignCategory, handleRemoveItem, handleMoveItem, handleReturnItem])
 
   return {
     data, loadState, errorMsg, reload, refreshError, refreshSummary, refetch,
     addMemoryItem,
     budgetSummary, budgetCategories,
-    ordered, labourSummary, totalKnownCost, labourHours, labourSpendGroup,
+    ordered, labourSummary, totalKnownCost, grossKnownCost, refunds, labourHours, labourSpendGroup,
     sectionItems, includedIds, exclusionReason, hasMemory,
     costCheckItems, notCountedItems, resolveCostBasis, addPrice,
     // budget CRUD state + handlers

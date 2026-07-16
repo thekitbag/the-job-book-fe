@@ -14,7 +14,7 @@ import {
 } from './api'
 import { identifyAnalyticsUser, track } from './analytics'
 import AuthScreen from './AuthScreen'
-import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, formatCostLabel, friendlyDayLabel } from './memoryScan'
+import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, deriveRefundsSummary, formatCostLabel, formatTotalLabel, friendlyDayLabel } from './memoryScan'
 import type {
   AuthUser,
   BudgetSummaryResponse,
@@ -239,8 +239,9 @@ function BackRow({ onBack, label = '← Back' }: { onBack: () => void; label?: s
 // Read-only memory card: same presentation as the workspace card, with no
 // Fix memory / verify / category controls at all.
 function ReadOnlyMemoryCard({ item }: { item: MemoryViewItem }) {
-  const structured = ['ordered_material', 'used_material', 'leftover_material', 'labour'].includes(item.memoryType)
+  const structured = ['ordered_material', 'used_material', 'leftover_material', 'returned_material', 'labour'].includes(item.memoryType)
   const rows: [string, string][] = []
+  const isReturned = item.memoryType === 'returned_material'
   if (item.memoryType === 'labour') {
     if (item.labourHours) rows.push(['Hours', item.labourHours])
     if (item.labourPerson) rows.push(['Person', item.labourPerson])
@@ -248,15 +249,23 @@ function ReadOnlyMemoryCard({ item }: { item: MemoryViewItem }) {
   } else {
     if (item.materialName) rows.push(['Item', item.materialName])
     const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
-    if (qty) rows.push(['Quantity', qty])
-    if (item.supplierName) rows.push(['Supplier', item.supplierName])
+    if (qty) rows.push([isReturned ? 'Returned' : 'Quantity', qty])
+    if (item.supplierName) rows.push([isReturned ? 'Returned to' : 'Supplier', item.supplierName])
     if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
     if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
   }
-  rows.push(...costDetailRows(item))
+  if (isReturned) {
+    const refund = formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
+    rows.push(['Refund', refund ? `${refund} refund` : 'None recorded — spend is unchanged'])
+    // Support inspection value: which leftover this came out of.
+    if (item.returnedFromMemoryItemId) rows.push(['Returned from', item.returnedFromMemoryItemId])
+  } else {
+    rows.push(...costDetailRows(item))
+  }
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
   const typeLabel: Record<string, string> = {
-    ordered_material: 'Bought / ordered', used_material: 'Used', leftover_material: 'Left over', labour: 'Labour',
+    ordered_material: 'Bought / ordered', used_material: 'Used', leftover_material: 'Left over',
+    returned_material: 'Returned', labour: 'Labour',
   }
   return (
     <div className={`mem-card${uncertain ? ' mem-card--unresolved' : ''}`}>
@@ -342,6 +351,7 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
   const sections = memory?.sections ?? []
   const sectionItems = (key: string) => sections.find(s => s.key === key)?.items ?? []
   const labourHours = memory ? (memory.labourHoursSummary ?? deriveLabourHoursSummary(sections)) : null
+  const refunds = memory ? (memory.costSummary?.refunds ?? deriveRefundsSummary(sections)) : null
   const labourGroup = budget ? (budget.labour ?? deriveLabourSpendGroupFromBudget(budget)) : null
   const labourRowIds = new Set((labourGroup?.rows ?? []).map(r => r.memoryItemId))
 
@@ -383,6 +393,11 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                 <p className="mem-hero-amount">
                   {budget?.totals.knownSpendAmount ? `£${budget.totals.knownSpendAmount}` : (memory.costSummary?.totalKnownCost?.knownSpendLabel ?? 'None yet')}
                 </p>
+                {/* Support sees the same refund adjustment Mike does, so a net
+                    total is never unexplained on a support call either. */}
+                {refunds?.knownRefundLabel && (
+                  <p className="mem-hero-sub">{refunds.knownRefundLabel} — net of refunds</p>
+                )}
                 {budget?.totals.remainingLabel && <p className="mem-hero-sub">{budget.totals.remainingLabel}</p>}
               </section>
 
@@ -515,6 +530,9 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
               <p className="mem-section-label">Left over</p>
               {sectionItems('leftovers').map(item => <ReadOnlyMemoryCard key={item.id} item={item} />)}
               {sectionItems('leftovers').length === 0 && <p className="mem-section-empty">None.</p>}
+              <p className="mem-section-label">Returned</p>
+              {sectionItems('returned_materials').map(item => <ReadOnlyMemoryCard key={item.id} item={item} />)}
+              {sectionItems('returned_materials').length === 0 && <p className="mem-section-empty">None.</p>}
             </div>
           )}
 
