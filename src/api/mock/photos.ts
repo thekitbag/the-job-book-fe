@@ -137,6 +137,17 @@ export function mockUploadJobPhoto(jobId: string, req: UploadJobPhotoRequest): J
   return { ...photo }
 }
 
+// Soft removal, mock-side: the photo leaves the active list (and the file
+// route it would have served). The mock keeps no separate object store, which
+// matches the backend rule that the underlying object is retained, not
+// physically deleted — only hidden from active reads.
+export function mockRemoveJobPhoto(jobId: string, photoId: string): void {
+  const photos = photosFor(jobId)
+  const idx = photos.findIndex(p => p.id === photoId)
+  if (idx === -1) throw new ApiError('Photo not found', 404)
+  photos.splice(idx, 1)
+}
+
 export function mockPatchJobPhoto(jobId: string, photoId: string, req: PatchJobPhotoRequest): JobPhoto {
   const photo = photosFor(jobId).find(p => p.id === photoId)
   if (!photo) throw new ApiError('Photo not found', 404)

@@ -8,10 +8,10 @@ export { getCurrentJob, getJobs, createJob, patchJob } from './api/jobs'
 export { getJobNoteStatuses, getDraftFacts, getNoteTranscript, uploadNote } from './api/notes'
 export type { UploadNoteResponse, NoteListRow, TranscriptResponse } from './api/notes'
 export { getReviewQueue, submitQueueDecision } from './api/reviewQueue'
-export { getMemoryView, updateMemoryItem, verifyMemoryItem, createMemoryItem, assignMemoryItemCategory } from './api/memory'
+export { getMemoryView, updateMemoryItem, verifyMemoryItem, createMemoryItem, assignMemoryItemCategory, removeMemoryItem } from './api/memory'
 export { getBudgetCategories, createBudgetCategory, patchBudgetCategory, getBudgetSummary } from './api/budget'
 export { getInspectionData } from './api/inspection'
-export { getJobPhotos, uploadJobPhoto, patchJobPhoto } from './api/photos'
+export { getJobPhotos, uploadJobPhoto, patchJobPhoto, removeJobPhoto } from './api/photos'
 export {
   getJobPayments, patchCustomerTotal, createJobPayment, patchJobPayment, deleteJobPayment,
   getSupportJobPayments,

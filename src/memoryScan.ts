@@ -531,6 +531,27 @@ export function friendlyDayLabel(dateKey: string, now: Date = new Date()): strin
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
 }
 
+// When an item happened, best-effort: the remembered date, else when the note
+// was captured, else when the row was created. Same order the labour day
+// grouping uses, so a card and its day heading can never disagree.
+export function effectiveItemDate(item: MemoryViewItem): string | null {
+  return item.happenedAt ?? item.source?.capturedAt ?? item.createdAt ?? null
+}
+
+// Concise date cue on an item card: Today / Yesterday / "8 Jul" / "31 Dec 2025".
+// Deliberately shorter than friendlyDayLabel (no weekday) — this sits inline on
+// a card as a memory/audit cue, not as a day heading. Not an accounting date.
+export function itemDateLabel(iso: string | null, now: Date = new Date()): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const key = localDateKey(iso)
+  if (key === localDateKey(now.toISOString())) return 'Today'
+  if (key === localDateKey(new Date(now.getTime() - 86_400_000).toISOString())) return 'Yesterday'
+  const sameYear = d.getFullYear() === now.getFullYear()
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
+}
+
 // "4" → "4h", "3.5" → "3.5h"; non-numeric hours shown as said (never totalled).
 function hoursShort(hours: string): string {
   return DECIMAL.test(hours) ? `${Math.round(parseFloat(hours) * 100) / 100}h` : hours
