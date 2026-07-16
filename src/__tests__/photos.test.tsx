@@ -16,6 +16,7 @@ vi.mock('../api', async (importOriginal) => {
     getJobPhotos: vi.fn(),
     uploadJobPhoto: vi.fn(),
     patchJobPhoto: vi.fn(),
+    removeJobPhoto: vi.fn(),
   }
 })
 
@@ -27,6 +28,7 @@ const mockGetBudgetSummary = vi.mocked(api.getBudgetSummary)
 const mockGetJobPhotos = vi.mocked(api.getJobPhotos)
 const mockUploadJobPhoto = vi.mocked(api.uploadJobPhoto)
 const mockPatchJobPhoto = vi.mocked(api.patchJobPhoto)
+const mockRemoveJobPhoto = vi.mocked(api.removeJobPhoto)
 
 const JOB: Job = {
   id: 'job-photo-001', title: 'Garden Room', jobType: 'garden_room',
@@ -266,6 +268,54 @@ describe('Job photos — section and upload', () => {
     const img = await within(section).findByAltText('Job photo')
     fireEvent.error(img)
     expect(within(section).getByText('Photo uploaded')).toBeInTheDocument()
+  })
+})
+
+describe('Job photos — remove', () => {
+  it('removing a photo needs confirmation, deletes on the backend, then refetches and it disappears', async () => {
+    // Stateful store so every getJobPhotos read (the section AND Overview's
+    // independent read) sees the same list; removeJobPhoto mutates it, so the
+    // refetch after delete authoritatively drops the photo.
+    let store: JobPhoto[] = [photo({ descriptor: 'Jewson receipt' })]
+    mockGetJobPhotos.mockImplementation(() => Promise.resolve({ jobId: JOB.id, photos: store.map(p => ({ ...p })) }))
+    mockRemoveJobPhoto.mockImplementation((_jobId, id) => { store = store.filter(p => p.id !== id); return Promise.resolve() })
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    await within(section).findByText('Jewson receipt')
+
+    fireEvent.click(within(section).getByRole('button', { name: /remove photo/i }))
+    expect(mockRemoveJobPhoto).not.toHaveBeenCalled()
+    expect(within(section).getByText(/remove this photo\?/i)).toBeInTheDocument()
+    fireEvent.click(within(section).getByRole('button', { name: /^remove$/i }))
+
+    await waitFor(() => expect(mockRemoveJobPhoto).toHaveBeenCalledWith(JOB.id, 'photo-1'))
+    await waitFor(() => expect(within(section).queryByText('Jewson receipt')).not.toBeInTheDocument())
+  })
+
+  it('cancelling the confirmation removes nothing', async () => {
+    mockGetJobPhotos.mockResolvedValue({ jobId: JOB.id, photos: [photo({ descriptor: 'Jewson receipt' })] })
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    await within(section).findByText('Jewson receipt')
+    fireEvent.click(within(section).getByRole('button', { name: /remove photo/i }))
+    fireEvent.click(within(section).getByRole('button', { name: /cancel/i }))
+    expect(mockRemoveJobPhoto).not.toHaveBeenCalled()
+    expect(within(section).getByText('Jewson receipt')).toBeInTheDocument()
+  })
+
+  it('a failed removal keeps the photo visible with retryable copy', async () => {
+    mockGetJobPhotos.mockResolvedValue({ jobId: JOB.id, photos: [photo({ descriptor: 'Jewson receipt' })] })
+    mockRemoveJobPhoto.mockRejectedValue(new Error('boom'))
+    renderWorkspace()
+    openNotesTab()
+    const section = await photosSection()
+    await within(section).findByText('Jewson receipt')
+    fireEvent.click(within(section).getByRole('button', { name: /remove photo/i }))
+    fireEvent.click(within(section).getByRole('button', { name: /^remove$/i }))
+    expect(await within(section).findByRole('alert')).toHaveTextContent(/could not remove/i)
+    expect(within(section).getByText('Jewson receipt')).toBeInTheDocument()
   })
 })
 

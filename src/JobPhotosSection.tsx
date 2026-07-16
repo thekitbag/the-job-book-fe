@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getJobPhotos, patchJobPhoto, resolveApiUrl, uploadJobPhoto } from './api'
+import { getJobPhotos, patchJobPhoto, removeJobPhoto, resolveApiUrl, uploadJobPhoto } from './api'
 import { mimeTypeFamily, sizeBucket, track } from './analytics'
 import type { JobPhoto, MemoryViewItem, PatchJobPhotoRequest } from './types'
 
@@ -99,10 +99,11 @@ function PhotoMetaFields({ descriptor, setDescriptor, linkId, setLinkId, linkTar
   )
 }
 
-function PhotoCard({ photo, linkTargets, onSave }: {
+function PhotoCard({ photo, linkTargets, onSave, onRemove }: {
   photo: JobPhoto
   linkTargets: PhotoLinkTarget[]
   onSave: (photoId: string, req: PatchJobPhotoRequest) => Promise<void>
+  onRemove: (photoId: string) => Promise<void>
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -110,12 +111,27 @@ function PhotoCard({ photo, linkTargets, onSave }: {
   const [linkId, setLinkId] = useState(photo.linkedMemoryItemId ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   const startEdit = () => {
     setDescriptor(photo.descriptor ?? '')
     setLinkId(photo.linkedMemoryItemId ?? '')
     setError(null)
     setEditing(true)
+  }
+
+  // Keep the photo visible until the backend accepts the delete: on failure it
+  // stays on screen with retryable copy, never removed locally as if confirmed.
+  const remove = async () => {
+    setRemoving(true)
+    setError(null)
+    try {
+      await onRemove(photo.id)
+    } catch {
+      setError('Could not remove — try again')
+      setRemoving(false)
+    }
   }
 
   const save = async () => {
@@ -170,7 +186,28 @@ function PhotoCard({ photo, linkTargets, onSave }: {
               {photoDayLabel(photo.uploadedAt)}
               {link && <span className="photo-card-link"> · {link}</span>}
             </p>
-            <button type="button" className="btn-mem-fix" onClick={startEdit}>Edit details</button>
+            {confirmingRemove ? (
+              <div className="mem-remove-confirm">
+                <p className="mem-remove-question">Remove this photo?</p>
+                <p className="mem-remove-consequence">It will be removed from this job.</p>
+                <div className="mem-remove-actions">
+                  <button type="button" className="btn-mem-remove-confirm" disabled={removing} onClick={() => void remove()}>
+                    {removing ? 'Removing…' : 'Remove'}
+                  </button>
+                  <button type="button" className="btn-mem-cancel" disabled={removing} onClick={() => setConfirmingRemove(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="photo-card-actions">
+                <button type="button" className="btn-mem-fix" onClick={startEdit}>Edit details</button>
+                <button type="button" className="btn-mem-remove" onClick={() => { setError(null); setConfirmingRemove(true) }}>
+                  Remove photo
+                </button>
+              </div>
+            )}
+            {error && <p className="queue-item-error" role="alert">{error}</p>}
           </>
         )}
       </div>
@@ -263,6 +300,17 @@ export default function JobPhotosSection({ jobId, linkTargets, onPhotosChanged =
     setPhotos(prev => prev ? prev.map(p => p.id === photoId ? updated : p) : prev)
   }
 
+  // Delete on the backend, then adopt the authoritative photo list by refetch
+  // (rather than splicing locally) so a removed photo disappears from the same
+  // source Overview's latest-activity reads. Throws on failure so the card
+  // keeps the photo visible with retryable copy.
+  const handleRemove = async (photoId: string) => {
+    await removeJobPhoto(jobId, photoId)
+    track('photo_removed', { job_id: jobId })
+    await load()
+    onPhotosChanged()
+  }
+
   return (
     <section className="job-photos" aria-label="Job photos">
       <div className="lens-add-head">
@@ -314,7 +362,7 @@ export default function JobPhotosSection({ jobId, linkTargets, onPhotosChanged =
         <p className="mem-section-empty">No photos yet.</p>
       )}
       {(photos ?? []).map(photo => (
-        <PhotoCard key={photo.id} photo={photo} linkTargets={linkTargets} onSave={handlePatch} />
+        <PhotoCard key={photo.id} photo={photo} linkTargets={linkTargets} onSave={handlePatch} onRemove={handleRemove} />
       ))}
     </section>
   )

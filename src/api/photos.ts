@@ -1,7 +1,7 @@
 import type { JobPhoto, JobPhotosResponse, PatchJobPhotoRequest, UploadJobPhotoRequest } from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
-import { mockGetJobPhotos, mockPatchJobPhoto, mockUploadJobPhoto } from './mock/photos'
+import { mockGetJobPhotos, mockPatchJobPhoto, mockRemoveJobPhoto, mockUploadJobPhoto } from './mock/photos'
 
 // GET /api/jobs/:jobId/photos — all photos for the job, newest first.
 export async function getJobPhotos(jobId: string): Promise<JobPhotosResponse> {
@@ -51,4 +51,20 @@ export async function patchJobPhoto(jobId: string, photoId: string, req: PatchJo
   })
   if (!res.ok) throw new ApiError(`PATCH photo → ${res.status}`, res.status)
   return res.json() as Promise<JobPhoto>
+}
+
+// DELETE /api/jobs/:jobId/photos/:photoId — remove a photo from the job.
+// Soft-delete server-side: the object is kept but hidden from the active list
+// and the file route. Repeat delete → 404, matching memory-item removal.
+export async function removeJobPhoto(jobId: string, photoId: string): Promise<void> {
+  if (USE_MOCK) {
+    await delay(300)
+    mockRemoveJobPhoto(jobId, photoId)
+    return
+  }
+  const res = await apiFetch(`/api/jobs/${jobId}/photos/${photoId}`, { method: 'DELETE' })
+  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
+  if (res.status === 403) throw new ApiError('Forbidden', 403)
+  if (res.status === 404) throw new ApiError('Photo not found', 404)
+  if (!res.ok && res.status !== 204) throw new ApiError(`DELETE photo → ${res.status}`, res.status)
 }

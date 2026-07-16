@@ -222,7 +222,7 @@ describe('Support mode — read-only view-as', () => {
       expect(screen.queryByRole('button', { name: /^add /i })).toBeNull()
       expect(screen.queryByRole('button', { name: /fix memory/i })).toBeNull()
       // correction/removal is an owner action — never offered in view-as
-      expect(screen.queryByRole('button', { name: /remove item|move to/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /remove item|remove photo|move to/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /remember this|dismiss|save|upload|edit details/i })).toBeNull()
       expect(document.querySelector('input, textarea, select')).toBeNull()
       // no job status edit surface — support/view-as never mutates target data

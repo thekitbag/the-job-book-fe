@@ -4262,6 +4262,7 @@ code {
 }
 .photo-card-meta { margin: 0.15rem 0 0.35rem; font-size: var(--text-xs); color: var(--ink-500); }
 .photo-card-link { font-weight: 700; }
+.photo-card-actions { display: flex; align-items: center; gap: 0.5rem; }
 .photo-preview {
   display: block;
   /* The form is a column flexbox: without this the image is cross-axis
