@@ -6,6 +6,19 @@ import * as api from '../api'
 import { makeNote } from './helpers'
 import type { BudgetCategory, BudgetSummaryResponse, Job, MemoryViewItem, MemoryViewResponse } from '../types'
 
+// The SPENT / BUDGET / LEFT columns state a bare figure under their own kicker
+// label, so a figure is identified by its column rather than by a phrase that
+// used to repeat the label ("£280 known spend").
+function figure(scope: HTMLElement, label: string, value: string) {
+  const col = within(scope).getAllByText(label, { selector: 'dt' })[0].closest('.budget-figure') as HTMLElement
+  return expect(within(col).getByText(value))
+}
+async function figureAsync(scope: HTMLElement, label: string, value: string) {
+  const col = (await within(scope).findAllByText(label, { selector: 'dt' }))[0].closest('.budget-figure') as HTMLElement
+  return expect(within(col).getByText(value))
+}
+
+
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
   return {
@@ -106,9 +119,9 @@ describe('Labour tab — budget context from budgetSummary.labour', () => {
     renderWorkspace()
     openTab('Labour')
     const money = await screen.findByRole('region', { name: 'Labour cost' })
-    expect(within(money).getByText('£280 known spend')).toBeInTheDocument()
-    expect(within(money).getByText('£1500 budget')).toBeInTheDocument()
-    expect(within(money).getByText('£1220 remaining')).toBeInTheDocument()
+    figure(money, 'Cost', '£280').toBeInTheDocument()
+    figure(money, 'Budget', '£1500').toBeInTheDocument()
+    figure(money, 'Left', '£1220').toBeInTheDocument()
   })
 
   it('without a labour budget, still shows cost and never implies it is excluded', async () => {
@@ -118,8 +131,9 @@ describe('Labour tab — budget context from budgetSummary.labour', () => {
     renderWorkspace()
     openTab('Labour')
     const money = await screen.findByRole('region', { name: 'Labour cost' })
-    expect(within(money).getByText('£280 known spend')).toBeInTheDocument()
-    expect(within(money).getByText(/no Labour budget needed/i)).toBeInTheDocument()
+    figure(money, 'Cost', '£280').toBeInTheDocument()
+    // No budget set, yet the cost is still stated — that is the claim.
+    expect(within(money).queryByText(/Budget/)).toBeNull()
   })
 
   it('labour add stays available from Labour and creates memoryType labour', async () => {
@@ -151,7 +165,9 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
     openTab('Spend')
     const group = await screen.findByRole('region', { name: /^labour spend$/i })
     expect(within(group).queryByRole('button', { name: /add/i })).toBeNull()
-    expect(within(group).getByText(/Add labour from the Labour tab/)).toBeInTheDocument()
+    // The standing "add labour on the Labour tab" guidance is gone entirely —
+    // static prose the theme asks us to cut. The absence of an add action here
+    // is what steers entry to the Labour tab now.
     // and no separate "budget category labour" card offering Add to labour
     expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add to labour' })).toBeNull()
@@ -197,7 +213,8 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
     const group = await screen.findByRole('region', { name: /^labour spend$/i })
     const hist = within(group).getByRole('group', { name: /existing spend in the labour category/i })
     expect(within(hist).getByText('agency invoice')).toBeInTheDocument()
-    expect(within(hist).getByText(/already counted in known spend/i)).toBeInTheDocument()
+    // The "why is this here" explanation is gone; the heading and the rows'
+    // own Fix memory action carry it.
     expect(within(hist).getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
     // shown exactly once across the whole Spend tab
     expect(screen.getAllByText('agency invoice')).toHaveLength(1)
@@ -209,12 +226,12 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
     renderWorkspace()
     openTab('Spend')
     const timber = await screen.findByRole('region', { name: /budget category timber/i })
-    expect(within(timber).getByText('£4000 budget')).toBeInTheDocument()
-    expect(within(timber).getByText('£4000 remaining')).toBeInTheDocument()
+    figure(timber, 'Budget', '£4000').toBeInTheDocument()
+    figure(timber, 'Left', '£4000').toBeInTheDocument()
     const labour = screen.getByRole('region', { name: /^labour spend$/i })
-    expect(within(labour).getByText('£280 known spend')).toBeInTheDocument()
-    expect(within(labour).getByText('£1500 budget')).toBeInTheDocument()
-    expect(within(labour).getByText('£1220 remaining')).toBeInTheDocument()
+    figure(labour, 'Spent', '£280').toBeInTheDocument()
+    figure(labour, 'Budget', '£1500').toBeInTheDocument()
+    figure(labour, 'Left', '£1220').toBeInTheDocument()
   })
 })
 
@@ -300,8 +317,9 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
 
     await waitFor(() => expect(mockCreateCategory).toHaveBeenCalledWith(JOB.id, { name: 'Labour', budgetAmount: '1500' }))
     // the refetched authoritative summary now shows the Labour budget
-    expect(await within(money).findByText('£1500 budget')).toBeInTheDocument()
-    expect(within(money).getByText('£1220 remaining')).toBeInTheDocument()
+    const budget = await figureAsync(money, 'Budget', '£1500')
+    budget.toBeInTheDocument()
+    figure(money, 'Left', '£1220').toBeInTheDocument()
   })
 
   it('with a Labour category, Edit Labour budget patches the existing category', async () => {

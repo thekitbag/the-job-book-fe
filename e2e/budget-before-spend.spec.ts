@@ -64,7 +64,7 @@ test.describe('Budget setup before spend', () => {
     const card = page.getByRole('region', { name: /budget category materials/i })
     await expect(card).toBeVisible()
     await expect(card).toContainText('None yet')
-    await expect(card).toContainText('£500 budget')
+    await expect(card.locator('.budget-figure', { hasText: 'Budget' }).getByText('£500', { exact: true })).toBeVisible()
 
     const addTo = card.getByRole('button', { name: /add to materials/i })
     await expect(addTo).toBeVisible()

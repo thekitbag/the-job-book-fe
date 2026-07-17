@@ -1,80 +1,112 @@
 /* ════════════════════════════════════════════════════════════════════
-   Design tokens — Job Book
-   Aesthetic: warm, field-ready, confident. High contrast for outdoor
-   glances, large tap targets, calm paper canvas, a single green brand
-   with a red record accent. No CDN web fonts (offline-first PWA): the
-   type system rides a refined native stack, swappable via the font vars.
+   Design tokens — Job Book, "Ledger" theme
+   Editorial account-book typography: white paper, hairline rules, no
+   cards. Hierarchy comes from type size/weight/colour alone — never
+   from a container. One accent (cobalt) and it always means "tapping
+   this does something". Flat: no shadows, no gradients (the Record-bar
+   fade is the one exception), no radii bar the mic circle and dot.
+
+   Every rule serves builders reading a phone in sunlight: ≥16px body,
+   ≥56px rows, tabular numerals so money columns line up.
+
+   Font is self-hosted (see main.tsx), not Google-CDN: this is an
+   offline-first PWA used in vans with no signal.
    ════════════════════════════════════════════════════════════════════ */
 :root {
-  /* Fonts — self-hosted variable faces (see main.tsx), system fallbacks */
-  --font-body: 'Hanken Grotesk Variable', ui-sans-serif, -apple-system,
+  /* Fonts — self-hosted variable face (see main.tsx), system fallbacks */
+  --font-body: 'Schibsted Grotesk Variable', ui-sans-serif, -apple-system,
     BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Roboto, system-ui, sans-serif;
-  --font-display: 'Bricolage Grotesque Variable', var(--font-body);
+  --font-display: var(--font-body);
   --font-mono: 'SF Mono', 'Fira Code', Menlo, ui-monospace, monospace;
 
-  /* Green brand ramp */
-  --green-900: #0c3d20;
-  --green-800: #103f24;
-  --green-700: #14512a;   /* pressed */
-  --green-600: #1a6f38;   /* primary brand */
-  --green-500: #2f8a4e;
-  --green-200: #b9dcc6;
-  --green-100: #d9ecdf;
-  --green-50:  #eef6f0;
+  /* ── Ledger palette ──
+     Four greys, one ink, one paper, one accent. That is the whole set. */
+  --ink:          #111111;  /* text, heavy rules, progress fill, Record bar */
+  --paper:        #ffffff;  /* the only background colour */
+  --grey-text:    #6e6e6a;  /* secondary text, muted labels, Remove */
+  --grey-hairline:#e4e4e2;  /* row separators */
+  --grey-track:   #eeeeec;  /* progress track */
+  --grey-press:   #f7f7f5;  /* pressed row */
+  --cobalt:       #2440ff;  /* interactive ONLY — never decoration */
+  --cobalt-on-ink:#9db1ff;  /* the accent when it sits on ink (cobalt is illegible there) */
+  --warning-red:  #d92d20;  /* warning states ONLY (over budget, overdue) */
+  --record-sub:   #9b9b97;  /* secondary text on the Record bar */
 
-  /* Record / danger red */
-  --red-700: #8f1717;
-  --red-600: #b91c1c;
-  --red-500: #d83a3a;
+  /* Zoning: three visual levels, each with its own treatment. A band is the
+     boundary — so a banded zone never also needs a rule. */
+  --band-grey:    #f4f4f1;  /* alternating category band */
+  --track-on-grey:#e2e2dd;  /* progress track on a grey band */
+  --track-on-ink: #3a3a38;  /* progress track on the ink band */
 
-  /* Amber (offline / attention) */
-  --amber-bg: #fdf3d6;
-  --amber-line: #f0d68a;
-  --amber-fg: #8a5a10;
+  /* Legacy aliases: the app's older names, remapped onto the ledger set so
+     every surface converges on it. Kept (rather than renamed across ~4.5k
+     lines) so this stays a restyle with a reviewable diff. */
+  --surface:      var(--paper);
+  --paper-tint:   var(--paper);
+  --surface-sunk: var(--grey-press);
+  --ink-900: var(--ink);
+  --ink-700: var(--ink);
+  --ink-500: var(--grey-text);
+  --ink-400: var(--grey-text);
+  --ink-300: var(--grey-hairline);
+  --line:        var(--grey-hairline);
+  --line-strong: var(--grey-hairline);
+  --green-900: var(--ink);
+  --green-800: var(--ink);
+  --green-700: var(--cobalt);
+  --green-600: var(--cobalt);
+  --green-500: var(--cobalt);
+  --green-200: var(--grey-hairline);
+  --green-100: var(--grey-track);
+  --green-50:  var(--grey-press);
+  --red-700: var(--ink);
+  --red-600: var(--ink);
+  --red-500: var(--ink);
 
-  /* Job status hues (header chip fills + picker-sheet dots) */
-  --status-planning: #c08a2e;  /* amber */
-  --status-started:  var(--green-600);
-  --status-finished: #67706b;  /* quiet slate */
+  /* Attention (offline / worth-checking). The ledger has one accent and it
+     means "tappable", so attention can't borrow it — it speaks with weight
+     and an ink rule instead of a coloured fill. */
+  --amber-bg: var(--paper);
+  --amber-line: var(--ink);
+  --amber-fg: var(--ink);
 
-  /* Warm neutral ink + paper */
-  --paper:        #f2f1ea;
-  --paper-tint:   #ecebe2;
-  --surface:      #ffffff;
-  --surface-sunk: #f7f6f1;
-  --ink-900: #191c18;
-  --ink-700: #3b403a;
-  --ink-500: #6a706a;
-  --ink-400: #969b94;
-  --ink-300: #b9bdb5;
-  --line:        #e5e4db;
-  --line-strong: #d4d2c6;
+  /* Job status: no status hues — a coloured chip is decoration. The dot is
+     cobalt because the status line is a tappable switcher. */
+  --status-planning: var(--grey-text);
+  --status-started:  var(--cobalt);
+  --status-finished: var(--grey-text);
 
-  /* Radius */
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 22px;
-  --r-pill: 999px;
+  /* Radius — 0 everywhere. The mic circle and status dot set their own. */
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+  --r-xl: 0;
+  --r-pill: 0;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(25, 35, 22, 0.06);
-  --shadow-md: 0 2px 10px rgba(25, 35, 22, 0.08);
-  --shadow-lg: 0 12px 32px rgba(25, 35, 22, 0.14);
-  --shadow-green: 0 10px 26px rgba(26, 111, 56, 0.30);
-  --shadow-red: 0 10px 26px rgba(185, 28, 28, 0.28);
+  /* Elevation — flat theme; kept as no-ops so no rule resurrects a shadow. */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-green: none;
+  --shadow-red: none;
+  --shadow-card: none;
 
-  /* Type scale */
-  --text-2xs: 0.6875rem;
-  --text-xs:  0.75rem;
-  --text-sm:  0.85rem;
-  --text-md:  0.95rem;
-  --text-lg:  1.1rem;
-  --text-xl:  1.35rem;
-  --text-2xl: 1.7rem;
-  --text-3xl: 2.1rem;
+  /* Type scale (16px root). Floors are deliberate: body never below 16px,
+     secondary never below 15px — this app is read outdoors. */
+  --text-2xs: 0.75rem;   /* 12px — kicker labels/tags only */
+  --text-xs:  0.8125rem; /* 13px — kicker labels */
+  --text-sm:  0.9375rem; /* 15px — secondary/denominators */
+  --text-md:  1rem;      /* 16px — body floor */
+  --text-lg:  1.1875rem; /* 19px — row values */
+  --text-xl:  1.375rem;  /* 22px — item names */
+  --text-2xl: 1.4375rem; /* 23px — section headings */
+  --text-3xl: 2.375rem;  /* 38px — screen titles */
+  --text-figure: 3.375rem; /* 54px — the big money figure */
 
-  --focus: 0 0 0 3px rgba(26, 111, 56, 0.35);
+  --rule-heavy: 2px solid var(--ink);
+  --rule-hair: 1px solid var(--grey-hairline);
+
+  --focus: 0 0 0 2px var(--cobalt);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -85,7 +117,11 @@ html, body {
   font-family: var(--font-body);
   font-size: 16px;
   background: var(--paper);
-  color: var(--ink-900);
+  color: var(--ink);
+  /* Deliberately NOT font-variant-numeric: tabular-nums (handoff rule 5, as
+     revised): Schibsted Grotesk gives the comma a full figure width, so
+     "£1,400" renders with a visible gap. Right-alignment alone keeps the money
+     columns straight. */
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -99,10 +135,12 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Consistent, branded keyboard focus across interactive elements */
+/* 2px cobalt, offset 2px (handoff "Interactions"). Outline rather than a
+   box-shadow ring so it can't read as elevation. */
 :where(button, a, input, select, textarea):focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
+  outline: 2px solid var(--cobalt);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
 /* ── Loading / error states ── */
@@ -127,7 +165,7 @@ button {
   background: #1a6f38;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 1rem;
 }
 
@@ -146,8 +184,8 @@ button {
   width: 100%;
   max-width: 360px;
   background: var(--surface);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-lg);
+  border-radius: 0;
+  box-shadow: none;
   padding: 1.75rem 1.5rem;
 }
 
@@ -183,7 +221,7 @@ button {
   min-height: 44px;
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-md);
   font-family: inherit;
   background: var(--surface);
@@ -191,7 +229,7 @@ button {
 
 .auth-input:focus {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: none;
   border-color: var(--green-600);
 }
 
@@ -214,10 +252,10 @@ button {
   background: var(--green-600);
   color: #fff;
   border: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-md);
   font-weight: 800;
-  box-shadow: var(--shadow-green);
+  box-shadow: none;
   transition: transform 0.08s ease;
 }
 
@@ -291,9 +329,9 @@ button {
   content: "";
   width: 0.7rem;
   height: 0.7rem;
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--green-600);
-  box-shadow: inset 0 0 0 2px var(--surface), 0 0 0 1.5px var(--green-600);
+  box-shadow: none;
 }
 
 .offline-badge {
@@ -303,7 +341,7 @@ button {
   color: var(--amber-fg);
   border: 1px solid var(--amber-line);
   padding: 0.25rem 0.7rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 
 /* ── Job info ── */
@@ -326,8 +364,8 @@ button {
   color: var(--green-700);
   font-weight: 700;
   padding: 0.35rem 0.85rem;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
+  box-shadow: none;
   transition: background 0.15s, border-color 0.15s, transform 0.05s;
 }
 
@@ -359,85 +397,98 @@ button {
   background: var(--green-50);
   border: 1px solid var(--green-100);
   padding: 0.25em 0.6em;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   letter-spacing: 0.01em;
 }
 
 /* ── Storage explainer ── */
 
+/* Notices (storage explainer, install banner) — were tinted rounded panels in
+   amber and blue. The ledger has one accent and no fills, so a notice is just
+   body text between hairlines, with its dismiss/act links in cobalt. */
+
 .explainer {
-  margin: 0 1rem 1rem;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
+  margin: 0 0 16px;
+  background: none;
+  border: none;
+  border-top: var(--rule-hair);
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  padding: 16px 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 8px;
 }
 
 .explainer-text {
-  font-size: 0.875rem;
-  color: #78350f;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--grey-text);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .explainer-dismiss {
   align-self: flex-start;
   background: none;
-  border: 1px solid #d97706;
-  color: #b45309;
-  border-radius: 6px;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border: none;
+  color: var(--cobalt);
+  border-radius: 0;
+  padding: 0;
+  min-height: 44px;
+  font-size: var(--text-md);
+  font-weight: 700;
 }
 
 /* ── Install banner ── */
 
 .install-banner {
-  margin: 0 1rem 1rem;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
+  margin: 0 0 16px;
+  background: none;
+  border: none;
+  border-top: var(--rule-hair);
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  padding: 16px 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 8px;
 }
 
 .install-banner-text {
-  font-size: 0.875rem;
-  color: #1e3a5f;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--grey-text);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .install-banner-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 20px;
   align-items: center;
 }
 
 .install-banner-btn {
-  background: #2563eb;
-  color: #fff;
+  background: none;
+  color: var(--cobalt);
   border: none;
-  border-radius: 6px;
-  padding: 0.35rem 0.85rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border-radius: 0;
+  padding: 0;
+  min-height: 44px;
+  font-size: var(--text-md);
+  font-weight: 700;
 }
 
 .install-banner-dismiss {
   background: none;
-  border: 1px solid #93c5fd;
-  color: #1d4ed8;
-  border-radius: 6px;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border: none;
+  color: var(--grey-text);
+  border-radius: 0;
+  padding: 0;
+  min-height: 44px;
+  font-size: var(--text-md);
+  font-weight: 700;
 }
 
 /* ── Recording controls ── */
@@ -462,15 +513,13 @@ button {
   height: 168px;
   border-radius: 50%;
   border: none;
-  background:
-    radial-gradient(120% 120% at 50% 18%, var(--green-500) 0%, var(--green-600) 46%, var(--green-700) 100%);
-  color: #fff;
+  background: var(--cobalt);
+  color: var(--paper);
   font-size: var(--text-md);
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  box-shadow: var(--shadow-green), inset 0 2px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -4px 10px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
   transition: transform 0.08s ease, box-shadow 0.15s ease;
 }
 
@@ -486,8 +535,7 @@ button {
 
 .record-btn:active {
   transform: scale(0.95);
-  box-shadow: 0 4px 14px rgba(26, 111, 56, 0.32),
-    inset 0 -2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 /* The universal "record" dot, in white-ringed red so it reads on green */
@@ -497,7 +545,7 @@ button {
   height: 40px;
   border-radius: 50%;
   background: var(--red-500);
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
 }
 
 /* Active recording area */
@@ -554,11 +602,11 @@ button {
   background: var(--red-600);
   color: #fff;
   border: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-lg);
   font-weight: 800;
   letter-spacing: 0.02em;
-  box-shadow: var(--shadow-red);
+  box-shadow: none;
   transition: transform 0.08s ease;
 }
 
@@ -617,64 +665,70 @@ button {
 
 /* ── Note card ── */
 
+/* A recorded note is a ledger row like everything else: time on the left, its
+   state on the right, hairline between. It was the last card left on Job home. */
 .note-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 0.85rem 1rem;
-  box-shadow: var(--shadow-sm);
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  padding: 15px 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 3px;
 }
 
 .note-card-meta {
   display: flex;
-  gap: 0.6rem;
+  gap: 12px;
   align-items: baseline;
-  font-size: var(--text-sm);
-  color: var(--ink-700);
+  font-size: var(--text-md);
+  color: var(--ink);
 }
 
 .note-time { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .note-duration, .note-size {
-  color: var(--ink-400);
+  color: var(--grey-text);
+  font-weight: 400;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
 .note-card-status {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: baseline;
+  gap: 12px;
 }
 
-/* State badges */
+/* State: stated in words, not a filled badge. Every state reads grey — a note's
+   status is information, not a warning, and none of it is tappable. */
 .note-state {
-  font-size: var(--text-xs);
-  font-weight: 700;
-  padding: 0.25rem 0.65rem;
-  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--grey-text);
 }
 
-.note-state--local    { background: var(--green-50); color: var(--green-700); }
-.note-state--offline  { background: var(--amber-bg); color: var(--amber-fg); }
-.note-state--waiting  { background: var(--amber-bg); color: var(--amber-fg); }
-.note-state--uploading { background: var(--surface-sunk); color: var(--ink-500); }
-.note-state--saved    { background: var(--green-100); color: var(--green-800); }
-.note-state--synced   { background: var(--green-100); color: var(--green-800); }
-.note-state--failed   { background: var(--amber-bg); color: var(--amber-fg); }
-.note-state--attention { background: #fbe4e4; color: var(--red-700); }
+/* The two states that genuinely need Mike to do something take the warning
+   colour; the rest are just progress. */
+.note-state--failed,
+.note-state--attention { color: var(--warning-red); font-weight: 700; }
 
 .btn-retry {
   background: none;
-  border: 1px solid #ef4444;
-  color: #b91c1c;
-  border-radius: 5px;
-  padding: 0.15rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  border: none;
+  color: var(--cobalt);
+  border-radius: 0;
+  padding: 0;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
+.btn-retry:active { opacity: 0.6; }
 
 /* ── Notes heading row (with refresh button) ── */
 
@@ -696,75 +750,80 @@ button {
   font-size: var(--text-xs);
   font-weight: 700;
   padding: 0.3rem 0.75rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   white-space: nowrap;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .btn-refresh-transcripts:active { background: var(--green-50); }
 
 /* ── Transcript section inside note card ── */
+/* Everything nested in a note row uses the same ledger vocabulary as the rest
+   of the app: hairline rules, grey secondary text, cobalt for the toggles. */
 
 .transcript-section {
-  border-top: 1px solid #f0f0ec;
-  margin-top: 0.4rem;
-  padding-top: 0.45rem;
+  border-top: var(--rule-hair);
+  margin-top: 12px;
+  padding-top: 12px;
 }
 
 .transcript-toggle {
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.75rem;
-  color: #555;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--cobalt);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  margin: 0 0 0.25rem;
+  text-decoration: none;
+  margin: 0;
 }
+.transcript-toggle:active { opacity: 0.6; }
 
 .transcript-text {
-  font-size: 0.875rem;
-  color: #222;
+  font-size: var(--text-md);
+  color: var(--ink);
   margin: 0;
   line-height: 1.5;
 }
 
 .transcript-pending {
-  font-size: 0.75rem;
-  color: #888;
-  margin: 0.25rem 0 0;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+  margin: 6px 0 0;
 }
 
 .transcript-failed {
-  font-size: 0.75rem;
-  color: #92400e;
-  margin: 0.25rem 0 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--warning-red);
+  margin: 6px 0 0;
 }
 
 /* ── Draft facts section inside note card ── */
 
 .draft-facts-section {
-  border-top: 1px solid #f0f0ec;
-  margin-top: 0.4rem;
-  padding-top: 0.45rem;
+  border-top: var(--rule-hair);
+  margin-top: 12px;
+  padding-top: 12px;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 8px;
 }
 
 .draft-facts-label {
-  font-size: 0.68rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #888;
+  letter-spacing: 1px;
+  color: var(--grey-text);
   margin: 0;
 }
 
 .draft-facts-empty {
-  font-size: 0.8rem;
-  color: #aaa;
+  font-size: var(--text-md);
+  color: var(--grey-text);
   margin: 0;
 }
 
@@ -774,69 +833,75 @@ button {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 
+/* No fill, no left-border accent (the theme bans both) — a draft fact is a row.
+   Confidence is stated by .fact-badge in words, not by an edge colour. */
 .fact-card {
-  background: #f9f9f6;
-  border-radius: 6px;
-  padding: 0.45rem 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  background: none;
+  border-radius: 0;
+  padding: 12px 0;
+  border-bottom: var(--rule-hair);
 }
-
-.fact-card--low { border-left: 3px solid #fbbf24; }
-.fact-card--medium { border-left: 3px solid #60a5fa; }
-.fact-card--high { border-left: 3px solid #34d399; }
+.fact-card:last-child { border-bottom: none; }
+.fact-card--low,
+.fact-card--medium,
+.fact-card--high { border-left: none; }
 
 .fact-summary {
-  font-size: 0.875rem;
-  color: #222;
+  font-size: var(--text-md);
+  color: var(--ink);
   margin: 0;
-  line-height: 1.4;
 }
 
 .fact-meta {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 3px;
 }
 
+/* Stated, not filled. Only "unclear" — the one a builder must act on — is red. */
 .fact-badge {
-  font-size: 0.65rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--grey-text);
 }
+.fact-badge--unclear { background: none; color: var(--warning-red); }
+.fact-badge--low,
+.fact-badge--medium { background: none; color: var(--grey-text); }
 
-.fact-badge--unclear  { background: #fde68a; color: #78350f; }
-.fact-badge--low      { background: #fef3c7; color: #92400e; }
-.fact-badge--medium   { background: #dbeafe; color: #1e40af; }
+.fact-type {
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+}
 
 .fact-source {
-  font-size: 0.65rem;
-  color: #bbb;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
   margin-left: auto;
 }
 
 .extraction-pending {
-  font-size: 0.75rem;
-  color: #888;
-  margin: 0.25rem 0 0;
-  border-top: 1px solid #f0f0ec;
-  padding-top: 0.45rem;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+  margin: 6px 0 0;
+  border-top: var(--rule-hair);
+  padding-top: 12px;
 }
 
 .extraction-failed {
-  font-size: 0.75rem;
-  color: #92400e;
-  margin: 0.25rem 0 0;
-  border-top: 1px solid #f0f0ec;
-  padding-top: 0.45rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--warning-red);
+  margin: 6px 0 0;
+  border-top: var(--rule-hair);
+  padding-top: 12px;
 }
 
 /* ── Review entry button on capture screen ── */
@@ -851,7 +916,7 @@ button {
   background: #1a6f38;
   color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 1rem;
   font-weight: 700;
   -webkit-tap-highlight-color: transparent;
@@ -872,10 +937,10 @@ button {
 
 .card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 0;
   padding: 1rem 1.1rem;
   margin-bottom: 1rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: none;
 }
 
 .card-info { background: #f9f9f6; }
@@ -883,7 +948,7 @@ button {
 .status-box {
   display: inline-block;
   padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 0.9rem;
   font-weight: 600;
   margin-bottom: 0.75rem;
@@ -902,7 +967,7 @@ button {
   min-height: 52px;
   padding: 0 1.5rem;
   border: none;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -933,7 +998,7 @@ code {
   font-size: 0.8em;
   background: #f0f0f0;
   padding: 0.1em 0.3em;
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .audio-player { width: 100%; margin-bottom: 0.75rem; }
@@ -961,7 +1026,7 @@ code {
   align-items: center;
   gap: 0.85rem;
   text-align: left;
-  border-radius: var(--r-lg);
+  border-radius: 0;
   transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
@@ -975,7 +1040,7 @@ code {
   justify-content: center;
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: var(--r-md);
+  border-radius: 0;
 }
 
 .action-icon svg { width: 1.35rem; height: 1.35rem; }
@@ -1006,7 +1071,7 @@ code {
   background: var(--surface);
   color: var(--ink-900);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .btn-things-to-check .action-icon {
@@ -1015,11 +1080,10 @@ code {
 }
 
 .btn-things-to-check--urgent {
-  background:
-    radial-gradient(140% 120% at 0% 0%, var(--green-500) 0%, var(--green-600) 55%, var(--green-700) 100%);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: var(--shadow-green);
+  background: none;
+  color: var(--ink);
+  border-color: var(--ink);
+  box-shadow: none;
 }
 
 .btn-things-to-check--urgent .action-icon {
@@ -1148,8 +1212,8 @@ code {
   color: var(--green-700);
   padding: 0.4rem 0.85rem;
   font-weight: 700;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
+  box-shadow: none;
   white-space: nowrap;
 }
 
@@ -1186,7 +1250,7 @@ code {
   background: var(--green-50);
   border: 1px solid var(--green-100);
   padding: 0.25rem 0.7rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   white-space: nowrap;
 }
 
@@ -1215,8 +1279,8 @@ code {
   color: var(--ink-700);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
+  box-shadow: none;
   transition: background 0.12s, border-color 0.12s, transform 0.06s ease;
 }
 
@@ -1231,7 +1295,7 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: var(--paper-tint);
   color: var(--ink-700);
 }
@@ -1295,7 +1359,7 @@ code {
   font-weight: 600;
   background: var(--surface-sunk);
   border: 1px dashed var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: 0;
   padding: 1.5rem 1rem;
   margin: 0 0 1.5rem;
 }
@@ -1311,7 +1375,7 @@ code {
   background: var(--green-600);
   color: #fff;
   border: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-md);
   font-weight: 700;
 }
@@ -1336,10 +1400,10 @@ code {
 .queue-item-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   padding: 1rem 1.1rem;
   margin-bottom: 0.75rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .queue-item-card--confirmed,
@@ -1368,7 +1432,7 @@ code {
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.2em 0.5em;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .queue-kind-badge--duplicate {
@@ -1433,10 +1497,10 @@ code {
   background: var(--green-600);
   color: #fff;
   border: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-md);
   font-weight: 800;
-  box-shadow: var(--shadow-green);
+  box-shadow: none;
   transition: transform 0.08s ease;
 }
 
@@ -1446,7 +1510,7 @@ code {
 .btn-queue-dismiss {
   padding: 0.65rem 1rem;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: 0;
   background: var(--surface);
   font-size: var(--text-md);
   font-weight: 600;
@@ -1492,7 +1556,7 @@ code {
   background: #f8f8f6;
   border-left: 3px solid #d1d5db;
   padding: 0.4rem 0.6rem;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0;
 }
 
 .queue-source-text {
@@ -1520,37 +1584,50 @@ code {
 .queue-field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .queue-field-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #555;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--grey-text);
 }
 
 /* A field whose value is fixed and shown rather than edited (e.g. the type of a
    returned item). Reads as settled fact, not a disabled input to fight with. */
 .queue-field-static {
   margin: 0;
-  padding: 0.45rem 0;
-  font-size: var(--text-sm);
+  padding: 10px 0;
+  font-size: var(--text-md);
   font-weight: 700;
-  color: var(--ink-700);
+  color: var(--ink);
 }
 
+/* Inputs are the one thing that must show an edge — you have to see where to
+   type. A single ink underline does it: no box, no radius, no fill. 16px also
+   stops iOS zooming the page on focus.
+   1px, not 2px: 2px ink is the section-opening rule, and a full-width control
+   wearing that weight reads as the strongest divider on the page. Three
+   distinct lines now — 2px ink opens a section, 1px ink is an input, 1px grey
+   separates rows. */
 .queue-field-input {
-  padding: 0.45rem 0.6rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
   font-family: inherit;
-  background: #fff;
+  color: var(--ink);
+  background: none;
+  min-height: 44px;
 }
+
+.queue-field-input::placeholder { color: var(--grey-text); font-weight: 400; }
 
 .queue-field-input:focus {
-  outline: 2px solid #1a6f38;
-  outline-offset: 1px;
+  outline: 2px solid var(--cobalt);
+  outline-offset: 2px;
 }
 
 .queue-edit-actions {
@@ -1559,25 +1636,32 @@ code {
   margin-top: 0.25rem;
 }
 
+/* The primary action is the one solid block in the theme: cobalt, square, and
+   big enough to hit with a glove. Everything else is a text action. */
 .btn-queue-save {
   flex: 1;
-  padding: 0.55rem 1rem;
-  background: #1a6f38;
-  color: #fff;
+  padding: 0 1rem;
+  min-height: 52px;
+  background: var(--cobalt);
+  color: var(--paper);
   border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  border-radius: 0;
+  font-size: var(--text-md);
+  font-weight: 800;
 }
+.btn-queue-save:active { opacity: 0.85; }
 
 .btn-queue-cancel {
-  padding: 0.55rem 1rem;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  color: #374151;
+  padding: 0 1rem;
+  min-height: 52px;
+  border: none;
+  background: none;
+  border-radius: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--grey-text);
 }
+.btn-queue-cancel:active { color: var(--ink); }
 
 .btn-queue-save:disabled,
 .btn-queue-cancel:disabled {
@@ -1652,7 +1736,7 @@ code {
 
 .queue-remembered-card {
   background: #fff;
-  border-radius: 10px;
+  border-radius: 0;
   padding: 0.7rem 0.85rem;
   border-left: 3px solid #6b7280; /* fallback */
 }
@@ -1754,8 +1838,8 @@ code {
   color: var(--green-700);
   padding: 0.4rem 0.85rem;
   font-weight: 700;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
+  box-shadow: none;
   white-space: nowrap;
 }
 
@@ -1786,11 +1870,11 @@ code {
   padding: 0.95rem 1.1rem;
   background: var(--surface);
   border: 1.5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: 0;
   text-align: left;
   font-size: var(--text-md);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   transition: border-color 0.12s, transform 0.08s ease;
 }
 
@@ -1814,7 +1898,7 @@ code {
   background: var(--green-50);
   border: 1px solid var(--green-100);
   padding: 0.2em 0.6em;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 
 .job-picker-item--selected .job-picker-item-type {
@@ -1826,7 +1910,7 @@ code {
   font-size: var(--text-2xs);
   font-weight: 800;
   padding: 0.2em 0.55em;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: var(--surface-sunk);
   color: var(--ink-500);
 }
@@ -1848,7 +1932,7 @@ code {
   padding: 0.75rem 1rem;
   background: none;
   border: 2px dashed #d1d5db;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 0.95rem;
   color: #374151;
   font-weight: 500;
@@ -1883,7 +1967,7 @@ code {
 .add-job-field-input {
   padding: 0.6rem 0.75rem;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 1rem;
   font-family: inherit;
   background: #fff;
@@ -1916,7 +2000,7 @@ code {
   gap: 0.3rem;
   padding: 0.4rem 0.75rem;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 0.88rem;
   background: #fff;
   cursor: pointer;
@@ -1953,7 +2037,7 @@ code {
   background: #1a6f38;
   color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 1rem;
   font-weight: 600;
 }
@@ -1967,7 +2051,7 @@ code {
   padding: 0.75rem 1rem;
   border: 1px solid #d1d5db;
   background: #fff;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 1rem;
   color: #374151;
 }
@@ -2010,7 +2094,7 @@ code {
   font-size: 0.8rem;
   padding: 0.3rem 0.75rem;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 0;
   background: #fff;
   color: #555;
 }
@@ -2033,7 +2117,7 @@ code {
 .insp-key-input {
   padding: 0.6rem 0.75rem;
   border: 1px solid #ccc;
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 1rem;
   font-family: inherit;
 }
@@ -2043,7 +2127,7 @@ code {
   background: #1a6f38;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 1rem;
   align-self: flex-start;
 }
@@ -2054,7 +2138,7 @@ code {
 .insp-job-select {
   padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 0.95rem;
   font-family: inherit;
   background: #fff;
@@ -2067,7 +2151,7 @@ code {
 .insp-error {
   background: #fff0f0;
   border: 1px solid #f5c6c6;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.75rem 1rem;
   color: #b00;
   margin-bottom: 1rem;
@@ -2078,7 +2162,7 @@ code {
   font-size: 0.85rem;
   padding: 0.3rem 0.75rem;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 0;
   background: #fff;
   color: #333;
 }
@@ -2090,7 +2174,7 @@ code {
   gap: 1.5rem;
   flex-wrap: wrap;
   background: #f0f0e8;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.6rem 1rem;
   font-size: 0.85rem;
   color: #444;
@@ -2098,12 +2182,13 @@ code {
 
 .insp-section { display: flex; flex-direction: column; gap: 0.75rem; }
 
+/* A section opener, so it takes the heavy rule like every other one. */
 .insp-section-heading {
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
-  padding-bottom: 0.4rem;
-  border-bottom: 2px solid #ddd;
+  padding-bottom: 8px;
+  border-bottom: var(--rule-heavy);
 }
 
 .insp-section-micro {
@@ -2126,7 +2211,7 @@ code {
 
 .insp-note {
   border: 1px solid #e0e0d8;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.75rem 1rem;
   background: #fff;
   display: flex;
@@ -2158,7 +2243,7 @@ code {
   border-left: 3px solid #ccc;
   font-size: 0.85rem;
   color: #444;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0;
   width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
@@ -2168,7 +2253,7 @@ code {
 
 .insp-fact {
   background: #f8f8f4;
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
@@ -2199,7 +2284,7 @@ code {
   font-size: 0.72rem;
   font-weight: 600;
   padding: 0.15rem 0.45rem;
-  border-radius: 4px;
+  border-radius: 0;
   white-space: nowrap;
 }
 
@@ -2241,7 +2326,7 @@ code {
   flex-wrap: wrap;
   padding: 0.4rem 0.6rem;
   background: #f8f8f4;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .insp-queue-item-summary { font-size: 0.88rem; }
@@ -2256,7 +2341,7 @@ code {
   padding: 0.4rem 0.6rem;
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .insp-memory-summary { flex: 1; font-size: 0.88rem; }
@@ -2267,7 +2352,7 @@ code {
   padding: 0.6rem 0.75rem;
   background: #fffbeb;
   border: 1px solid #fde68a;
-  border-radius: 6px;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -2304,8 +2389,8 @@ code {
   font-weight: 700;
   padding: 0.4rem 0.85rem;
   flex-shrink: 0;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
+  box-shadow: none;
   white-space: nowrap;
 }
 
@@ -2333,7 +2418,7 @@ code {
 .mem-error {
   background: #fff0f0;
   border: 1px solid #f5c6c6;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.75rem 1rem;
   color: #b00;
   margin-top: 1rem;
@@ -2345,7 +2430,7 @@ code {
   padding: 0.4rem 1rem;
   background: #fff;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 0;
   color: #333;
 }
 
@@ -2354,7 +2439,7 @@ code {
 .mem-still-to-check {
   background: var(--amber-bg);
   border: 1px solid var(--amber-line);
-  border-radius: var(--r-md);
+  border-radius: 0;
   padding: 0.85rem 1rem;
   margin-bottom: 1.25rem;
   display: flex;
@@ -2387,7 +2472,7 @@ code {
   background: rgba(255, 255, 255, 0.6);
   border: 1px solid var(--amber-line);
   padding: 0.1rem 0.5rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   margin: 0;
 }
 
@@ -2429,39 +2514,69 @@ code {
 
 .mem-empty p { margin: 0; font-size: 0.95rem; }
 
-/* Memory sections */
+/* Memory sections — "kicker label, 8px, heavy 2px rule, then rows" (handoff
+   "Section rhythm"). The rule hangs off whichever header the section has: the
+   lens header with its add action, or a bare heading. */
 
 .mem-section {
-  margin-bottom: 1.25rem;
+  margin-bottom: 30px;
 }
 
+.mem-section > .lens-add,
+.mem-section > .mem-section-heading,
+.mem-tabpanel > .lens-add {
+  border-bottom: var(--rule-heavy);
+  padding-bottom: 8px;
+  margin-bottom: 0;
+}
+/* The By-category header deliberately has NO rule: the first category band
+   starts immediately below it, and the band edge is the boundary. A rule here
+   would be a third boundary competing with the ink band above and the bands
+   below — which is how every boundary stopped meaning anything. */
+.mem-tabpanel > section > .lens-add {
+  margin-top: 22px;
+  padding-bottom: 6px;
+  border-bottom: none;
+}
+
+/* A lens's top-level section opens with a heavy rule, whatever kind of header
+   it has. Uncategorised spend is a peer of By category — the categorised/
+   uncategorised split is the biggest division on the page — so it can't slip in
+   under a bare label while By category gets a rule. */
+.mem-tabpanel > section > .mem-section-label {
+  border-bottom: var(--rule-heavy);
+  padding-bottom: 8px;
+}
+
+/* Kicker label: 13/700, ls 1.5px, uppercase, grey. Opens a section, 8px above
+   its heavy rule. */
 .mem-section-heading {
-  font-size: var(--text-2xs);
-  font-weight: 800;
+  font-size: var(--text-xs);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-400);
-  margin: 0 0 0.6rem;
+  letter-spacing: 1.5px;
+  color: var(--grey-text);
+  margin: 0 0 8px;
 }
 
-/* Memory card — trusted reference, calm and grounded */
+/* Item row — was a card with a green left-border accent. Now a ledger row:
+   hairline-separated, no fill, no radius, no left accent (the handoff bans
+   left-border accents by name). */
 
 .mem-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--green-500);
-  border-radius: var(--r-md);
-  padding: 0.85rem 1rem;
-  margin-bottom: 0.55rem;
-  box-shadow: var(--shadow-sm);
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  padding: 16px 0;
+  margin-bottom: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0;
 }
 
-.mem-card--editing {
-  border-left-color: var(--green-600);
-}
+.mem-card--editing { border-left-color: transparent; }
 
 /* Wraps so the source toggle keeps its own line rather than being squeezed to
    two words wide: a Left over item carries three actions (return, move, fix)
@@ -2470,104 +2585,117 @@ code {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 0.15rem;
+  gap: 20px;
+  margin-top: 12px;
 }
 
 .mem-card-footer .mem-source { flex-shrink: 0; }
 
-/* Type label and date sit on one line; the date is a quiet memory cue, so it
-   never competes with the item itself. */
+/* Item name and its price share one baseline — the ledger's defining line:
+   what it is on the left, what it cost on the right. */
 .mem-card-head {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 0.5rem;
 }
 
 .mem-card-head > :first-child { flex: 1 1 auto; min-width: 0; }
 
+/* Date joins the end of the meta line rather than floating opposite the name,
+   which the price now occupies. */
 .mem-card-date {
-  flex: 0 0 auto;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  color: var(--ink-500);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--grey-text);
   white-space: nowrap;
 }
+.card-detail-fields + .mem-card-date {
+  display: inline;
+  margin-left: 0;
+}
+.card-detail-fields + .mem-card-date::before {
+  content: '\00a0· ';
+  color: var(--grey-text);
+}
 
-/* Item actions (Move / Fix / Remove) share the right of the footer. */
+/* Action row: text links, no pills. Cobalt for the things that do something to
+   the record; Remove is grey and pushed right — reachable, never inviting. */
+/* Packs left alongside Source and wraps when a row carries several actions
+   (a Left over item has four). Only Remove is pushed right. */
 .mem-card-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-left: auto;
+  gap: 20px;
+  flex: 1 1 auto;
+  margin-left: 0;
 }
 
 .mem-card-actions .btn-mem-fix { margin-left: 0; }
 
-.btn-mem-move {
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  color: var(--ink-700);
+.btn-mem-move,
+.btn-mem-return,
+.btn-mem-fix {
+  background: none;
+  border: none;
+  color: var(--cobalt);
   font-size: var(--text-sm);
   font-weight: 700;
-  padding: 0.35rem 0.85rem;
-  border-radius: var(--r-pill);
+  padding: 0;
+  border-radius: 0;
+  min-height: 44px;
 }
 
-.btn-mem-move:active { background: var(--surface-sunk); }
-.btn-mem-move:disabled { opacity: 0.5; }
-
-/* "Mark as returned" — a real job event, so it reads as an action of the same
-   weight as Move, not as a variant of Remove. */
-.btn-mem-return {
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  color: var(--ink-700);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  padding: 0.35rem 0.85rem;
-  border-radius: var(--r-pill);
-}
-.btn-mem-return:active { background: var(--surface-sunk); }
+.btn-mem-move:active,
+.btn-mem-return:active,
+.btn-mem-fix:active { opacity: 0.6; }
+.btn-mem-move:disabled,
 .btn-mem-return:disabled { opacity: 0.5; }
 
 /* Return sheet */
 .return-form-identity { margin: 0 0 0.75rem; font-size: var(--text-sm); font-weight: 700; color: var(--ink-700); }
 .return-form-hint { margin: -0.35rem 0 0.75rem; font-size: var(--text-xs); color: var(--ink-500); }
 
-/* Removal is destructive but ordinary — readable, not alarming. */
+/* Removal is destructive but ordinary — grey, not cobalt: it is the one action
+   here we never want to look inviting. Pushed right by margin-left:auto. */
 .btn-mem-remove {
   background: none;
   border: none;
-  color: var(--ink-500);
+  color: var(--grey-text);
   font-size: var(--text-sm);
   font-weight: 700;
-  padding: 0.35rem 0.4rem;
-  text-decoration: underline;
+  padding: 0;
+  min-height: 44px;
+  margin-left: auto;
+  text-decoration: none;
 }
 
-.btn-mem-remove:active { color: var(--red-600); }
+.btn-mem-remove:active { color: var(--ink); }
 .btn-mem-remove:disabled { opacity: 0.5; }
 
+/* Confirmation is stated in type under an ink rule, not fenced in a tinted
+   box — it still stops you, because it is the only ink rule on the row. */
 .mem-remove-confirm {
-  margin-top: 0.5rem;
-  padding: 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface-sunk);
+  margin-top: 12px;
+  padding: 12px 0 0;
+  border: none;
+  border-top: var(--rule-heavy);
+  border-radius: 0;
+  background: none;
 }
 
 .mem-remove-question {
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 800;
-  color: var(--ink-900);
+  color: var(--ink);
 }
 
 .mem-remove-consequence {
   margin-top: 0.25rem;
-  font-size: var(--text-xs);
-  color: var(--ink-700);
+  font-size: var(--text-md);
+  color: var(--grey-text);
 }
 
 .mem-remove-actions {
@@ -2583,7 +2711,7 @@ code {
   font-size: var(--text-sm);
   font-weight: 800;
   padding: 0.4rem 0.95rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 
 .btn-mem-remove-confirm:active { background: var(--red-700); }
@@ -2596,27 +2724,19 @@ code {
   font-size: var(--text-sm);
   font-weight: 700;
   padding: 0.4rem 0.95rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 
 .btn-mem-cancel:active { background: var(--surface-sunk); }
 .btn-mem-cancel:disabled { opacity: 0.5; }
 
-/* Light edit affordance for trusted memory */
+/* Edit affordance for trusted memory — a cobalt text action like the rest of
+   the row's actions (the pill styling this class used to carry is gone; the
+   shared .btn-mem-move/.btn-mem-return/.btn-mem-fix rule above owns it now). */
 .btn-mem-fix {
   flex: 0 0 auto;
-  margin-left: auto;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  color: var(--green-700);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  padding: 0.35rem 0.85rem;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-sm);
+  margin-left: 0;
 }
-
-.btn-mem-fix:active { background: var(--green-50); }
 
 /* Worth-checking resolution actions (This is right / Still unsure) */
 .mem-resolve {
@@ -2633,8 +2753,8 @@ code {
   font-size: var(--text-sm);
   font-weight: 800;
   padding: 0.4rem 0.95rem;
-  border-radius: var(--r-pill);
-  box-shadow: var(--shadow-green);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .btn-mem-verify:active { background: var(--green-700); }
@@ -2647,7 +2767,7 @@ code {
   font-size: var(--text-sm);
   font-weight: 700;
   padding: 0.4rem 0.95rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 
 .btn-mem-unsure:active { background: var(--amber-bg); }
@@ -2658,7 +2778,7 @@ code {
   background: var(--surface);
   color: var(--amber-fg);
   border: 1px solid var(--amber-line);
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-sm);
   font-weight: 700;
   padding: 0.5rem 0.9rem;
@@ -2672,19 +2792,39 @@ code {
 
 .mem-card-summary {
   margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--ink-900);
-  line-height: 1.4;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
 }
 
+/* Item name / price — 22/700 both, sharing a baseline. */
+.mem-card-item-name {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mem-card-price {
+  flex: none;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Type label — the section heading above already says Bought/Used/Left over, so
+   repeating it on every row is noise the ledger can't afford. Kept in the DOM
+   for the surfaces that mix types in one list (Support inspection). */
 .mem-card-type-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  color: #555;
-  margin: 0 0 0.5rem;
+  color: var(--grey-text);
+  margin: 0 0 6px;
 }
 
 .mem-item-detail {
@@ -2697,22 +2837,26 @@ code {
 
 .mem-source { margin-top: 0.25rem; }
 
+/* "Source" — a cobalt action alongside Fix memory (mock's Materials row). */
 .mem-source-toggle {
   background: none;
   border: none;
-  color: #888;
-  font-size: 0.8rem;
+  color: var(--cobalt);
+  font-size: var(--text-sm);
+  font-weight: 700;
   padding: 0;
+  min-height: 44px;
   cursor: pointer;
-  text-decoration: underline;
+  text-decoration: none;
 }
+.mem-source-toggle:active { opacity: 0.6; }
 
 .mem-source-body {
   margin-top: 0.4rem;
   padding: 0.5rem 0.75rem;
   background: #f8f8f4;
   border-left: 3px solid #ccc;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -2742,41 +2886,57 @@ code {
   word-break: break-word;
 }
 
-/* ── Card detail fields (shared: Things to check + Job memory cards) ── */
+/* ── Card detail fields (shared: Things to check + Job memory cards) ──
+   The mock's item row carries ONE meta line under the name: "6 pieces · £14
+   each — Screwfix · 13 Jul". These are still a <dl> so each value keeps its
+   label programmatically (screen readers, and the label is what makes "£14"
+   mean unit cost rather than total) — but visually the labels drop out and the
+   values run together on a single line, separated by middots. */
 
 .card-detail-fields {
-  margin: 0 0 0.5rem;
+  margin: 6px 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  display: block;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--grey-text);
+  line-height: 1.4;
 }
 
 .card-detail-row {
-  display: flex;
-  gap: 0.4rem;
-  align-items: baseline;
+  display: inline;
 }
 
+/* Visually hidden, not removed: the label still names the value for assistive
+   tech, and "Unit cost"/"Total" are load-bearing meaning, not decoration. */
 .card-detail-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #888;
-  min-width: 4.5rem;
-  flex-shrink: 0;
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .card-detail-value {
-  font-size: 0.82rem;
-  color: #333;
+  display: inline;
+  font-size: var(--text-md);
+  color: var(--grey-text);
   margin: 0;
 }
 
-.card-uncertainty {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #b45309;
-  margin: 0.15rem 0 0;
+/* Non-breaking space before the middot so a separator can never orphan onto the
+   start of the next line; the space after it stays breakable. */
+.card-detail-row + .card-detail-row::before {
+  content: '\00a0· ';
+  color: var(--grey-text);
+}
+
+/* Worth checking speaks in ink and weight — the theme has no amber. */
+.card-uncertainty .card-detail-value {
+  font-weight: 700;
+  color: var(--ink);
 }
 
 /* ── Memory scan view ── */
@@ -2785,12 +2945,11 @@ code {
 
 .mem-known-spend {
   margin: 0 1rem 1rem;
-  background:
-    radial-gradient(130% 130% at 0% 0%, var(--green-500) 0%, var(--green-600) 55%, var(--green-700) 100%);
-  color: #fff;
-  border-radius: var(--r-lg);
+  background: none;
+  color: var(--ink);
+  border-radius: 0;
   padding: 0.85rem 1.1rem;
-  box-shadow: var(--shadow-green);
+  box-shadow: none;
 }
 
 .mem-known-spend-label {
@@ -2886,7 +3045,7 @@ code {
   color: #fff;
   background: rgba(255, 255, 255, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 0.25rem 0.7rem;
   cursor: pointer;
 }
@@ -2897,9 +3056,9 @@ code {
   margin: 0 1rem 1.25rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   padding: 0.5rem 1rem 1rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
 }
@@ -2961,7 +3120,7 @@ code {
   background: var(--amber-bg);
   border: 1px solid var(--amber-line);
   padding: 0.05rem 0.45rem;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 
 /* ── Remembered detail — de-emphasised, behind a disclosure ── */
@@ -3014,73 +3173,104 @@ code {
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
   margin: 0 0 1rem;
-  padding: 0.85rem 1.1rem;
-  border-radius: var(--r-lg);
-  background:
-    radial-gradient(130% 130% at 0% 0%, var(--green-500) 0%, var(--green-600) 55%, var(--green-700) 100%);
-  color: #fff;
-  box-shadow: var(--shadow-green);
+  padding: 16px 0;
+  border-radius: 0;
+  border-top: var(--rule-heavy);
+  background: none;
+  color: var(--ink);
+  box-shadow: none;
 }
-.budget-totals .budget-figure dt { color: rgba(255, 255, 255, 0.85); }
-.budget-totals .budget-figure dd { color: #fff; }
+.budget-totals .budget-figure dt { color: var(--grey-text); }
+.budget-totals .budget-figure dd { color: var(--ink); }
 
+/* SPENT / BUDGET / LEFT: kicker label over a heavy figure. */
 .budget-figure { margin: 0; }
 .budget-figure dt {
   margin: 0;
   font-size: var(--text-2xs);
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--ink-400);
+  color: var(--grey-text);
 }
 .budget-figure dd {
-  margin: 0.1rem 0 0;
-  font-size: var(--text-md);
+  margin: 2px 0 0;
+  font-size: 20px;
   font-weight: 800;
-  color: var(--ink-900);
+  color: var(--ink);
 }
-.budget-figure--over dd { color: var(--amber-fg, #b45309); }
+/* Over budget: the OVER column goes warning-red, label and figure both. Never a
+   blue "remaining" — blue means tappable, and this is a state, not an action. */
+.budget-figure--over dt,
+.budget-figure--over dd { color: var(--warning-red); }
 
-/* Per-category card */
+/* ── Zone 2: category bands ────────────────────────────────────────────────
+   Each category is a full-width band, alternating paper / grey. The band edge
+   IS the boundary, so there is no rule between or inside categories — that was
+   the bug: every boundary wore the heavy rule, so no boundary meant anything.
+   Full-bleed via the same negative-margin trick as the ink band. */
 .budget-cat {
-  margin: 0 0 0.85rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  margin: 0 -22px;
+  padding: 20px 22px 22px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
 }
+/* nth-of-type counts the <section> siblings inside "Budget categories" — the
+   Labour group is the first, then each category card. */
+.budget-cat:nth-of-type(even) { background: var(--band-grey); }
+.budget-cat:nth-of-type(even) .budget-bar { background: var(--track-on-grey); }
 .budget-cat-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 0.5rem;
 }
+/* The "⋯" wrap is pushed right; anything between it and the name (e.g. the
+   Labour "?") sits next to the name. */
+.budget-cat-head .budget-cat-menu-wrap { margin-left: auto; }
+/* 24/800 — the scale ladder's second rung. An item row is 19, so a category can
+   never be mistaken for an item on size alone. */
 .budget-cat-name {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: 24px;
   font-weight: 800;
-  color: var(--ink-900);
+  color: var(--ink);
 }
 .budget-cat-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
 .btn-cat-edit, .btn-cat-archive {
   font: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
   background: none;
   border: none;
   cursor: pointer;
   padding: 0.2rem 0.1rem;
 }
-.btn-cat-edit { color: var(--green-700); }
-.btn-cat-archive { color: var(--ink-400); }
+.btn-cat-edit { color: var(--cobalt); }
+.btn-cat-archive { color: var(--grey-text); }
 
+/* Three even columns, so SPENT/BUDGET/LEFT line up across every category
+   block down the page — the point of a ledger. */
 .budget-cat-figures {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.25rem;
-  margin: 0.6rem 0 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 14px 0 0;
 }
+
+/* Per-category progress bar. Same 6px ink-on-track as the summary block, so
+   spent-against-budget reads identically at both levels. */
+.budget-bar {
+  height: 6px;
+  background: var(--grey-track);
+  margin-top: 12px;
+  overflow: hidden;
+}
+.budget-bar > span { display: block; height: 100%; background: var(--ink); }
+/* A full red bar is the pre-attentive signal — you should see the category is
+   blown before you read a figure. */
+.budget-bar--over > span { background: var(--warning-red); }
 
 /* Spend rows (under a category and under uncategorised) */
 .budget-rows {
@@ -3110,7 +3300,7 @@ code {
   font-size: var(--text-sm);
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   background: var(--surface-sunk);
   color: var(--ink-900);
 }
@@ -3133,7 +3323,7 @@ code {
   margin: 0.6rem 0 0;
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: 0;
   background: var(--surface-sunk);
 }
 .budget-cat-confirm-text {
@@ -3149,7 +3339,7 @@ code {
   color: #fff;
   background: var(--danger, #b91c1c);
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 0.4rem 0.85rem;
   cursor: pointer;
 }
@@ -3160,7 +3350,7 @@ code {
   color: var(--ink-900);
   background: none;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 0.4rem 0.85rem;
   cursor: pointer;
 }
@@ -3170,7 +3360,7 @@ code {
   margin: 1rem 0 0;
   padding: 0.85rem 1rem;
   border: 1px dashed var(--line);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   background: var(--surface);
 }
 .budget-uncat-head {
@@ -3186,7 +3376,7 @@ code {
   margin: 0 0 1rem;
   padding: 1rem;
   border: 1px dashed var(--line);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   color: var(--ink-500);
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -3195,7 +3385,7 @@ code {
 .budget-refresh {
   margin: 0 0 0.85rem;
   padding: 0.6rem 0.85rem;
-  border-radius: var(--r-md);
+  border-radius: 0;
   background: var(--amber-bg, #fef3c7);
   color: var(--amber-fg, #b45309);
   display: flex;
@@ -3207,42 +3397,50 @@ code {
 }
 
 .btn-add-category {
-  width: 100%;
-  margin: 0.5rem 0 0;
-  padding: 0.7rem 1rem;
+  width: auto;
+  margin: 16px 0 0;
+  padding: 0;
+  min-height: 44px;
   font: inherit;
-  font-weight: 800;
-  color: var(--green-700);
-  background: var(--green-50, #ecfdf5);
-  border: 1px solid var(--green-100, #d1fae5);
-  border-radius: var(--r-lg);
+  font-weight: 700;
+  color: var(--cobalt);
+  background: none;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
 }
+.btn-add-category:active { opacity: 0.6; }
 
-.budget-cat-form { margin: 0 0 0.85rem; }
+.budget-cat-form { margin: 0 0 16px; }
 
 /* In-card budget category picker (Job memory detail) */
 .mem-card-category {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  margin: 0.6rem 0 0;
+  gap: 4px;
+  margin: 12px 0 0;
 }
 .mem-card-category-label {
   font-size: var(--text-2xs);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--ink-400);
+  color: var(--grey-text);
 }
+/* Selects get the same single 1px ink underline as text inputs — an edge where
+   you have to see one, and nothing more. Never 2px: that weight opens sections,
+   and this control sits inside a row, not at the head of one. */
 .mem-card-category-select {
   font: inherit;
-  font-size: var(--text-sm);
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface-sunk);
-  color: var(--ink-900);
+  font-size: var(--text-md);
+  font-weight: 500;
+  padding: 10px 0;
+  min-height: 44px;
+  border: none;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
 }
 
 /* ── Known spend → category breakdown (Job memory) ── */
@@ -3251,8 +3449,8 @@ code {
   padding: 0.75rem 1rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0;
+  box-shadow: none;
 }
 .mem-known-bycat-label {
   margin: 0 0 0.4rem;
@@ -3327,84 +3525,297 @@ code {
 .mem-tabs {
   display: flex; gap: 4px; margin: 0 1rem 1rem;
   background: var(--surface-sunk); border: 1px solid var(--line);
-  border-radius: var(--r-pill); padding: 4px;
+  border-radius: 0; padding: 4px;
 }
 .mem-tab {
   flex: 1; border: none; background: transparent; cursor: pointer;
-  padding: 9px 6px; border-radius: var(--r-pill); font-weight: 800;
+  padding: 9px 6px; border-radius: 0; font-weight: 800;
   font-size: var(--text-xs); color: var(--ink-500);
 }
-.mem-tab--active { background: var(--green-500); color: #fff; box-shadow: var(--shadow-sm); }
+.mem-tab--active { background: var(--green-500); color: #fff; box-shadow: none; }
 .mem-tabpanel { display: block; }
 .mem-tab-empty { margin: 1rem; color: var(--ink-400); font-size: var(--text-sm); }
 
-/* ── Bought tab: Known spend hero ── */
+/* ── Spend: the summary block ──
+   Was a filled green card. Now no container at all: a kicker, a very large
+   figure, its denominator on the same baseline, the remaining figure in cobalt
+   (tappable → breakdown), and a 6px bar. Hierarchy is doing the work the card
+   used to do. */
 .mem-hero {
-  margin: 0 1rem 1rem;
-  background: radial-gradient(130% 130% at 0% 0%, var(--green-500) 0%, var(--green-600) 55%, var(--green-700) 100%);
-  color: #fff; border-radius: var(--r-lg); padding: 0.95rem 1.1rem; box-shadow: var(--shadow-green);
+  margin: 24px 0 0;
+  background: none;
+  color: var(--ink);
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
 }
-.mem-hero-cap { margin: 0; font-size: var(--text-2xs); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.85); }
-.mem-hero-amount { margin: 0.1rem 0 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.02em; }
-.mem-hero-of { font-size: var(--text-md); font-weight: 700; opacity: 0.85; }
-.mem-hero-sub { margin: 0.2rem 0 0; font-size: var(--text-sm); color: rgba(255,255,255,0.92); }
-.mem-hero-bar { height: 9px; border-radius: var(--r-pill); background: rgba(255,255,255,0.25); margin-top: 0.7rem; overflow: hidden; }
-.mem-hero-bar > span { display: block; height: 100%; background: #fff; border-radius: var(--r-pill); }
-.mem-hero--over .mem-hero-bar > span { background: #ffd0c4; }
+.mem-hero-amount {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-figure);
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+  color: var(--ink);
+}
+.mem-hero-of {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--grey-text);
+  opacity: 1;
+}
+/* "£2,598 left to spend ›" — accent-coloured because it opens the breakdown. */
+.mem-hero-sub {
+  display: block;
+  margin: 8px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--cobalt);
+  min-height: 44px;
+  cursor: pointer;
+}
+.mem-hero-sub:active { opacity: 0.7; }
+/* A statement, not an action — so it must not wear the accent. Doubled class
+   so it beats the equally-specific banded accent rule regardless of order. */
+.mem-hero-sub--quiet { color: var(--grey-text); cursor: default; min-height: 0; }
+.ws-page--banded .mem-hero-sub.mem-hero-sub--quiet { color: var(--record-sub); }
+/* 6px, square ends, ink fill on a grey track. Never cobalt: a progress bar is
+   not interactive, and cobalt is reserved for things you can tap. */
+.mem-hero-bar {
+  height: 6px;
+  border-radius: 0;
+  background: var(--grey-track);
+  margin-top: 14px;
+  overflow: hidden;
+}
+.mem-hero-bar > span { display: block; height: 100%; background: var(--ink); border-radius: 0; }
+/* Over budget speaks through the figures and the full bar, not a red fill —
+   the theme has no danger colour to spend here. */
+.mem-hero--over .mem-hero-bar > span { background: var(--ink); }
 
-/* Refund breakdown: shows how gross spend became the net headline above. */
-.mem-hero-breakdown { margin: 0.55rem 0 0; display: flex; flex-direction: column; gap: 0.15rem; }
-.mem-hero-line {
-  display: flex; justify-content: space-between; gap: 0.75rem;
-  font-size: var(--text-sm); color: rgba(255,255,255,0.92);
+/* Over budget — the only warning state on this screen, and the only place the
+   theme's second colour appears. A square dot, not a circle: circles are the
+   mic and the status dot, both of which mean "tap me". */
+.mem-hero-warning {
+  margin: 10px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--warning-red);
 }
-/* The global `dt { color: #666 }` is unreadable on the green hero, and inherited
-   colour can't beat it — set it here. */
-.mem-hero-line dt, .mem-hero-line dd { margin: 0; color: rgba(255,255,255,0.85); }
-.mem-hero-line dd { font-weight: 700; white-space: nowrap; }
-.mem-hero-line--refund dd { color: #d6f5e0; }
+.mem-hero-warning-dot {
+  width: 10px; height: 10px;
+  background: var(--warning-red);
+  flex: none;
+}
 
 /* ── Spend: refunds (money back — never styled like a spend row) ── */
-.spend-refunds { margin-bottom: 1rem; }
-.spend-refund-list { list-style: none; margin: 0 1rem; padding: 0; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
-.spend-refund-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-  padding: 0.7rem 0.9rem;
-  border-bottom: 1px solid var(--line);
+/* ── Zone 3: uncategorised items — plain rows on white ─────────────────────
+   These are items, not categories. They get no band and no stat grid, and drop
+   to row scale (19 vs the category's 24), so the two are never confusable. The
+   2px rule is legitimate here: it starts a section of rows. */
+.uncat { margin-top: 26px; }
+.uncat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
-.spend-refund-row:last-child { border-bottom: none; }
-.spend-refund-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
-.spend-refund-item { font-size: var(--text-sm); font-weight: 700; color: var(--ink-900); }
-.spend-refund-detail { font-size: var(--text-xs); color: var(--ink-500); }
-.spend-refund-amount { flex-shrink: 0; font-size: var(--text-sm); font-weight: 800; color: var(--green-700); }
+.uncat-kicker { margin: 0; }
+.uncat-count {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--grey-text);
+  white-space: nowrap;
+}
+.uncat-rows { border-top: var(--rule-heavy); }
 
-/* section labels within the bought tab */
+/* The compact item row. */
+.mem-card--row { padding: 15px 0; position: relative; }
+.mem-card--row .mem-card-item-name,
+.mem-card--row .mem-card-summary { font-size: 19px; font-weight: 700; }
+.mem-card--row .mem-card-price { font-size: 19px; font-weight: 700; }
+/* One line, never wrapping mid-word: the meta ellipsises rather than breaking. */
+.mem-card--row .card-detail-fields {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.mem-card--row .card-detail-fields + .mem-card-date { display: none; }
+/* The single primary action on the row. */
+.mem-card-pick {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--cobalt);
+  min-height: 44px;
+  cursor: pointer;
+}
+.mem-card-pick:active { opacity: 0.6; }
+/* "…" sits at the row's right edge, under the amount. */
+.mem-row-overflow-wrap { position: absolute; right: 0; bottom: 15px; }
+.btn-row-overflow {
+  border: none; background: none; cursor: pointer;
+  color: var(--grey-text); font-weight: 700; letter-spacing: 2px;
+  font-size: var(--text-md); min-width: 44px; min-height: 44px;
+}
+.btn-row-overflow:active { color: var(--ink); }
+.mem-row-menu {
+  position: absolute; right: 0; bottom: 46px; z-index: 30;
+  background: var(--paper); border: var(--rule-hair); min-width: 180px;
+}
+.mem-row-menu button {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  cursor: pointer; font: inherit; font-size: var(--text-md); font-weight: 700;
+  color: var(--cobalt); padding: 0.8rem 0.9rem; min-height: 48px;
+}
+.mem-row-menu button:active { background: var(--grey-press); }
+.mem-row-menu-danger { color: var(--grey-text) !important; border-top: var(--rule-hair); }
+.mem-row-source { margin-top: 8px; }
+
+/* ── Materials: plain tappable ledger rows ─────────────────────────────────
+   An item used to carry up to five cobalt links (return / move / source / fix /
+   remove), so nothing led and the row was a wall of choices. Now the row itself
+   is the one tap target and every action lives in a single sheet behind it. */
+.mem-card--sheet { padding: 0; border-bottom: var(--rule-hair); }
+.mem-row-tap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 13px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.mem-row-tap:active { background: var(--grey-press); }
+.mem-row-tap-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.mem-row-tap-name { font-size: 19px; font-weight: 700; color: var(--ink); }
+.mem-row-tap-meta {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--grey-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mem-row-tap-price { flex: none; font-size: 19px; font-weight: 700; color: var(--ink); }
+/* The chevron only points at the row — the whole row is the target. */
+.mem-row-tap-chev { flex: none; color: var(--cobalt); font-size: var(--text-lg); font-weight: 700; }
+
+/* Worth checking on a row — stated in ink and weight, like every other
+   attention state in the theme. */
+.mem-row-check {
+  margin: 0 0 8px;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.row-sheet-sub { margin: 0 0 8px; font-size: var(--text-md); font-weight: 500; color: var(--grey-text); }
+.row-sheet-actions { display: flex; flex-direction: column; border-top: var(--rule-heavy); }
+.row-sheet-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: none;
+  background: none;
+  border-bottom: var(--rule-hair);
+  text-align: left;
+  font: inherit;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 15px 0;
+  min-height: 56px;
+  cursor: pointer;
+}
+.row-sheet-opt:active { background: var(--grey-press); }
+.row-sheet-opt:disabled { opacity: 0.5; }
+.row-sheet-opt span { color: var(--cobalt); }
+/* Destructive, and the only red in the sheet. */
+.row-sheet-opt--danger { color: var(--warning-red); }
+.row-sheet-cancel {
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--grey-text);
+  padding: 16px 0 0;
+  min-height: 56px;
+  cursor: pointer;
+}
+
+/* Category picker sheet — one tap per category, no dropdown in the ledger. */
+.pick-cat-list { display: flex; flex-direction: column; }
+.pick-cat-opt {
+  border: none; background: none; border-bottom: var(--rule-hair);
+  text-align: left; font: inherit; font-size: 19px; font-weight: 700;
+  color: var(--ink); padding: 15px 0; min-height: 56px; cursor: pointer;
+}
+.pick-cat-opt:active { background: var(--grey-press); }
+
+/* "+ Add budget category" — its own slim white row after the last band. */
+.budget-add-cat-row {
+  margin: 0 -22px;
+  padding: 18px 22px;
+  background: var(--paper);
+  border-bottom: var(--rule-hair);
+}
+.budget-add-cat-row .btn-add-category { margin: 0; }
+
+/* Kicker over the big figure. The pilot's Spend screen drops it — the screen is
+   already titled "Spend" — but Support's view-as is a tab strip with no title,
+   so the figure still needs naming there. */
+.mem-hero-cap {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--grey-text);
+}
+
+/* Section kicker: 13/700, ls 1.5px, uppercase, grey — the label that opens a
+   section above its heavy rule. */
 .mem-section-label {
-  margin: 0 1rem 0.5rem; font-size: var(--text-2xs); font-weight: 800;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-400);
+  margin: 30px 0 8px; font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--grey-text);
 }
-.mem-section-note { margin: -0.25rem 1rem 0.6rem; font-size: var(--text-xs); color: var(--ink-500); }
+.mem-section-note { margin: 0 0 8px; font-size: var(--text-md); font-weight: 500; color: var(--grey-text); }
 
-/* category cards live in the bought tab; budget-cat styles already defined */
-.budget-cat { margin: 0 1rem 0.75rem; }
-.notes-toggle {
-  margin-top: 10px; border: none; background: none; cursor: pointer;
-  color: var(--green-700); font-weight: 800; font-size: var(--text-xs); padding: 4px 0;
-}
-.cat-empty { margin: 10px 0 0; font-size: var(--text-xs); color: var(--ink-400); }
-.cat-notes { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
-.cat-notes .mem-card, .mem-tabpanel > section > .mem-card { background: var(--surface-sunk); }
+/* "Nothing yet" — the "Add to <category>" action beside it says what to do, so
+   the line only has to state the fact. */
+.cat-empty { margin: 14px 0 0; font-size: var(--text-md); font-weight: 500; color: var(--grey-text); }
+/* Disclosed notes are rows in the same ledger, not a tinted well. */
+.cat-notes { margin-top: 0; display: flex; flex-direction: column; }
+.cat-notes .mem-card, .mem-tabpanel > section > .mem-card { background: none; }
 
 /* a bought note that is not counted in Known spend */
 .mem-card-notcounted {
-  margin: 0.4rem 0 0; font-size: var(--text-xs); font-weight: 800;
-  color: var(--amber-fg, #b45309);
+  margin: 6px 0 0; font-size: var(--text-md); font-weight: 700;
+  color: var(--ink);
 }
-
-/* bought-tab item cards sit directly under section labels */
-.mem-tabpanel section { margin-bottom: 1rem; }
-.mem-tabpanel .mem-card { margin: 0 1rem 0.6rem; }
-.cat-notes .mem-card { margin: 0; }
 
 /* ── UI polish: home guidance line ── */
 .capture-hint {
@@ -3456,11 +3867,11 @@ code {
 .queue-batch-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
   margin-bottom: 0.8rem; padding: 0.6rem 0.85rem;
-  background: var(--green-50); border: 1px solid var(--green-100); border-radius: var(--r-md);
+  background: var(--green-50); border: 1px solid var(--green-100); border-radius: 0;
 }
 .queue-batch-bar span { font-size: var(--text-sm); font-weight: 700; color: var(--green-700); }
 .btn-queue-remember-all {
-  border: none; background: var(--green-600); color: #fff; border-radius: var(--r-pill);
+  border: none; background: var(--green-600); color: #fff; border-radius: 0;
   padding: 0.5rem 0.95rem; font: inherit; font-size: var(--text-sm); font-weight: 800; cursor: pointer; min-height: 40px;
 }
 .btn-queue-remember-all:disabled { opacity: 0.6; }
@@ -3469,13 +3880,13 @@ code {
 .budget-cat-menu-wrap { position: relative; flex-shrink: 0; }
 .btn-cat-menu {
   width: 44px; height: 44px; border: none; background: none; cursor: pointer;
-  font-size: 1.4rem; line-height: 1; color: var(--ink-400); border-radius: var(--r-pill);
+  font-size: 1.4rem; line-height: 1; color: var(--ink-400); border-radius: 0;
 }
 .btn-cat-menu:active { background: var(--surface-sunk); }
 .budget-cat-menu {
   position: absolute; right: 0; top: 46px; z-index: 30;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
-  box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 180px; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 0;
+  box-shadow: none; min-width: 180px; overflow: hidden;
 }
 .budget-cat-menu button {
   display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
@@ -3485,12 +3896,15 @@ code {
 .budget-cat-menu-danger { color: var(--danger); border-top: 1px solid var(--line) !important; }
 .mem-menu-scrim { position: fixed; inset: 0; z-index: 20; }
 
-/* Promoted Show-notes affordance */
+/* "Show notes (2) ▾" — a cobalt disclosure, per the mock's category block.
+   Deliberately NOT full-width with a top rule: that read as a select box. */
 .notes-toggle {
-  display: flex; align-items: center; justify-content: space-between; width: 100%;
-  border-top: 1px solid var(--line); margin-top: 0.75rem; padding: 0.7rem 0 0.1rem;
-  font-size: var(--text-sm); min-height: 48px;
+  display: inline-flex; align-items: center; gap: 6px; width: auto;
+  border: none; background: none; margin-top: 14px; padding: 0;
+  font-size: var(--text-md); font-weight: 700; color: var(--cobalt);
+  min-height: 44px; cursor: pointer;
 }
+.notes-toggle:active { opacity: 0.6; }
 .notes-toggle-chev { font-size: var(--text-sm); }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -3500,8 +3914,8 @@ code {
 .ws-page {
   min-height: 100dvh;
   background: var(--paper);
-  /* room for the pinned record bar */
-  padding: 0 1rem calc(104px + env(safe-area-inset-bottom, 0px));
+  /* 22px screen padding; bottom clears the pinned Record bar. */
+  padding: 0 22px calc(120px + env(safe-area-inset-bottom, 0px));
   max-width: 560px;
   margin: 0 auto;
 }
@@ -3511,7 +3925,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 1.1rem 0 0.6rem;
+  padding: 24px 0 0;
 }
 .ws-header-top {
   display: flex;
@@ -3519,64 +3933,72 @@ code {
   justify-content: space-between;
   gap: 0.75rem;
 }
+.ws-header-top { padding-bottom: 18px; }
 .ws-header-top-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
-.ws-header-titles { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+.ws-header-titles { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* Screen title: 38/800/-1px/lh 1 — the largest thing on the page, and the
+   only thing that needs to be readable at a glance from a ladder. */
 .ws-job-title {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: 800;
-  line-height: 1.05;
-  color: var(--ink-900);
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--ink);
   margin: 0;
   overflow-wrap: anywhere;
   width: 100%;
 }
 .ws-job-location {
   margin: 0;
-  color: var(--ink-500);
+  color: var(--grey-text);
   font-size: var(--text-md);
+  font-weight: 500;
 }
-/* Status block — small uppercase STATUS label with the tappable chip below,
-   matching the approved mock. Chip colours are the single source of truth for
-   status colour (the sheet dots reuse the same per-status hues). */
+/* Status line — "In progress ▾ •". A filled chip is a box and a second accent
+   colour, both of which the ledger forbids; the mock states status as plain
+   grey text with a cobalt dot, the dot carrying the "this is tappable" signal.
+   The STATUS kicker goes: the word "In progress" already says what it is. */
 .ws-status-block {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.3rem;
-  margin-top: 0.5rem;
+  align-items: center;
+  margin-top: 0;
 }
-.ws-status-label {
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-500);
-}
+.ws-status-label { display: none; }
 .ws-status-chip {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   border: none;
-  border-radius: var(--r-pill);
-  padding: 0.35rem 0.85rem;
+  border-radius: 0;
+  padding: 0;
   font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 800;
-  background: var(--surface-sunk);
-  color: var(--ink-700);
+  font-size: var(--text-md);
+  font-weight: 600;
+  background: none;
+  color: var(--grey-text);
   cursor: pointer;
-  min-height: 34px;
+  /* ≥44px tap area without a visible box (handoff rule 7). */
+  min-height: 44px;
 }
-.ws-status-chip:active { filter: brightness(0.96); }
-.ws-status-chip-chev { font-size: 0.7em; opacity: 0.85; }
-/* Solid filled chips, white label — per mock: Planning amber, In progress
-   brand green, Finished deliberately quiet slate. */
-.ws-status-chip--planning { background: var(--status-planning); color: #fff; }
-.ws-status-chip--started { background: var(--status-started); color: #fff; }
-.ws-status-chip--finished { background: var(--status-finished); color: #fff; }
-.ws-status-chip--archived { background: var(--surface-sunk); color: var(--ink-500); }
+.ws-status-chip:active { color: var(--ink); }
+.ws-status-chip-chev { font-size: 0.85em; }
+/* The dot is the interactive cue, so it is cobalt on every status — status
+   itself is stated in words, never colour-coded. */
+.ws-status-chip::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cobalt);
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.ws-status-chip--planning,
+.ws-status-chip--started,
+.ws-status-chip--finished,
+.ws-status-chip--archived { background: none; color: var(--grey-text); }
 
 /* Change status bottom sheet — three normal statuses, then a separated
    Archive danger action. Reuses the BottomSheet shell. */
@@ -3587,7 +4009,7 @@ code {
   gap: 0.7rem;
   border: none;
   background: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   padding: 0.85rem 0.75rem;
   font: inherit;
   font-size: var(--text-md);
@@ -3621,7 +4043,7 @@ code {
   text-align: left;
   padding: 0.85rem 0.75rem;
   min-height: 48px;
-  border-radius: var(--r-md);
+  border-radius: 0;
   cursor: pointer;
 }
 .status-sheet-archive:active { background: #fbe4e4; }
@@ -3631,7 +4053,7 @@ code {
 .status-sheet-confirm-actions { display: flex; gap: 0.6rem; }
 .status-sheet-confirm-archive {
   border: none;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: var(--red-600);
   color: #fff;
   font: inherit;
@@ -3643,7 +4065,7 @@ code {
 .status-sheet-confirm-archive:active { background: var(--red-700); }
 .status-sheet-confirm-cancel {
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: var(--surface);
   color: var(--ink-700);
   font: inherit;
@@ -3653,52 +4075,59 @@ code {
   cursor: pointer;
 }
 
-/* Plain text back-link, not a pill — matches "‹ Switch job" in the approved mockup */
+/* Back link: 16/600 cobalt with a "‹ " prefix — cobalt because it navigates. */
 .btn-switch-job {
   border: none;
   background: none;
-  color: var(--ink-700);
-  padding: 0.4rem 0.2rem;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  min-height: 40px;
+  color: var(--cobalt);
+  padding: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  min-height: 44px;
 }
-.btn-switch-job:active { color: var(--ink-900); }
+.btn-switch-job:active { opacity: 0.6; }
 
 /* Header overflow menu — Rename/Support/Log out, tucked behind "⋯" so the
    title row never competes with them for width. Mirrors .budget-cat-menu. */
 .ws-header-menu-wrap { position: relative; flex-shrink: 0; }
+/* Overflow "•••" — grey letter-spaced dots, no button box (mock header row). */
 .btn-header-menu {
-  width: 40px; height: 40px; border: 1px solid var(--line-strong); background: var(--surface);
-  cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--ink-700); border-radius: var(--r-pill);
+  width: 44px; height: 44px; border: none; background: none;
+  cursor: pointer; font-size: var(--text-md); font-weight: 700; letter-spacing: 2px;
+  line-height: 1; color: var(--grey-text); border-radius: 0;
 }
-.btn-header-menu:active { background: var(--surface-sunk); }
+.btn-header-menu:active { color: var(--ink); }
+/* A popover has to be legible over the content it covers, so it keeps a paper
+   fill and a hairline border — the one place a boundary earns its keep. It
+   stays square and shadowless. */
 .ws-header-menu {
   position: absolute; right: 0; top: 46px; z-index: 30;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
-  box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 160px; overflow: hidden;
+  background: var(--paper); border: var(--rule-hair); border-radius: 0;
+  box-shadow: none; min-width: 180px; overflow: hidden;
 }
 .ws-header-menu button, .ws-header-menu a {
   display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
-  font: inherit; font-size: var(--text-sm); font-weight: 700; color: var(--ink-900); padding: 0.8rem 0.9rem;
+  font: inherit; font-size: var(--text-md); font-weight: 700; color: var(--cobalt); padding: 0.8rem 0.9rem;
   min-height: 48px; text-decoration: none; box-sizing: border-box;
 }
-.ws-header-menu button:active, .ws-header-menu a:active { background: var(--surface-sunk); }
-.ws-header-menu-danger { color: var(--danger); border-top: 1px solid var(--line) !important; }
+.ws-header-menu button:active, .ws-header-menu a:active { background: var(--grey-press); }
+.ws-header-menu-danger { color: var(--grey-text); border-top: var(--rule-hair) !important; }
 
 /* — Tab row: segmented pill tabs, active = solid dark pill —
    All 5 must fit without horizontal scroll: a scrolled-off tab has no
    visible affordance on a phone and simply stops getting used. Only the
    active tab carries pill padding; inactive tabs are plain, tightly spaced
    text so five labels comfortably fit at 390px width. */
+/* Tabs — plain text sharing a hairline baseline. No pills, no segmented
+   control: the active tab is stated by weight, ink, and a 3px underline. */
 .ws-tabs {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: flex-end;
+  gap: 26px;
   width: 100%;
-  margin: 0 -1rem;
-  padding: 0.2rem 1rem 0.6rem;
-  border-bottom: 1px solid var(--line);
+  margin: 0;
+  padding: 0;
+  border-bottom: var(--rule-hair);
   position: sticky;
   top: 0;
   background: var(--paper);
@@ -3707,247 +4136,345 @@ code {
 .ws-tab {
   flex: 0 0 auto;
   border: none;
+  border-bottom: 3px solid transparent;
   background: none;
-  color: var(--ink-700);
-  padding: 0.5rem 0.35rem;
-  font-size: var(--text-sm);
-  font-weight: 700;
+  color: var(--grey-text);
+  padding: 10px 0;
+  font-size: 18px;
+  font-weight: 600;
   white-space: nowrap;
-  border-radius: var(--r-pill);
-  transition: background-color 0.12s ease, color 0.12s ease, padding 0.12s ease;
+  border-radius: 0;
+  min-height: 44px;
+  transition: color 0.12s ease;
 }
-.ws-tab:active { background: var(--surface-sunk); }
+.ws-tab:active { color: var(--ink); }
 .ws-tab--active {
-  background: var(--ink-900);
-  color: #fff;
-  padding: 0.5rem 0.85rem;
+  background: none;
+  color: var(--ink);
+  font-weight: 800;
+  border-bottom-color: var(--ink);
+  padding: 10px 0;
 }
-.ws-tab--active:active { background: var(--ink-900); }
+.ws-tab--active:active { background: none; }
 
-.ws-body { padding-top: 0.85rem; }
-.ws-overview { display: flex; flex-direction: column; gap: 1rem; }
+.ws-body { padding-top: 22px; }
+.ws-overview { display: flex; flex-direction: column; }
 
-/* — Things to check — */
+/* — Things to check —
+   Was an amber panel. Attention now comes from a heavy ink rule and weight,
+   with the "Review ›" action in cobalt: it is the only ink rule this high on
+   the page, so it still stops the eye without a fill or a second colour. */
 .ws-ttc {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--amber-line);
-  background: var(--amber-bg);
-  color: var(--amber-fg);
-  border-radius: var(--r-lg);
-  padding: 0.9rem 1rem;
+  border: none;
+  border-top: var(--rule-heavy);
+  border-bottom: var(--rule-hair);
+  background: none;
+  color: var(--ink);
+  border-radius: 0;
+  padding: 17px 0;
   min-height: 56px;
 }
-.ws-ttc--urgent:active { filter: brightness(0.98); }
+.ws-ttc--urgent:active { background: var(--grey-press); }
+/* Cobalt: the row navigates to the review queue. */
 .ws-ttc-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--amber-fg); flex-shrink: 0;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--cobalt); flex-shrink: 0;
 }
-.ws-ttc-label { font-weight: 800; font-size: var(--text-md); }
-.ws-ttc-action { margin-left: auto; font-weight: 800; font-size: var(--text-md); }
+.ws-ttc-label { font-weight: 700; font-size: 21px; }
+.ws-ttc-action { margin-left: auto; font-weight: 700; font-size: var(--text-md); color: var(--cobalt); }
 .ws-ttc-quiet {
   margin: 0;
-  color: var(--ink-500);
-  font-size: var(--text-sm);
-  padding: 0.2rem 0.1rem;
+  color: var(--grey-text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  padding: 8px 0;
 }
 
 /* — Job home: stable section cards — */
-.ws-home-cards { display: flex; flex-direction: column; gap: 0.6rem; }
+/* Nav list — a ledger table, not five cards: one heavy ink rule opens it, then
+   hairline-separated rows. The whole row is the tap target (the chevron only
+   points at it). Icons are gone: the mock has none, and a label at 21/700 is
+   already the fastest thing to read. */
+.ws-home-cards {
+  display: flex;
+  flex-direction: column;
+  border-top: var(--rule-heavy);
+  margin-top: 14px;
+}
 .ws-home-card {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.8rem;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 0.9rem 1rem;
-  min-height: 64px;
+  border: none;
+  border-bottom: var(--rule-hair);
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 17px 0;
+  min-height: 56px;
   cursor: pointer;
 }
-.ws-home-card:active { background: var(--surface-sunk); }
-.ws-home-card-icon {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--r-md);
-  background: var(--surface-sunk);
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: var(--ink-700);
+.ws-home-card:active { background: var(--grey-press); }
+.ws-home-card-icon { display: none; }
+.ws-home-card-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
-.ws-home-card-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .ws-home-card-title {
   font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 800;
-  color: var(--ink-900);
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--ink);
+  flex: none;
 }
+/* Value cluster: bold figure, muted denominator, both right-aligned so the
+   numbers stack in a column down the list. */
+.ws-home-card-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+}
+.ws-home-card-value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.ws-home-card-denom,
 .ws-home-card-context {
   font-size: var(--text-sm);
-  color: var(--ink-500);
-  font-weight: 600;
+  color: var(--grey-text);
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ws-home-card-chev { margin-left: auto; color: var(--ink-400); font-size: 1.2rem; font-weight: 700; }
+.ws-home-card-chev {
+  flex: none;
+  color: var(--cobalt);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+/* ── Zone 1: the job-summary ink band (Spend) ──────────────────────────────
+   Full-bleed #111 running edge to edge — a band, not a card: no radius, no
+   shadow, no inset. The header and the hero are separate components, so each
+   paints the band and they butt together; the page's side padding is cancelled
+   with negative margins and re-applied inside so the ink reaches the edges.
+   Nothing may sit between them (see the notices, now home-only). */
+.ws-page--banded .ws-header--section,
+.ws-page--banded .mem-hero {
+  background: var(--ink);
+  color: var(--paper);
+  margin-left: -22px;
+  margin-right: -22px;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.ws-page--banded .ws-header--section { padding-top: 24px; padding-bottom: 0; }
+.ws-page--banded .ws-body { padding-top: 0; }
+.ws-page--banded .mem-hero { margin-top: 0; padding-top: 22px; padding-bottom: 26px; }
+
+.ws-page--banded .ws-job-title { color: var(--paper); }
+/* Cobalt is illegible on ink — the accent switches to its on-ink tint, and
+   still only ever marks something tappable. */
+.ws-page--banded .btn-switch-job { color: var(--cobalt-on-ink); }
+.ws-page--banded .ws-header-top { padding-bottom: 20px; }
+.ws-page--banded .mem-hero-amount { color: var(--paper); font-size: 50px; }
+.ws-page--banded .mem-hero-of { color: var(--record-sub); }
+.ws-page--banded .mem-hero-sub { color: var(--cobalt-on-ink); }
+.ws-page--banded .mem-hero-bar { background: var(--track-on-ink); }
+.ws-page--banded .mem-hero-bar > span { background: var(--paper); }
+/* Warning red stays red on ink — it is legible, and it is the one colour that
+   must never be mistaken for an accent. */
+.ws-page--banded .mem-hero--over .mem-hero-bar > span { background: var(--warning-red); }
 
 /* — Section workspace header + inner tabs — */
-.ws-header--section .ws-job-title { font-size: var(--text-xl); }
+/* A section screen's title is the screen title: same 38/800 as Job home. The
+   job name under it goes — the back link already says which job you came from,
+   and a static subtitle is exactly the kind of never-changing text the theme
+   asks us to cut. */
+.ws-header--section .ws-job-title { font-size: var(--text-3xl); }
+.ws-header--section .ws-job-location { display: none; }
 .ws-tabs--inner { position: static; border-bottom: none; padding-top: 0; margin-top: -0.35rem; }
 
 
 /* — Latest on this job — */
-.ws-latest { display: flex; flex-direction: column; gap: 0.5rem; }
+.ws-latest { display: flex; flex-direction: column; margin-top: 26px; }
 .ws-latest-card {
   list-style: none; margin: 0; padding: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
+  background: none;
+  border: none;
+  border-top: var(--rule-heavy);
+  border-radius: 0;
+  box-shadow: none;
 }
-.ws-latest-card li + li { border-top: 1px solid var(--line); }
+.ws-latest-card li + li { border-top: none; }
 .ws-latest-row {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 2px;
   width: 100%;
   border: none;
+  border-bottom: var(--rule-hair);
   background: none;
-  padding: 0.8rem 1rem;
+  padding: 13px 0;
   text-align: left;
   cursor: pointer;
 }
-.ws-latest-row:active { background: var(--surface-sunk); }
+.ws-latest-row:active { background: var(--grey-press); }
 .ws-latest-top {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: baseline;
+  gap: 16px;
 }
 .ws-latest-headline {
   flex: 1;
   min-width: 0;
-  color: var(--ink-900);
+  color: var(--ink);
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
+/* The mock's activity row is tag/description/amount with no time. The app has a
+   real timestamp and dropping it would lose information a restyle shouldn't, so
+   it sits under the description — indented past the tag column to keep the tag
+   gutter clean. */
 .ws-latest-time {
-  color: var(--ink-500);
-  font-size: var(--text-xs);
-  font-weight: 600;
+  color: var(--grey-text);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  /* Aligns with the description column (tag width + row gap). */
+  padding-left: 94px;
 }
 .ws-latest-right {
   flex-shrink: 0;
-  color: var(--ink-900);
-  font-size: var(--text-sm);
-  font-weight: 800;
+  color: var(--ink);
+  font-size: var(--text-md);
+  font-weight: 700;
 }
+/* Tag column: a fixed 58px gutter of uppercase type, not a chip. Filled pills
+   are boxes and would need a palette of background colours; the ledger states
+   the tag in weight and one of three inks.
+   The mock names BOUGHT=cobalt, PAID=ink, NOTE=grey. Generalised to this app's
+   fuller set: money out = cobalt, money in = ink, everything else = grey. */
 .ws-type-chip {
-  flex-shrink: 0;
-  border-radius: var(--r-pill);
-  padding: 0.2rem 0.6rem;
-  font-size: var(--text-xs);
+  flex: none;
+  /* Sized to the widest tag this app produces, measured: RETURNED is 77px
+     (the mock's 58px only had to fit BOUGHT/PAID/NOTE). Anything narrower and
+     the longest tags overrun the gutter and crowd the description instead of
+     leaving the column straight. */
+  width: 78px;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  font-size: var(--text-2xs);
   font-weight: 800;
-  background: #e7eefb;
-  color: #2b5fb3;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--cobalt);
 }
-.ws-type-chip--returned { background: #e3f3e9; color: var(--green-700); }
-.ws-type-chip--labour { background: #eae6fb; color: #5a44b3; }
-.ws-type-chip--note   { background: #eef1f4; color: var(--ink-700); }
-.ws-type-chip--photo  { background: #fdeee0; color: #b3612b; }
-.ws-type-chip--payment { background: #e3f3e9; color: var(--green-700); }
+.ws-type-chip--payment  { color: var(--ink); }
+.ws-type-chip--used,
+.ws-type-chip--returned,
+.ws-type-chip--note,
+.ws-type-chip--photo    { color: var(--grey-text); }
 
 /* — Payments workspace (money in — visually separate from Spend) — */
 .pay-section { display: flex; flex-direction: column; gap: 1rem; }
+/* Support's read-only payment summary keeps the stacked label/value list — it
+   is an inspection view with no ink band and no hero. De-carded like everything
+   else: rows between hairlines, no fill, no border. (The pilot's Payments
+   screen uses the shared .mem-hero primitives instead — see PaymentsSection.) */
 .pay-summary {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 0.9rem 1rem;
+  background: none;
+  border: none;
+  border-top: var(--rule-heavy);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
 }
-.pay-summary-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
-.pay-summary-label { color: var(--ink-700); font-size: var(--text-md); font-weight: 600; }
+.pay-summary-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 15px 0; border-bottom: var(--rule-hair);
+}
+.pay-summary-label { color: var(--grey-text); font-size: var(--text-md); font-weight: 500; }
 .pay-summary-value {
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 800;
-  color: var(--ink-900);
+  font-weight: 700;
+  color: var(--ink);
 }
+/* Overpaid is a warning state, not a tinted notice. */
 .pay-overpaid {
   margin: 0;
-  padding: 0.55rem 0.7rem;
-  border-radius: var(--r-md);
-  background: var(--amber-bg);
-  border: 1px solid var(--amber-line);
-  color: var(--amber-fg);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-.pay-edit-total {
-  align-self: flex-start;
-  border: none;
+  padding: 15px 0;
+  border-radius: 0;
   background: none;
-  color: var(--green-700);
-  font-size: var(--text-sm);
-  font-weight: 800;
-  padding: 0.2rem 0;
-  cursor: pointer;
-  text-decoration: underline;
+  border: none;
+  color: var(--warning-red);
+  font-size: var(--text-md);
+  font-weight: 700;
 }
-.pay-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+/* A payment is a ledger row like everything else: amount left, when right,
+   hairline between. Its actions are text links, and Delete is grey — never
+   inviting. Matches the item rows on Spend at the same 19/700 scale. */
+.pay-list { list-style: none; margin: 0; padding: 0; border-top: var(--rule-heavy); }
 .pay-row {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 0.75rem 0.9rem;
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 15px 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 3px;
 }
-.pay-row-main { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
-.pay-row-amount { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 800; color: var(--ink-900); }
-.pay-row-when { font-size: var(--text-xs); color: var(--ink-500); }
-.pay-row-meta { margin: 0; font-size: var(--text-sm); color: var(--ink-700); }
-.pay-row-actions { display: flex; align-items: center; gap: 0.6rem; }
+.pay-row-main { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pay-row-amount { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); }
+.pay-row-when { font-size: var(--text-sm); color: var(--grey-text); }
+.pay-row-meta { margin: 0; font-size: var(--text-sm); color: var(--grey-text); }
+.pay-row-actions { display: flex; align-items: center; gap: 20px; margin-top: 5px; }
 .pay-row-action {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--ink-700);
-  border-radius: var(--r-pill);
-  padding: 0.3rem 0.75rem;
-  font-size: var(--text-xs);
+  border: none;
+  background: none;
+  color: var(--cobalt);
+  border-radius: 0;
+  padding: 0;
+  font-size: var(--text-sm);
   font-weight: 700;
-  min-height: 32px;
+  min-height: 44px;
   cursor: pointer;
 }
-.pay-row-action--danger { color: var(--red-600); border-color: var(--red-500); }
-.pay-delete-copy { font-size: var(--text-sm); color: var(--ink-700); font-weight: 600; }
+.pay-row-action:active { opacity: 0.6; }
+.pay-row-action--danger { color: var(--grey-text); border-color: transparent; margin-left: auto; }
+.pay-delete-copy { font-size: var(--text-md); color: var(--grey-text); font-weight: 500; }
 .pay-delete-confirm {
   border: none;
-  border-radius: var(--r-pill);
-  background: var(--red-600);
-  color: #fff;
-  font-size: var(--text-xs);
-  font-weight: 800;
-  padding: 0.35rem 0.8rem;
-  min-height: 32px;
+  border-radius: 0;
+  background: none;
+  color: var(--warning-red);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0;
+  min-height: 44px;
   cursor: pointer;
 }
 .pay-form { display: flex; flex-direction: column; gap: 0.8rem; }
@@ -3956,7 +4483,7 @@ code {
   border: 1px solid var(--red-500);
   background: var(--surface);
   color: var(--red-600);
-  border-radius: var(--r-pill);
+  border-radius: 0;
   padding: 0.45rem 0.9rem;
   font-size: var(--text-sm);
   font-weight: 700;
@@ -3971,73 +4498,100 @@ code {
 }
 
 /* — Pinned Record bar — */
+/* Record bar — full-bleed ink, square, no margin, pinned over every screen.
+   The bar itself carries no background gradient; the ~115px fade above it is
+   the theme's single permitted gradient, so scrolled content dissolves into
+   the paper instead of clipping against a hard edge. */
 .ws-record-bar {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   z-index: 20;
-  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, var(--paper) 72%, rgba(242, 241, 234, 0));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
+  padding: 0;
+  background: none;
+  display: block;
+}
+.ws-record-bar::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 100%;
+  height: 115px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, var(--paper) 42%);
+  pointer-events: none;
 }
 .ws-record-btn {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 14px;
   width: 100%;
-  max-width: 528px;
-  min-height: 68px;
+  min-height: 80px;
   border: none;
-  border-radius: var(--r-xl);
-  background:
-    radial-gradient(120% 140% at 18% 20%, var(--green-500) 0%, var(--green-600) 46%, var(--green-700) 100%);
-  color: #fff;
-  padding: 0.85rem 1.25rem;
-  box-shadow: var(--shadow-green),
-    inset 0 2px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.16);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 18px 22px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow: none;
+  text-align: left;
 }
-.ws-record-btn:active { transform: scale(0.99); }
+.ws-record-btn:active { background: #000; }
+/* The one circle in the theme, and it is cobalt because tapping it records. */
 .ws-record-icon {
   flex-shrink: 0;
-  width: 30px; height: 30px;
-  color: #fff;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--cobalt);
+  color: var(--paper);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.ws-record-icon svg { width: 100%; height: 100%; }
-.ws-record-text { display: flex; flex-direction: column; align-items: flex-start; }
+.ws-record-icon svg { width: 22px; height: 22px; }
+.ws-record-text { display: flex; flex-direction: column; align-items: flex-start; flex: 1; }
 .ws-record-title {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 800;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.3px;
+  color: var(--paper);
 }
 .ws-record-sub {
-  font-size: var(--text-xs);
-  color: rgba(255, 255, 255, 0.72);
-  font-weight: 600;
+  font-size: 14px;
+  color: var(--record-sub);
+  font-weight: 500;
 }
+/* Chevron: white on the ink bar (cobalt would vanish against it, and the whole
+   bar is already the tap target). */
+.ws-record-btn::after {
+  content: '›';
+  color: var(--paper);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  flex: none;
+}
+/* Recording in progress: the bar stays ink and full-bleed — only its contents
+   swap — so the one fixed element on screen never changes shape mid-take. */
 .ws-recording-active {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
+  gap: 14px;
   width: 100%;
-  max-width: 528px;
-  min-height: 68px;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-lg);
-  padding: 0.7rem 0.9rem;
+  min-height: 80px;
+  background: var(--ink);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 18px 22px calc(18px + env(safe-area-inset-bottom, 0px));
 }
+/* The live-status dot is cobalt (handoff rule 4 names it explicitly). */
 .ws-rec-dot {
   flex-shrink: 0;
   width: 12px; height: 12px;
   border-radius: 50%;
-  background: var(--red-600);
+  background: var(--cobalt);
   animation: ws-rec-pulse 1.1s ease-in-out infinite;
 }
 @keyframes ws-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* One of the few sanctioned tabular-nums uses: a live counter, comma-free, that
+   would jitter on every tick with proportional figures. */
 .ws-rec-elapsed {
   flex: 1;
   min-width: 0;
@@ -4045,23 +4599,24 @@ code {
   font-size: var(--text-xl);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  color: var(--ink-900);
+  letter-spacing: -0.3px;
+  color: var(--paper);
   line-height: 1;
 }
-.ws-rec-max { font-size: var(--text-sm); color: var(--ink-400); font-weight: 500; }
+.ws-rec-max { font-size: 14px; color: var(--record-sub); font-weight: 500; }
+/* Stop is the action on the ink bar, so it takes the accent. */
 .ws-stop-btn {
   flex-shrink: 0;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 1.4rem;
-  background: var(--red-600);
-  color: #fff;
+  background: var(--cobalt);
+  color: var(--paper);
   border: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-size: var(--text-md);
   font-weight: 800;
 }
-.ws-stop-btn:active { transform: scale(0.97); }
+.ws-stop-btn:active { opacity: 0.85; }
 .ws-stop-btn:disabled { opacity: 0.6; }
 
 /* — Capture confirmation interstitial — */
@@ -4079,8 +4634,8 @@ code {
   width: 100%;
   max-width: 360px;
   background: var(--surface);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-lg);
+  border-radius: 0;
+  box-shadow: none;
   padding: 1.9rem 1.5rem 1.5rem;
   text-align: center;
   display: flex;
@@ -4123,18 +4678,18 @@ code {
 .ws-capture-review {
   min-height: 50px;
   border: none;
-  border-radius: var(--r-md);
+  border-radius: 0;
   background: var(--green-600);
   color: #fff;
   font-size: var(--text-md);
   font-weight: 800;
-  box-shadow: var(--shadow-green);
+  box-shadow: none;
 }
 .ws-capture-review:active { transform: scale(0.99); }
 .ws-capture-done {
   min-height: 48px;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: 0;
   background: var(--surface-sunk);
   color: var(--ink-700);
   font-size: var(--text-md);
@@ -4143,62 +4698,66 @@ code {
 .ws-capture-done:active { background: var(--line); }
 .ws-record-unsupported {
   width: 100%;
-  max-width: 528px;
   text-align: center;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg);
-  padding: 0.85rem 1rem;
+  background: var(--ink);
+  border: none;
+  border-radius: 0;
+  padding: 18px 22px calc(18px + env(safe-area-inset-bottom, 0px));
   margin: 0;
-  color: var(--ink-700);
-  font-size: var(--text-sm);
+  color: var(--record-sub);
+  font-size: var(--text-md);
+  font-weight: 500;
 }
 
 /* ── Direct add (section-level manual memory) ─────────────────────────────── */
 /* Quiet section header: small-caps label + a round "+" trigger. Keeps direct
    add secondary to voice and the lens summary. */
-.lens-add { margin-bottom: 0.25rem; }
+/* Lens header — the mock's "BY CATEGORY [kicker] … + Add spend [cobalt]" row,
+   sitting 8px above the heavy rule that opens the section. */
+.lens-add { margin-bottom: 0; }
 .lens-add-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem;
-  min-height: 40px;
+  min-height: 44px;
 }
 .lens-add-label {
   font-size: var(--text-xs);
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--ink-400);
+  color: var(--grey-text);
 }
-/* Clear text add action in the lens header — never a bare "+" (founder
-   feedback: a plus-only affordance reads as leftover chrome). */
+/* Cobalt text action, never a pill — and never a bare "+" (founder feedback: a
+   plus-only affordance reads as leftover chrome). */
 .btn-lens-add-text {
   flex-shrink: 0;
   font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 800;
-  color: var(--green-700);
-  background: var(--green-50);
-  border: 1px solid var(--green-200);
-  border-radius: var(--r-pill);
-  padding: 0.35rem 0.8rem;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--cobalt);
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  min-height: 44px;
   cursor: pointer;
 }
-.btn-lens-add-text:active { background: var(--green-100); }
+.btn-lens-add-text:active { opacity: 0.6; }
 .direct-add {
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 1rem;
-  margin-bottom: 0.5rem;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 16px 0;
+  margin-bottom: 0;
 }
 .mem-section-empty {
   margin: 0 0 0.25rem;
-  color: var(--ink-400);
-  font-size: var(--text-sm);
+  color: var(--grey-text);
+  font-size: var(--text-md);
+  font-weight: 500;
 }
 .direct-add-form { gap: 0.6rem; }
 .direct-add-row {
@@ -4212,118 +4771,131 @@ code {
   font-family: inherit;
 }
 
-/* ── Spend cost-basis attention ("Needs cost check") ──────────────────────── */
+/* ── Spend cost-basis attention ("Not counted yet") ────────────────────────
+   Was an amber panel holding white sub-cards — boxes inside boxes. Now an
+   ordinary section: kicker, heavy rule, hairline-separated rows. It keeps its
+   pull because it sits directly under the summary block, not because of a
+   colour the theme doesn't have. */
 .cost-check {
-  background: var(--amber-bg);
-  border: 1px solid var(--amber-line);
-  border-radius: var(--r-lg);
-  padding: 0.9rem 1rem;
-  margin-bottom: 0.75rem;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 26px 0 0;
 }
-.cost-check-title {
-  margin: 0;
-  font-weight: 800;
+/* The whole "Not counted yet" explainer collapsed into this: a live count as
+   the title, the state as a subtitle, and the way out on the right. */
+.cost-check-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: var(--rule-heavy);
+  border-bottom: var(--rule-hair);
+}
+.cost-check-row-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.cost-check-row-title { font-size: 20px; font-weight: 700; color: var(--ink); }
+.cost-check-row-sub { font-size: var(--text-sm); font-weight: 400; color: var(--grey-text); }
+.cost-check-row-action {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  min-height: 44px;
+  font: inherit;
   font-size: var(--text-md);
-  color: var(--amber-fg);
+  font-weight: 700;
+  color: var(--cobalt);
+  cursor: pointer;
 }
-.cost-check-sub {
-  margin: 0.15rem 0 0.6rem;
-  font-size: var(--text-sm);
-  color: var(--amber-fg);
-  opacity: 0.85;
-}
+.cost-check-row-action:active { opacity: 0.6; }
 .cost-check-item {
-  background: var(--surface);
-  border: 1px solid var(--amber-line);
-  border-radius: var(--r-md);
-  padding: 0.75rem 0.85rem;
-  margin-top: 0.5rem;
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  padding: 16px 0;
+  margin-top: 0;
 }
-.cost-check-item--editing { padding: 0.85rem; }
+/* The heavy rule belongs to the summary row above; the disclosed items are
+   ordinary hairline rows under it. */
+.cost-check-item--editing { padding: 16px 0; }
 .cost-check-headline {
   margin: 0;
-  font-weight: 800;
-  font-size: var(--text-md);
-  color: var(--ink-900);
+  font-weight: 700;
+  font-size: var(--text-xl);
+  color: var(--ink);
 }
 .cost-check-q {
-  margin: 0.15rem 0 0.6rem;
-  font-size: var(--text-sm);
-  color: var(--ink-600, var(--ink-700));
+  margin: 6px 0 12px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--grey-text);
 }
 .cost-check-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 20px;
 }
+/* The resolving action is cobalt text; only a form's Save earns a solid block. */
 .btn-cost-total, .btn-cost-each, .btn-cost-fix {
-  border-radius: var(--r-md);
+  border-radius: 0;
   min-height: 44px;
-  padding: 0 0.9rem;
+  padding: 0;
   font-size: var(--text-sm);
-  font-weight: 800;
-}
-.btn-cost-total {
-  border: none;
-  background: var(--green-600);
-  color: #fff;
-}
-.btn-cost-total:active { background: var(--green-700); }
-.btn-cost-each {
-  border: 1px solid var(--green-300, var(--green-200));
-  background: var(--green-50);
-  color: var(--green-700);
-}
-.btn-cost-fix {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--ink-700);
   font-weight: 700;
+  border: none;
+  background: none;
+  color: var(--cobalt);
 }
+.btn-cost-total:active, .btn-cost-each:active, .btn-cost-fix:active { opacity: 0.6; }
 .btn-cost-total:disabled, .btn-cost-each:disabled, .btn-cost-fix:disabled { opacity: 0.55; }
 
 /* Derived line-total preview (direct add / edit / add-price form) */
 .cost-preview {
-  margin: 0.1rem 0 0.2rem;
-  font-size: var(--text-sm);
-  color: var(--green-700);
-  font-weight: 600;
+  margin: 6px 0;
+  font-size: var(--text-md);
+  color: var(--grey-text);
+  font-weight: 500;
 }
-.cost-preview strong { font-weight: 800; }
-.cost-preview--warning { color: var(--amber-fg); }
+.cost-preview strong { font-weight: 700; color: var(--ink); }
+.cost-preview--warning { color: var(--ink); }
 
-/* ── Job photos (Notes tab): job-context photo cards ── */
-.job-photos { margin: 0 0 1rem; }
+/* ── Job photos (Job log): photos are the theme's only images, so they carry
+   their own edges — no card is needed around them. ── */
+.job-photos { margin: 0; }
 .photo-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  margin: 0 1rem 0.6rem;
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  margin: 0;
+  padding: 16px 0;
+  box-shadow: none;
 }
 .photo-card-img {
   display: block;
   width: 100%;
   max-height: 220px;
   object-fit: cover;
-  background: var(--surface-sunk);
+  background: var(--grey-track);
 }
 .photo-card-fallback {
   padding: 1.4rem 1rem;
-  background: var(--surface-sunk);
-  color: var(--ink-500);
-  font-size: var(--text-sm);
-  font-weight: 700;
+  background: var(--grey-track);
+  color: var(--grey-text);
+  font-size: var(--text-md);
+  font-weight: 500;
   text-align: center;
 }
-.photo-card-body { padding: 0.65rem 0.9rem 0.75rem; }
+.photo-card-body { padding: 12px 0 0; }
 .photo-card-descriptor {
-  margin: 0; font-size: var(--text-md); font-weight: 700; color: var(--ink-900);
+  margin: 0; font-size: var(--text-xl); font-weight: 700; color: var(--ink);
 }
-.photo-card-meta { margin: 0.15rem 0 0.35rem; font-size: var(--text-xs); color: var(--ink-500); }
+.photo-card-meta { margin: 6px 0 12px; font-size: var(--text-md); font-weight: 500; color: var(--grey-text); }
 .photo-card-link { font-weight: 700; }
-.photo-card-actions { display: flex; align-items: center; gap: 0.5rem; }
+.photo-card-actions { display: flex; align-items: center; gap: 20px; }
 .photo-preview {
   display: block;
   /* The form is a column flexbox: without this the image is cross-axis
@@ -4331,63 +4903,77 @@ code {
   align-self: flex-start;
   max-width: 100%;
   max-height: 160px;
-  border-radius: var(--r-md);
+  border-radius: 0;
   border: 1px solid var(--line);
   margin: 0.2rem 0;
 }
 .photo-file-input { padding: 0.45rem; }
 /* ── Labour tab: daily labour view (Labour Tracking V2) ── */
 .labour-job-total {
-  margin: 0 1rem 0.9rem;
-  padding: 0.85rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  margin: 0;
+  padding: 0 0 16px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .labour-job-total-cap {
-  margin: 0; font-size: var(--text-2xs); font-weight: 800;
-  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-400);
+  margin: 0; font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--grey-text);
 }
 .labour-job-total-value {
-  margin: 0.1rem 0 0; font-family: var(--font-display);
-  font-size: var(--text-xl); font-weight: 800; color: var(--ink-900);
+  margin: 6px 0 0; font-family: var(--font-display);
+  font-size: var(--text-figure); font-weight: 800; letter-spacing: -2px;
+  line-height: 1; color: var(--ink);
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
 }
-.labour-day { margin: 0 1rem 1rem; }
+.labour-job-total-of {
+  font-size: var(--text-lg); font-weight: 600; letter-spacing: 0;
+  color: var(--grey-text);
+}
+/* A day is a section: heading + heavy rule + its entries. */
+.labour-day { margin: 0 0 26px; }
 .labour-day-head {
   display: flex; align-items: baseline; justify-content: space-between;
-  gap: 0.5rem; margin: 0 0.15rem 0.4rem;
+  gap: 0.5rem; margin: 0 0 8px;
 }
 .labour-day-label {
-  margin: 0; font-size: var(--text-md); font-weight: 800; color: var(--ink-900);
+  margin: 0; font-size: var(--text-xs); font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--grey-text);
 }
-.labour-day-total { font-size: var(--text-xs); font-weight: 800; color: var(--ink-500); }
+.labour-day-total { font-size: var(--text-xs); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--grey-text); }
 .labour-entry {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--green-500);
-  border-radius: var(--r-md);
-  padding: 0.7rem 0.9rem;
-  margin-bottom: 0.5rem;
-  box-shadow: var(--shadow-sm);
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  padding: 16px 0;
+  margin-bottom: 0;
+  box-shadow: none;
 }
-.labour-entry--unresolved { border-left-color: var(--amber-fg, #b45309); }
-.labour-entry--editing { border-left-color: var(--green-600); }
-.labour-entry-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.labour-day .labour-entry:first-of-type { border-top: var(--rule-heavy); }
+.labour-entry--unresolved,
+.labour-entry--editing { border-left-color: transparent; }
+.labour-entry-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
 .labour-entry-main { min-width: 0; }
-.labour-entry-headline { margin: 0; font-size: var(--text-md); color: var(--ink-900); }
-.labour-entry-person { font-weight: 800; }
-.labour-entry-hours { margin-left: 0.5rem; font-weight: 700; color: var(--ink-700); }
-.labour-entry-task { margin: 0.1rem 0 0; font-size: var(--text-sm); color: var(--ink-500); }
+.labour-entry-headline { margin: 0; font-size: var(--text-xl); font-weight: 700; color: var(--ink); }
+.labour-entry-person { font-weight: 700; }
+.labour-entry-hours { margin-left: 0.5rem; font-weight: 700; color: var(--ink); }
+.labour-entry-task { margin: 6px 0 0; font-size: var(--text-md); font-weight: 500; color: var(--grey-text); }
+/* Worth-checking speaks in weight and ink, not amber. */
 .labour-entry-check {
-  margin: 0.25rem 0 0; font-size: var(--text-xs); font-weight: 800;
-  color: var(--amber-fg, #b45309);
+  margin: 6px 0 0; font-size: var(--text-md); font-weight: 700;
+  color: var(--ink);
 }
 .labour-entry-side {
   display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
   flex-shrink: 0; text-align: right;
 }
-.labour-entry-cost { font-size: var(--text-xs); font-weight: 700; color: var(--ink-500); }
+/* The money on a labour row is either a figure ("£280") or a phrase ("No cost
+   added"); both sit here, so it takes the row-value size rather than the item
+   name's 22px — a phrase set at 22px shouts louder than the person's name. */
+.labour-entry-cost { font-size: var(--text-lg); font-weight: 700; color: var(--ink); white-space: nowrap; }
+.labour-entry-side .btn-mem-fix { min-height: 0; }
 
 /* ── Manual Add V2: bottom sheet ── */
 .bottom-sheet-backdrop {
@@ -4395,14 +4981,17 @@ code {
   background: rgba(25, 28, 24, 0.45);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
+/* Square, shadowless, flat white — an ink hairline at the top is all the
+   separation it needs over the scrim. */
 .bottom-sheet {
-  background: var(--surface);
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-  box-shadow: 0 -8px 32px rgba(25, 28, 24, 0.25);
-  padding: 0.9rem 1.1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  border-radius: 0;
+  border-top: var(--rule-heavy);
+  box-shadow: none;
+  padding: 16px 22px calc(22px + env(safe-area-inset-bottom, 0px));
   max-height: 88vh;
   display: flex; flex-direction: column;
-  animation: bottom-sheet-up 180ms ease-out;
+  animation: bottom-sheet-up 150ms ease-out;
 }
 @keyframes bottom-sheet-up {
   from { transform: translateY(24px); opacity: 0.6; }
@@ -4416,54 +5005,60 @@ code {
 }
 .bottom-sheet-title {
   margin: 0; font-family: var(--font-display);
-  font-size: var(--text-lg); font-weight: 800; color: var(--ink-900);
+  font-size: var(--text-2xl); font-weight: 700; color: var(--ink);
 }
 .bottom-sheet-close {
-  font: inherit; font-size: 1.3rem; line-height: 1;
+  font: inherit; font-size: 1.5rem; line-height: 1;
   background: none; border: none; cursor: pointer;
-  color: var(--ink-400); padding: 0.3rem 0.4rem;
+  color: var(--grey-text); padding: 0; min-width: 44px; min-height: 44px;
 }
-.bottom-sheet-body { overflow-y: auto; }
+.bottom-sheet-body { overflow-y: auto; padding-top: 8px; }
 .bottom-sheet-voice {
-  margin: 0.8rem 0 0; text-align: center;
-  font-size: var(--text-sm); color: var(--ink-500);
+  margin: 16px 0 0; text-align: center;
+  font-size: var(--text-md); font-weight: 500; color: var(--grey-text);
 }
 .bottom-sheet-voice-link {
-  font: inherit; font-weight: 800; color: var(--green-700);
-  background: none; border: none; cursor: pointer; padding: 0;
+  font: inherit; font-weight: 700; color: var(--cobalt);
+  background: none; border: none; cursor: pointer; padding: 0; min-height: 44px;
 }
 
-/* Inline manual-add trigger (category cards, empty states) */
+/* Inline manual-add trigger (category blocks, empty states) */
 .lens-add-inline { display: inline-flex; }
 .btn-add-inline {
-  font: inherit; font-size: var(--text-xs); font-weight: 800;
-  color: var(--green-700); background: none; border: none;
-  cursor: pointer; padding: 4px 0;
+  font: inherit; font-size: var(--text-md); font-weight: 700;
+  color: var(--cobalt); background: none; border: none;
+  cursor: pointer; padding: 0; min-height: 44px;
 }
+.btn-add-inline:active { opacity: 0.6; }
+/* Wraps rather than squeezing "Add to cladding" into a two-line column beside
+   the disclosure — both are text actions and each needs its own line at phone
+   width when the category name is long. */
 .budget-cat-foot {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 0.75rem; margin-top: 4px;
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 20px; margin-top: 14px;
 }
 .budget-cat-foot .notes-toggle { margin-top: 0; }
+.budget-cat-foot .lens-add-inline { margin-left: auto; }
 
-/* Empty-section card: plain explanation + a manual add action, no Record */
+/* Empty state — was a dashed box. Now left-aligned type in the flow of the
+   page: an empty section is a fact, not a placeholder that needs framing. */
 .empty-card {
-  margin: 0 1rem 1rem;
-  padding: 1.1rem 1rem;
-  border: 1.5px dashed var(--ink-300);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  text-align: center;
+  margin: 0;
+  padding: 16px 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  text-align: left;
 }
-.mem-section .empty-card { margin: 0 1rem 0.5rem; }
+.mem-section .empty-card { margin: 0; }
 .empty-card-title {
-  margin: 0; font-size: var(--text-md); font-weight: 800; color: var(--ink-900);
+  margin: 0; font-size: var(--text-xl); font-weight: 700; color: var(--ink);
 }
-.empty-card-hint { margin: 0.25rem 0 0; font-size: var(--text-sm); color: var(--ink-500); }
-.empty-card-action { margin-top: 0.6rem; }
+.empty-card-hint { margin: 6px 0 0; font-size: var(--text-md); font-weight: 500; color: var(--grey-text); }
+.empty-card-action { margin-top: 12px; }
 .empty-card .btn-add-inline {
-  border: 1px solid var(--line); border-radius: var(--r-pill);
-  padding: 0.5rem 1rem; font-size: var(--text-sm); background: var(--surface);
+  border: none; border-radius: 0;
+  padding: 0; font-size: var(--text-md); background: none;
 }
 
 /* ── Founder Support Mode (internal, read-only) ── */
@@ -4480,36 +5075,36 @@ code {
 .support-row {
   display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
   width: 100%; text-align: left; font: inherit; cursor: pointer;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
-  padding: 0.7rem 0.9rem; box-shadow: var(--shadow-sm);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 0;
+  padding: 0.7rem 0.9rem; box-shadow: none;
 }
 .support-row-main { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
 .support-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem; }
 .support-row-sub { font-size: var(--text-xs); color: var(--ink-500); }
-.support-role { font-size: var(--text-2xs); font-weight: 800; letter-spacing: 0.08em; padding: 0.1rem 0.45rem; border-radius: var(--r-pill); background: var(--surface-sunk); color: var(--ink-500); }
+.support-role { font-size: var(--text-2xs); font-weight: 800; letter-spacing: 0.08em; padding: 0.1rem 0.45rem; border-radius: 0; background: var(--surface-sunk); color: var(--ink-500); }
 .support-role--internal { background: var(--green-50); color: var(--green-700); }
 
 .support-job {
   display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
-  padding: 0.7rem 0.9rem; box-shadow: var(--shadow-sm);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 0;
+  padding: 0.7rem 0.9rem; box-shadow: none;
 }
 .support-job-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 .btn-support {
   font: inherit; font-size: var(--text-xs); font-weight: 800;
   color: var(--ink-700); background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--r-pill); padding: 0.35rem 0.7rem; cursor: pointer;
+  border-radius: 0; padding: 0.35rem 0.7rem; cursor: pointer;
 }
 .btn-support--primary { color: var(--green-700); background: var(--green-50); border-color: var(--green-200); }
 
-.support-sec { margin: 0 0 1.1rem; padding: 0.8rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
+.support-sec { margin: 0 0 1.1rem; padding: 0.8rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0; }
 .support-insp-day { margin-bottom: 0.6rem; }
 .support-insp-daylabel { margin: 0 0 0.25rem; font-size: var(--text-xs); font-weight: 800; color: var(--ink-400); text-transform: uppercase; letter-spacing: 0.08em; }
 .support-insp-note { margin: 0 0 0.6rem; }
 .support-insp-fact { margin: 0.25rem 0 0; font-size: var(--text-sm); color: var(--ink-700); }
 .support-chip {
   font-size: var(--text-2xs); font-weight: 800; padding: 0.05rem 0.4rem;
-  border-radius: var(--r-pill); background: var(--surface-sunk); color: var(--ink-500);
+  border-radius: 0; background: var(--surface-sunk); color: var(--ink-500);
 }
 .support-chip--confirmed, .support-chip--edited { background: var(--green-50); color: var(--green-700); }
 .support-chip--dismissed { background: #fbeaea; color: #a13636; }
@@ -4525,7 +5120,7 @@ code {
 }
 .btn-support-exit {
   font: inherit; font-size: var(--text-xs); font-weight: 800; flex-shrink: 0;
-  color: #3b3040; background: #fff; border: none; border-radius: var(--r-pill);
+  color: #3b3040; background: #fff; border: none; border-radius: 0;
   padding: 0.35rem 0.8rem; cursor: pointer;
 }
 .support-tabs { margin-bottom: 0.75rem; }
@@ -4534,7 +5129,7 @@ code {
   margin: 0.35rem 0 0; font-size: var(--text-sm); color: var(--ink-700);
 }
 .support-spend-row--card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 0;
   padding: 0.55rem 0.9rem; margin: 0 0 0.4rem;
 }
 .btn-support-entry {
@@ -4545,33 +5140,29 @@ code {
 
 /* ── Labour entry point & budget clarity ── */
 .labour-money {
-  margin: 0 1rem 0.9rem;
-  padding: 0.75rem 1rem 0.6rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  margin: 0 0 26px;
+  padding: 0 0 16px;
+  background: none;
+  border: none;
+  border-bottom: var(--rule-hair);
+  border-radius: 0;
+  box-shadow: none;
 }
-.labour-money .budget-cat-figures { margin-top: 0; }
-.labour-money-note { margin: 0.4rem 0 0; }
-.labour-group-guide {
-  margin: 0.6rem 0 0;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  color: var(--ink-500);
-}
-.labour-historical { margin-top: 0.7rem; border-top: 1px solid var(--line); padding-top: 0.6rem; }
+/* The trio sits under the spend bar, so it keeps the standard 14px — the old
+   0 override was from when this block had no bar above it. */
+.labour-money .budget-cat-figures { margin-top: 14px; }
+.labour-money .budget-bar { margin-top: 0; }
+.labour-historical { margin-top: 0.7rem; border-top: var(--rule-hair); padding-top: 0.6rem; }
 .labour-historical-title {
-  margin: 0; font-size: var(--text-2xs); font-weight: 800;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-400);
+  margin: 0 0 8px; font-size: var(--text-2xs); font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--grey-text);
 }
-.labour-historical-note { margin: 0.2rem 0 0.5rem; }
 
 /* Job title rename */
 .ws-rename-form { display: flex; flex-direction: column; gap: 0.4rem; width: 100%; }
 .ws-rename-input {
   font: inherit; font-size: var(--text-lg); font-weight: 700;
-  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  border: 1px solid var(--line-strong); border-radius: 0;
   padding: 0.35rem 0.6rem; width: 100%;
 }
 .ws-rename-actions { display: flex; gap: 0.5rem; }

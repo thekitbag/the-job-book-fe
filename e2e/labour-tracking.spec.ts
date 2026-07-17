@@ -35,7 +35,9 @@ test.describe('Labour tab — daily view', () => {
     await page.waitForTimeout(600)
 
     // Job total: today 4+6+8 = 18h, yesterday 6h → 24h (worth-checking excluded).
-    await expect(page.getByText('24h job total')).toBeVisible()
+    const jobTotal = page.getByRole('region', { name: 'Labour hours' })
+    await expect(jobTotal).toContainText('24h')
+    await expect(jobTotal).toContainText('job total')
 
     const today = page.getByRole('region', { name: 'Labour Today' })
     await expect(today.getByText('18h day total')).toBeVisible()
@@ -135,8 +137,8 @@ test.describe('Spend tab — Labour group', () => {
     // Labour group: £280 (rated, categorised) + £600 (total, NO category) = £880,
     // against the seeded £1500 labour category budget.
     const group = page.getByRole('region', { name: /^labour spend$/i })
-    await expect(group.getByText('£880 known spend')).toBeVisible()
-    await expect(group.getByText('£620 remaining')).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Spent' }).getByText('£880', { exact: true })).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Left' }).getByText('£620', { exact: true })).toBeVisible()
 
     // no second home for labour: the manual labour category card is suppressed
     await expect(page.getByRole('region', { name: /budget category labour/i })).toHaveCount(0)

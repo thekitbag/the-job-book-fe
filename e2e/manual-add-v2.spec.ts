@@ -59,7 +59,7 @@ test.describe('Manual Add V2', () => {
 
     // electrics is a seeded category with no spend — its empty state offers the add
     const card = page.getByRole('region', { name: /budget category electrics/i })
-    await expect(card.getByText(/No spend in this category yet/)).toBeVisible()
+    await expect(card.getByText('Nothing yet')).toBeVisible()
     await card.getByRole('button', { name: 'Add to electrics' }).click()
 
     const sheet = page.getByRole('dialog', { name: 'Add spend — electrics' })
@@ -73,7 +73,7 @@ test.describe('Manual Add V2', () => {
     await page.waitForTimeout(900)
 
     // saved with the category → shows inside the electrics card per backend summary
-    await expect(card.getByText('£180 known spend')).toBeVisible()
+    await expect(card.locator('.budget-figure', { hasText: 'Spent' }).getByText('£180', { exact: true })).toBeVisible()
     await card.getByRole('button', { name: /show notes/i }).click()
     await expect(card.getByText('consumer unit')).toBeVisible()
   })

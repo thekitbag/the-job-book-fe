@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -86,8 +87,8 @@ test.describe('Direct add job detail', () => {
 
     const card = page.locator('.mem-card', { hasText: 'Client wants black cladding' })
     await expect(card).toBeVisible()
-    // editable via the existing Fix memory flow
-    await card.getByRole('button', { name: /fix memory/i }).click()
+    // Notes are tappable ledger rows: Fix memory lives in the row's sheet.
+    await (await openRowActions(page, card)).getByRole('button', { name: /fix memory/i }).click()
     await expect(page.getByRole('form', { name: /edit memory/i })).toBeVisible()
   })
 

@@ -97,11 +97,19 @@ function ReturnFields({ item, submitting, error, onSubmit, onCancel }: {
  * Mike's values until the backend has accepted, so a refused return (e.g. more
  * than is left over) can't leave the screen showing a move that didn't happen.
  */
-export default function ReturnMaterialSheet({ item, onReturn }: {
+export default function ReturnMaterialSheet({ item, onReturn, controlledOpen, onOpenChange }: {
   item: MemoryViewItem
   onReturn: (req: ReturnMaterialRequest) => Promise<unknown>
+  // Controlled mode: the row's actions sheet owns the open state and renders no
+  // trigger of its own, so "Mark as returned" is one row in one sheet rather
+  // than a competing button on the item.
+  controlledOpen?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const controlled = controlledOpen !== undefined
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlled ? controlledOpen : uncontrolledOpen
+  const setOpen = (v: boolean) => (controlled ? onOpenChange?.(v) : setUncontrolledOpen(v))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -126,14 +134,16 @@ export default function ReturnMaterialSheet({ item, onReturn }: {
 
   return (
     <div className="lens-add-inline">
-      <button
-        type="button"
-        className="btn-mem-return"
-        aria-expanded={open}
-        onClick={() => { setError(null); setOpen(true); track('material_return_opened', { memory_item_id: item.id }) }}
-      >
-        Mark as returned
-      </button>
+      {!controlled && (
+        <button
+          type="button"
+          className="btn-mem-return"
+          aria-expanded={open}
+          onClick={() => { setError(null); setOpen(true); track('material_return_opened', { memory_item_id: item.id }) }}
+        >
+          Mark as returned
+        </button>
+      )}
       {open && (
         <BottomSheet title="Mark as returned" onClose={close}>
           <ReturnFields item={item} submitting={submitting} error={error} onSubmit={submit} onCancel={close} />

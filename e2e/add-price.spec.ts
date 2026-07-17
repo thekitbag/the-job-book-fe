@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openNotCounted } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -30,7 +31,7 @@ async function openSpend(page: Page) {
 test.describe('Add price to a no-price item', () => {
   test('defaults to a total and enters Known spend', async ({ page }) => {
     await openSpend(page)
-    const area = page.getByRole('region', { name: /not counted yet/i })
+    const area = await openNotCounted(page)
 
     // membrane rolls have no price
     const row = area.locator('.cost-check-item', { hasText: 'membrane' }).first()
@@ -50,7 +51,7 @@ test.describe('Add price to a no-price item', () => {
 
   test('offers a per-item basis with a derived total for a quantity-known item', async ({ page }) => {
     await openSpend(page)
-    const area = page.getByRole('region', { name: /not counted yet/i })
+    const area = await openNotCounted(page)
     const row = area.locator('.cost-check-item', { hasText: 'membrane' }).first()
     await row.getByRole('button', { name: 'Add price' }).click()
 

@@ -101,19 +101,24 @@ describe('Payments — job home card', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open Payments' })).toHaveTextContent('No payments yet'))
   })
 
-  it('shows received-only when paid with no customer total', async () => {
+  // The nav row states the figure and its denominator as separate elements, so
+  // the money can be set in tabular numerals and right-aligned into a column —
+  // hence asserting the parts rather than one concatenated string.
+  it('shows the paid figure alone when there is no customer total', async () => {
     vi.mocked(getJobPayments).mockResolvedValue(summary({
       totalPaidAmount: '1500', totalPaidCurrency: 'GBP', totalPaidLabel: '£1500 paid', payments: [payment()],
     }))
     renderWorkspace()
     const card = screen.getByRole('button', { name: 'Open Payments' })
-    await waitFor(() => expect(card).toHaveTextContent('£1500 received'))
+    await waitFor(() => expect(within(card).getByText('£1500')).toBeInTheDocument())
     expect(card).not.toHaveTextContent(/of £/)
   })
 
-  it('shows "received of total" when the customer total is known', async () => {
+  it('shows "of total" when the customer total is known', async () => {
     renderWorkspace()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Open Payments' })).toHaveTextContent('£1500 received of £4200'))
+    const card = screen.getByRole('button', { name: 'Open Payments' })
+    await waitFor(() => expect(within(card).getByText('£1500')).toBeInTheDocument())
+    expect(within(card).getByText('of £4200')).toBeInTheDocument()
   })
 
   it('the Payments card is separate from the Spend card and never changes Spend context', async () => {
@@ -133,11 +138,10 @@ describe('Payments — workspace', () => {
     await openPayments(user)
     expect(screen.getByRole('heading', { name: 'Payments' })).toBeInTheDocument()
     const panel = screen.getByRole('tabpanel', { name: 'Payments' })
-    expect(within(panel).getByText('Customer total')).toBeInTheDocument()
-    expect(within(panel).getByText('£4200')).toBeInTheDocument()
-    expect(within(panel).getByText('Paid')).toBeInTheDocument()
-    expect(within(panel).getByText('Still owed')).toBeInTheDocument()
-    expect(within(panel).getByText('£2700')).toBeInTheDocument()
+    const hero = within(panel).getByRole('region', { name: 'Payment summary' })
+    expect(within(hero).getByText(/£1500/)).toBeInTheDocument()
+    expect(within(hero).getByText(/of £4200/)).toBeInTheDocument()
+    expect(within(hero).getByText(/£2700 still owed/)).toBeInTheDocument()
     // £1500 appears as the Paid summary value AND the history row amount
     expect(within(panel).getAllByText('£1500').length).toBeGreaterThanOrEqual(2)
     expect(within(panel).getByText(/deposit/i)).toBeInTheDocument()
@@ -172,7 +176,7 @@ describe('Payments — workspace', () => {
     await user.click(screen.getByRole('button', { name: /save total/i }))
     await waitFor(() => expect(patchCustomerTotal).toHaveBeenCalledWith(JOB.id, { customerTotalAmount: '4200' }))
     const panel = screen.getByRole('tabpanel', { name: 'Payments' })
-    await waitFor(() => expect(within(panel).getAllByText('£4200').length).toBeGreaterThanOrEqual(1))
+    await waitFor(() => expect(within(panel).getByText(/of £4200/)).toBeInTheDocument())
   })
 
   it('clears the customer total from the edit sheet', async () => {

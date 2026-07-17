@@ -4,6 +4,15 @@ import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
 import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
 
+// "2 items left over" / "3 items bought" — the section kicker states how many,
+// which is the one thing a count-of-things section should say.
+const SECTION_COUNT_LABEL: Record<string, (n: number) => string> = {
+  ordered_materials: n => `${n} ${n === 1 ? 'item' : 'items'} bought`,
+  used_materials: n => `${n} ${n === 1 ? 'item' : 'items'} used`,
+  leftovers: n => `${n} ${n === 1 ? 'item' : 'items'} left over`,
+  returned_materials: n => `${n} ${n === 1 ? 'item' : 'items'} returned`,
+}
+
 const SECTION_HEADINGS: Record<string, string> = {
   ordered_materials: 'Bought',
   used_materials: 'Used',
@@ -83,14 +92,17 @@ export default function MemorySectionTab({
       ) : (
         rows.map(s => {
           const heading = SECTION_HEADINGS[s.key] ?? s.key
+          const countLabel = s.items.length > 0
+            ? (SECTION_COUNT_LABEL[s.key]?.(s.items.length) ?? heading)
+            : heading
           const empty = SECTION_EMPTY[s.key]
           return (
             <section key={s.key} className="mem-section">
               {s.add
-                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={heading} onAdd={addMemoryItem} actionHidden={s.items.length === 0} />
-                : <h2 className="mem-section-heading">{heading}</h2>}
+                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} onAdd={addMemoryItem} actionHidden={s.items.length === 0} />
+                : <h2 className="mem-section-heading">{countLabel}</h2>}
               {s.items.length > 0
-                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />)
+                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" />)
                 : s.add
                   ? <EmptyState
                       title={empty?.title ?? 'Nothing logged yet'}

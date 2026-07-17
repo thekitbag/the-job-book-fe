@@ -4,6 +4,7 @@ import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS } from '../memoryScan'
 import type { BudgetSummaryResponse, CreateMemoryItemRequest, Job, MemoryViewItem, MemoryViewResponse } from '../types'
+import { openRowActions } from './helpers'
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
@@ -236,9 +237,11 @@ describe('Direct add — failure and edit', () => {
     fireEvent.change(form.querySelector('textarea[name="summary"]')!, { target: { value: 'fix me later' } })
     fireEvent.click(within(form).getByRole('button', { name: /^Save / }))
 
-    await screen.findByText('fix me later')
-    // one direct note → one Fix memory button; opening it shows the edit form
-    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+    // Scoped to the row, not the add form's textarea, which still holds the
+    // typed text until the sheet unmounts.
+    const note = await screen.findByText('fix me later', { selector: '.mem-row-tap-name' })
+    // Notes are tappable ledger rows too: Fix memory lives in the row's sheet.
+    fireEvent.click(openRowActions(note.closest('.mem-card') as HTMLElement).getByRole('button', { name: /fix memory/i }))
     expect(screen.getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
   })
 })
@@ -326,7 +329,7 @@ describe('Manual Add V2 — spend category context', () => {
     renderWorkspace()
     await openTab('Spend')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
-    expect(within(card).getByText(/No spend in this category yet/)).toBeInTheDocument()
+    expect(within(card).getByText('Nothing yet')).toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Add to timber' })).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /record/i })).toBeNull()
   })
@@ -376,8 +379,11 @@ describe('Manual Add V2 — empty states', () => {
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
       memoryType: 'labour', labourHours: '6', happenedAt: expect.stringContaining('T12:00:00'),
     })))
-    // the new entry appears in the daily Labour view after refetch
-    expect(await within(panel).findByText('6h')).toBeInTheDocument()
+    // The new entry appears in the daily Labour view after refetch. Scoped to
+    // the entry row: "6h" is also the job-total figure at the top of the lens.
+    await waitFor(() => expect(panel.querySelector('.labour-entry')).toBeTruthy())
+    const entry = panel.querySelector('.labour-entry') as HTMLElement
+    expect(within(entry).getByText('6h')).toBeInTheDocument()
   })
 })
 

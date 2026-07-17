@@ -3,9 +3,23 @@ import EmptyState from './EmptyState'
 import LabourBudgetControl from './LabourBudgetControl'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
-import { friendlyDayLabel } from './memoryScan'
+import { friendlyDayLabel, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
 import type { LabourDayItem } from './types'
+
+// Spent-against-budget bar, matching the category bands on Spend — only drawn
+// when there is a budget to measure against.
+function LabourBar({ spend, budget, over }: { spend: string | null; budget: string | null; over: boolean }) {
+  const spent = spend ? parseFloat(spend) : 0
+  const total = budget ? parseFloat(budget) : null
+  if (total === null || !(total > 0)) return null
+  const pct = Math.min(100, Math.round((spent / total) * 100))
+  return (
+    <div className={`budget-bar${over ? ' budget-bar--over' : ''}`} aria-hidden="true">
+      <span style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
 
 // The Labour lens as a daily view: job total hours up top, then day groups
 // (newest first) with a safe day total each. Entries lead with person / hours /
@@ -55,6 +69,17 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label="Labour">
+      {/* The same ink-band hero as Spend and Payments. Labour's headline is
+          hours — the money detail lives in the trio below rather than being
+          said twice. Renders before the add header so the band runs straight
+          out of the page header: nothing may come between the two. */}
+      <section className="mem-hero" aria-label="Labour hours">
+        <p className="mem-hero-amount">
+          {labourHours?.totalHours ? `${labourHours.totalHours}h` : 'None yet'}
+          {labourHours?.totalHours && <span className="mem-hero-of"> job total</span>}
+        </p>
+      </section>
+
       <DirectAddForm kind="labour" label="Add labour" sectionLabel="Labour" onAdd={addMemoryItem} actionHidden={days.length === 0} />
 
       {refreshError && (
@@ -72,33 +97,24 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
         />
       ) : (
         <>
-          <section className="labour-job-total" aria-label="Labour hours">
-            <p className="labour-job-total-cap">Labour hours</p>
-            <p className="labour-job-total-value">{labourHours?.totalLabel ?? 'No hours yet'}</p>
-          </section>
-
           {/* Labour money context from budgetSummary.labour: cost so far, and
               budget/remaining when a Labour budget exists. Trusted labour cost
               counts in Spend either way — no Labour budget is required. */}
           {labourSpendGroup && (
             <section className="labour-money" aria-label="Labour cost">
+              <LabourBar spend={labourSpendGroup.knownSpendAmount} budget={labourSpendGroup.budgetAmount} over={labourSpendGroup.overBudget} />
               <div className="budget-cat-figures">
-                <div className="budget-figure"><dt>Labour cost</dt><dd>{labourSpendGroup.knownSpendLabel ?? 'None yet'}</dd></div>
+                <div className="budget-figure"><dt>Cost</dt><dd>{moneyFigure(labourSpendGroup.knownSpendAmount) ?? 'None yet'}</dd></div>
                 {labourSpendGroup.budgetLabel && (
-                  <div className="budget-figure"><dt>Budget</dt><dd>{labourSpendGroup.budgetLabel}</dd></div>
+                  <div className="budget-figure"><dt>Budget</dt><dd>{moneyFigure(labourSpendGroup.budgetAmount)}</dd></div>
                 )}
                 {labourSpendGroup.remainingLabel && (
                   <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}>
-                    <dt>{labourSpendGroup.overBudget ? 'Over budget' : 'Remaining'}</dt>
-                    <dd>{labourSpendGroup.remainingLabel}</dd>
+                    <dt>{labourSpendGroup.overBudget ? 'Over' : 'Left'}</dt>
+                    <dd>{moneyFigure(labourSpendGroup.remainingAmount?.replace('-', '') ?? null)}</dd>
                   </div>
                 )}
               </div>
-              <p className="mem-section-note labour-money-note">
-                {labourSpendGroup.budgetLabel
-                  ? 'Labour cost rolls into Spend.'
-                  : 'Counted in Spend — no Labour budget needed for labour cost to count.'}
-              </p>
               <LabourBudgetControl
                 budgetCategory={labourSpendGroup.budgetCategory}
                 onSave={handleSetLabourBudget}

@@ -4,6 +4,7 @@ import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import SupportModePage from '../SupportModePage'
 import * as api from '../api'
 import { ApiError } from '../api'
+import { openRowActions } from './helpers'
 import type { AuthUser, BudgetSummaryResponse, Job, MemoryViewItem, MemoryViewResponse, ReturnMaterialRequest, SupportUser } from '../types'
 
 // Returned materials: Returned is a real Materials state, not a delete. A
@@ -179,7 +180,7 @@ const card = (text: string) => {
 async function openReturnSheet() {
   await openSection('Materials', 'Left over')
   await screen.findByText('fence posts')
-  fireEvent.click(within(card('fence posts')).getByRole('button', { name: /mark as returned/i }))
+  fireEvent.click(openRowActions(card('fence posts')).getByRole('button', { name: /mark as returned/i }))
   return within(await screen.findByRole('dialog', { name: /mark as returned/i }))
 }
 
@@ -210,14 +211,14 @@ describe('Returned materials — Materials navigation', () => {
     renderWorkspace()
     await openSection('Materials', 'Left over')
     await screen.findByText('fence posts')
-    expect(within(card('fence posts')).getByRole('button', { name: /mark as returned/i })).toBeInTheDocument()
+    expect(openRowActions(card('fence posts')).getByRole('button', { name: /mark as returned/i })).toBeInTheDocument()
   })
 
   it('bought items offer no return action — only a leftover can be taken back', async () => {
     renderWorkspace()
     await openSection('Materials')
     await screen.findByText('fence panels')
-    expect(within(card('fence panels')).queryByRole('button', { name: /mark as returned/i })).not.toBeInTheDocument()
+    expect(openRowActions(card('fence panels')).queryByRole('button', { name: /mark as returned/i })).not.toBeInTheDocument()
   })
 })
 
@@ -229,7 +230,7 @@ describe('Returned materials — not a reclassification target', () => {
     renderWorkspace()
     await openSection('Materials', 'Left over')
     await screen.findByText('fence posts')
-    fireEvent.click(within(card('fence posts')).getByRole('button', { name: /fix memory/i }))
+    fireEvent.click(openRowActions(card('fence posts')).getByRole('button', { name: /fix memory/i }))
 
     const types = within(await screen.findByRole('combobox', { name: /type/i }))
     expect(types.getByRole('option', { name: /leftover material/i })).toBeInTheDocument()
@@ -240,8 +241,8 @@ describe('Returned materials — not a reclassification target', () => {
     returnInView('left-posts', { quantity: '4', supplierName: 'Jewson', refundAmount: '80', refundCurrency: 'GBP', happenedAt: null })
     renderWorkspace()
     await openSection('Materials', 'Returned')
-    await screen.findByText('£80 refund')
-    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+    await screen.findByText('fence posts')
+    fireEvent.click(openRowActions(card('fence posts')).getByRole('button', { name: /fix memory/i }))
 
     const form = within(await screen.findByRole('form', { name: /edit memory/i }))
     // Type is stated, not a picker that could silently retype it.
@@ -269,13 +270,11 @@ describe('Returned materials — returning a leftover', () => {
       JOB.id, 'left-posts', expect.objectContaining({ quantity: '4', refundAmount: '80', supplierName: 'Jewson' })))
 
     // Left over now reads 2 — from the refetched backend state, not a local patch.
-    await waitFor(() => expect(within(card('fence posts')).getByText('2')).toBeInTheDocument())
+    await waitFor(() => expect(card('fence posts')).toHaveTextContent('2 · from Jewson'))
 
     fireEvent.click(screen.getByRole('tab', { name: 'Returned' }))
-    const returned = within(await screen.findByRole('tabpanel', { name: /returned materials/i }))
-    expect(returned.getByText('4')).toBeInTheDocument()
-    expect(returned.getByText('Jewson')).toBeInTheDocument()
-    expect(returned.getByText('£80 refund')).toBeInTheDocument()
+    const returned = await screen.findByRole('tabpanel', { name: /returned materials/i })
+    expect(returned).toHaveTextContent(/4 · from Jewson · £80 refund/)
   })
 
   it('a full return takes the item out of Left over entirely', async () => {
@@ -284,13 +283,13 @@ describe('Returned materials — returning a leftover', () => {
     fillReturn(sheet, { quantity: '6', refund: '120' })
     fireEvent.click(sheet.getByRole('button', { name: /save return/i }))
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: /mark as returned/i })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('fence posts')).not.toBeInTheDocument())
     expect(await screen.findByText(/nothing logged yet|nothing remembered here yet/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Returned' }))
-    const returned = within(await screen.findByRole('tabpanel', { name: /returned materials/i }))
-    expect(returned.getByText('fence posts')).toBeInTheDocument()
-    expect(returned.getByText('6')).toBeInTheDocument()
+    const returned = await screen.findByRole('tabpanel', { name: /returned materials/i })
+    expect(within(returned).getByText('fence posts')).toBeInTheDocument()
+    expect(returned).toHaveTextContent('6 · from Jewson')
   })
 
   it('the return date is recorded and shown on the returned item', async () => {
@@ -303,8 +302,8 @@ describe('Returned materials — returning a leftover', () => {
     await waitFor(() => expect(api.returnMemoryItem).toHaveBeenCalledWith(
       JOB.id, 'left-posts', expect.objectContaining({ happenedAt: '2026-07-08T12:00:00' })))
     fireEvent.click(screen.getByRole('tab', { name: 'Returned' }))
-    const returned = within(await screen.findByRole('tabpanel', { name: /returned materials/i }))
-    expect(returned.getByText('8 Jul')).toBeInTheDocument()
+    const returned = await screen.findByRole('tabpanel', { name: /returned materials/i })
+    expect(returned).toHaveTextContent('8 Jul')
   })
 
   // The whole point of Returned over Remove: the purchase really happened.
@@ -317,7 +316,7 @@ describe('Returned materials — returning a leftover', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Bought' }))
     expect(await screen.findByText('fence posts')).toBeInTheDocument()
-    expect(within(card('fence posts')).getByText('£400')).toBeInTheDocument()
+    expect(card('fence posts')).toHaveTextContent('£400')
   })
 })
 
@@ -336,25 +335,27 @@ describe('Returned materials — spend', () => {
 
     await openSection('Spend')
     const hero = within(await screen.findByRole('region', { name: /known spend/i }))
+    // Net of the £80 refund. Spend states the net figure only — the refund
+    // itself is shown under Materials → Returned, not on this screen.
     expect(hero.getByText('£840')).toBeInTheDocument()
-    // The drop is never silent: gross and refund are both on the hero.
-    expect(hero.getByText('£920')).toBeInTheDocument()
-    expect(hero.getByText('−£80')).toBeInTheDocument()
+    expect(hero.queryByText('£920')).not.toBeInTheDocument()
   })
 
-  it('lists the refund as money back, not as another spend row', async () => {
+  it('shows the refund as money back under Returned, never as a spend row', async () => {
     renderWorkspace()
     const sheet = await openReturnSheet()
     fillReturn(sheet, { quantity: '4', refund: '80' })
     fireEvent.click(sheet.getByRole('button', { name: /save return/i }))
     await waitFor(() => expect(api.returnMemoryItem).toHaveBeenCalled())
 
+    await openSection('Materials', 'Returned')
+    const returned = await screen.findByRole('tabpanel', { name: /returned materials/i })
+    expect(within(returned).getByText('fence posts')).toBeInTheDocument()
+    expect(returned).toHaveTextContent(/4 · .*£80 refund/)
+
+    // And it never appears among the spend rows as a purchase.
     await openSection('Spend')
-    const refunds = within(await screen.findByRole('region', { name: /^refunds$/i }))
-    expect(refunds.getByText('4 fence posts')).toBeInTheDocument()
-    expect(refunds.getByText(/returned to jewson/i)).toBeInTheDocument()
-    // Signed, so it can't be misread as £80 more spent.
-    expect(refunds.getByText('−£80')).toBeInTheDocument()
+    expect(screen.queryByText('£80 refund')).not.toBeInTheDocument()
   })
 
   // "I took them back but haven't been paid yet" is not money back.
@@ -369,12 +370,12 @@ describe('Returned materials — spend', () => {
     await openSection('Spend')
     const hero = within(await screen.findByRole('region', { name: /known spend/i }))
     expect(hero.getByText('£920')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: /^refunds$/i })).not.toBeInTheDocument()
 
     // Still visible in Returned, and honest about the money.
     await openSection('Materials', 'Returned')
-    const returned = within(await screen.findByRole('tabpanel', { name: /returned materials/i }))
-    expect(returned.getByText(/none recorded — spend is unchanged/i)).toBeInTheDocument()
+    const returned = await screen.findByRole('tabpanel', { name: /returned materials/i })
+    // No refund figure on the row: nothing came back, so nothing is claimed.
+    expect(returned).not.toHaveTextContent(/refund/i)
   })
 })
 
@@ -393,7 +394,7 @@ describe('Returned materials — failure', () => {
     expect(sheet.getByRole('textbox', { name: /refund/i })).toHaveValue('180')
     // And nothing moved.
     fireEvent.click(sheet.getByRole('button', { name: /cancel/i }))
-    await waitFor(() => expect(within(card('fence posts')).getByText('6')).toBeInTheDocument())
+    await waitFor(() => expect(card('fence posts')).toHaveTextContent('6 · from Jewson'))
     await openSection('Materials', 'Returned')
     expect(await screen.findByText(/nothing returned yet/i)).toBeInTheDocument()
   })
@@ -459,8 +460,8 @@ describe('Returned materials — support view-as', () => {
     await openViewAs()
     // The returned item is on screen, with its merchant and refund.
     const returnedCard = (await screen.findByText('£80 refund')).closest('.mem-card') as HTMLElement
-    expect(within(returnedCard).getByText('fence posts')).toBeInTheDocument()
-    expect(within(returnedCard).getByText('Jewson')).toBeInTheDocument()
+    expect(returnedCard).toHaveTextContent('fence posts')
+    expect(returnedCard).toHaveTextContent('Jewson')
     expect(screen.queryByRole('button', { name: /mark as returned/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /fix memory/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /remove item/i })).not.toBeInTheDocument()

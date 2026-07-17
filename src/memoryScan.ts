@@ -28,6 +28,17 @@ export function formatMoney(amount: number, currency: string | null): string {
   return `${currencySymbol(currency)}${text}`
 }
 
+/**
+ * Bare money for a figure that already sits under its own label (the
+ * SPENT / BUDGET / LEFT columns). The backend's *Label fields spell the whole
+ * phrase ("£880 known spend"), which repeats the column heading and overflows a
+ * third of a phone screen — under a kicker, the number is the whole message.
+ */
+export function moneyFigure(amount: string | null | undefined, currency: string | null = 'GBP'): string | null {
+  if (!amount || !DECIMAL.test(amount)) return null
+  return formatMoney(parseFloat(amount), currency)
+}
+
 // Detail-card cost rows: distinguish unit cost from line total, and mark an
 // unclear basis as worth checking rather than a trusted figure. No bare numbers.
 // For a clear `each` item with no explicit total, show the derived line total.

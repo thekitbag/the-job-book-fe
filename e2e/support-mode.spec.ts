@@ -81,7 +81,9 @@ test.describe('Support mode — founder flow', () => {
 
     // the target user's data is actually visible
     await page.getByRole('tab', { name: 'Labour' }).click()
-    await expect(page.getByText('24h job total')).toBeVisible()
+    const jobTotal = page.getByRole('region', { name: 'Labour hours' })
+    await expect(jobTotal).toContainText('24h')
+    await expect(jobTotal).toContainText('job total')
     await page.getByRole('tab', { name: 'Spend' }).click()
     await expect(page.getByText(/£2270/)).toBeVisible()
 

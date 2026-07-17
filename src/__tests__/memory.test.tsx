@@ -4,6 +4,15 @@ import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import type { BudgetCategory, BudgetSummaryResponse, Job, MemoryViewItem, MemoryViewResponse } from '../types'
 
+// The SPENT / BUDGET / LEFT columns state a bare figure under their own kicker
+// label, so a figure is identified by its column rather than by a phrase that
+// used to repeat the label ("£1200 known spend").
+function figure(scope: HTMLElement, label: string, value: string) {
+  const col = within(scope).getAllByText(label, { selector: 'dt' })[0].closest('.budget-figure') as HTMLElement
+  return expect(within(col).getByText(value))
+}
+
+
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
   return {
@@ -211,10 +220,10 @@ describe('Workspace — Spend tab', () => {
     renderWorkspace()
     openTab('Spend')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
-    expect(within(clad).getByText('£1200 known spend')).toBeTruthy()
-    expect(within(clad).getByText('£800 remaining')).toBeTruthy()
+    figure(clad, 'Spent', '£1200').toBeTruthy()
+    figure(clad, 'Left', '£800').toBeTruthy()
     const elec = screen.getByRole('region', { name: /budget category electrics/i })
-    expect(within(elec).getByText('No budget set')).toBeTruthy()
+    figure(elec, 'Budget', 'Not set').toBeTruthy()
   })
 
   it('expands a category to its notes, each with Fix memory', async () => {
@@ -235,6 +244,7 @@ describe('Workspace — Spend tab', () => {
     expect(within(counted).getByText(/hardcore/)).toBeTruthy()
     // no-price items live in the unified "Not counted yet" area
     const notCounted = screen.getByRole('region', { name: /not counted yet/i })
+    fireEvent.click(within(notCounted).getByRole('button', { name: /add prices/i }))
     expect(within(notCounted).getByText(/timber/)).toBeTruthy()
     expect(within(notCounted).getByText(/No price yet/i)).toBeTruthy()
   })
@@ -321,8 +331,8 @@ describe('Workspace — Spend tab', () => {
     // Labour group carries the trusted labour cost once (280 + 600 = 880),
     // with no manual Labour category required.
     const labourGroup = screen.getByRole('region', { name: /^labour spend$/i })
-    expect(within(labourGroup).getByText('£880 known spend')).toBeTruthy()
-    expect(within(labourGroup).getByText(/no budget set/i)).toBeTruthy()
+    figure(labourGroup, 'Spent', '£880').toBeTruthy()
+    figure(labourGroup, 'Budget', 'Not set').toBeTruthy()
     fireEvent.click(within(labourGroup).getByRole('button', { name: /show notes/i }))
     expect(within(labourGroup).getByText('electrics')).toBeTruthy()
     expect(within(labourGroup).getByText('roof')).toBeTruthy()
@@ -443,7 +453,7 @@ describe('Workspace — budget setup before spend', () => {
     await waitFor(() => expect(mockCreateBudgetCategory).toHaveBeenCalledWith('job-mem-001', { name: 'Materials', budgetAmount: '500' }))
     const card = await screen.findByRole('region', { name: /budget category materials/i })
     expect(within(card).getByText('None yet')).toBeInTheDocument()
-    expect(within(card).getByText('£500 budget')).toBeInTheDocument()
+    figure(card, 'Budget', '£500').toBeInTheDocument()
     expect(within(card).getByRole('button', { name: /add to materials/i })).toBeInTheDocument()
   })
 
@@ -479,7 +489,10 @@ describe('Workspace — assign / fix / verify', () => {
     renderWorkspace()
     openTab('Spend')
     const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
-    fireEvent.change(within(counted).getByLabelText(/budget category for hardcore/i), { target: { value: 'c1' } })
+    // Uncategorised rows carry one action — "Pick category ›" opens the picker
+    // sheet — rather than an inline dropdown in the middle of the ledger.
+    fireEvent.click(within(counted).getByRole('button', { name: /pick a category for hardcore/i }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: /pick a category/i })).getByRole('button', { name: 'cladding' }))
     await waitFor(() => expect(mockAssignMemoryItemCategory).toHaveBeenCalledWith('job-mem-001', 'mem-hardcore', 'c1'))
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
   })
@@ -489,6 +502,7 @@ describe('Workspace — assign / fix / verify', () => {
     renderWorkspace()
     openTab('Spend')
     const notCounted = await screen.findByRole('region', { name: /not counted yet/i })
+    fireEvent.click(within(notCounted).getByRole('button', { name: /add prices/i }))
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.change(screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!, { target: { value: '10' } })
@@ -519,6 +533,7 @@ describe('Workspace — assign / fix / verify', () => {
     const hero = await spendHero()
     expect(within(hero).getByText(/£1440/)).toBeTruthy()
     const notCounted = screen.getByRole('region', { name: /not counted yet/i })
+    fireEvent.click(within(notCounted).getByRole('button', { name: /add prices/i }))
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
@@ -531,6 +546,7 @@ describe('Workspace — assign / fix / verify', () => {
     renderWorkspace()
     openTab('Spend')
     const notCounted = await screen.findByRole('region', { name: /not counted yet/i })
+    fireEvent.click(within(notCounted).getByRole('button', { name: /add prices/i }))
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
@@ -623,7 +639,7 @@ describe('Workspace — Labour tab', () => {
     openTab('Labour')
     const labour = await screen.findByRole('tabpanel', { name: /labour/i })
     // Safe hours only: today 4 + 6 + 8 = 18h, yesterday 6h → 24h job total.
-    expect(within(labour).getByText('24h job total')).toBeTruthy()
+    expect(within(labour).getByText('24h')).toBeTruthy()
     const today = within(labour).getByRole('region', { name: 'Labour Today' })
     expect(within(today).getByText('18h day total')).toBeTruthy()
     const yesterday = within(labour).getByRole('region', { name: 'Labour Yesterday' })
@@ -665,7 +681,7 @@ describe('Workspace — Labour tab', () => {
     expect(within(labour).getByText('about 5')).toBeTruthy()
     expect(within(labour).getByText(/worth checking — not counted in totals/i)).toBeTruthy()
     // job total ignores it (still 24h)
-    expect(within(labour).getByText('24h job total')).toBeTruthy()
+    expect(within(labour).getByText('24h')).toBeTruthy()
   })
 
   it('prefers the backend labourHoursSummary over local derivation when present', async () => {
@@ -680,8 +696,9 @@ describe('Workspace — Labour tab', () => {
     renderWorkspace()
     openTab('Labour')
     const labour = await screen.findByRole('tabpanel', { name: /labour/i })
-    expect(within(labour).getByText('99h job total')).toBeTruthy()
-    expect(within(labour).queryByText('24h job total')).toBeNull()
+    const jobTotal = within(labour).getByRole('region', { name: 'Labour hours' })
+    expect(within(jobTotal).getByText('99h')).toBeTruthy()
+    expect(within(jobTotal).queryByText('24h')).toBeNull()
   })
 })
 
@@ -722,8 +739,8 @@ describe('Workspace — Spend Labour group', () => {
     renderWorkspace()
     openTab('Spend')
     const group = await screen.findByRole('region', { name: /^labour spend$/i })
-    expect(within(group).getByText('£280 known spend')).toBeTruthy()
-    expect(within(group).getByText('£1220 remaining')).toBeTruthy()
+    figure(group, 'Spent', '£280').toBeTruthy()
+    figure(group, 'Left', '£1220').toBeTruthy()
     // the manual labour category card is suppressed — one Labour home, not two
     expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
     // the labour row renders under Labour, not under Uncategorised
@@ -742,8 +759,8 @@ describe('Workspace — Spend Labour group', () => {
     renderWorkspace()
     openTab('Spend')
     const group = await screen.findByRole('region', { name: /^labour spend$/i })
-    expect(within(group).getByText('£280 known spend')).toBeTruthy()
-    expect(within(group).getByText(/no budget set/i)).toBeTruthy()
+    figure(group, 'Spent', '£280').toBeTruthy()
+    figure(group, 'Budget', 'Not set').toBeTruthy()
   })
 
   it('hours-only labour never appears as spend', async () => {

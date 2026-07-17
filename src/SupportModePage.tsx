@@ -491,7 +491,10 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                 : <>
                     <section className="labour-job-total" aria-label="Labour hours">
                       <p className="labour-job-total-cap">Labour hours</p>
-                      <p className="labour-job-total-value">{labourHours?.totalLabel ?? 'No hours yet'}</p>
+                      <p className="labour-job-total-value">
+                        {labourHours?.totalHours ? `${labourHours.totalHours}h` : 'None yet'}
+                        {labourHours?.totalHours && <span className="labour-job-total-of">job total</span>}
+                      </p>
                     </section>
                     {(labourHours?.days ?? []).map(day => (
                       <section key={day.date || 'unknown'} className="labour-day" aria-label={`Labour ${friendlyDayLabel(day.date)}`}>

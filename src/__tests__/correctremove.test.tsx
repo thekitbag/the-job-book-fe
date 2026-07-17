@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS } from '../memoryScan'
+import { openRowActions } from './helpers'
 import type { Job, MemoryViewItem, MemoryViewResponse, BudgetSummaryResponse } from '../types'
 
 // Correct/remove confirmed job items: item-level Remove with confirmation,
@@ -180,7 +181,7 @@ describe('Correct/remove — remove confirmed items', () => {
     await screen.findByText(/£600/)
     await openSection('Materials')
     await screen.findByText('plasterboard')
-    fireEvent.click(within(card('plasterboard')).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(card('plasterboard')).getByRole('button', { name: 'Remove item' }))
     expect(api.removeMemoryItem).not.toHaveBeenCalled()
     const confirm = within(card('plasterboard'))
     expect(confirm.getByText(/remove this item\?/i)).toBeInTheDocument()
@@ -197,7 +198,7 @@ describe('Correct/remove — remove confirmed items', () => {
     renderWorkspace()
     await openSection('Materials')
     await screen.findByText('plasterboard')
-    fireEvent.click(within(card('plasterboard')).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(card('plasterboard')).getByRole('button', { name: 'Remove item' }))
     fireEvent.click(within(card('plasterboard')).getByRole('button', { name: /cancel/i }))
     expect(api.removeMemoryItem).not.toHaveBeenCalled()
     expect(screen.getByText('plasterboard')).toBeInTheDocument()
@@ -207,7 +208,7 @@ describe('Correct/remove — remove confirmed items', () => {
     renderWorkspace()
     await openSection('Materials', 'Used')
     await screen.findByText('OSB')
-    fireEvent.click(within(card('OSB')).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(card('OSB')).getByRole('button', { name: 'Remove item' }))
     fireEvent.click(within(card('OSB')).getByRole('button', { name: /^remove$/i }))
     await waitFor(() => expect(api.removeMemoryItem).toHaveBeenCalledWith(JOB.id, 'used-1'))
     await waitFor(() => expect(screen.queryByText('OSB')).not.toBeInTheDocument())
@@ -217,7 +218,7 @@ describe('Correct/remove — remove confirmed items', () => {
     renderWorkspace()
     await openSection('Materials', 'Left over')
     await screen.findByText('sand')
-    fireEvent.click(within(card('sand')).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(card('sand')).getByRole('button', { name: 'Remove item' }))
     fireEvent.click(within(card('sand')).getByRole('button', { name: /^remove$/i }))
     await waitFor(() => expect(api.removeMemoryItem).toHaveBeenCalledWith(JOB.id, 'left-1'))
     await waitFor(() => expect(screen.queryByText('sand')).not.toBeInTheDocument())
@@ -228,7 +229,7 @@ describe('Correct/remove — remove confirmed items', () => {
     await openSection('Job log', 'Notes')
     await screen.findByText('Customer wants extra spots')
     const noteCard = card('Customer wants extra spots')
-    fireEvent.click(within(noteCard).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(noteCard).getByRole('button', { name: 'Remove item' }))
     expect(within(noteCard).getByText(/removed from the job log/i)).toBeInTheDocument()
     expect(within(noteCard).getByText(/original voice note will be kept/i)).toBeInTheDocument()
     fireEvent.click(within(noteCard).getByRole('button', { name: /^remove$/i }))
@@ -242,7 +243,7 @@ describe('Correct/remove — remove confirmed items', () => {
     renderWorkspace()
     await openSection('Materials', 'Used')
     await screen.findByText('OSB')
-    fireEvent.click(within(card('OSB')).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(card('OSB')).getByRole('button', { name: 'Remove item' }))
     fireEvent.click(within(card('OSB')).getByRole('button', { name: /^remove$/i }))
     await waitFor(() => expect(screen.queryByText('OSB')).not.toBeInTheDocument())
     goHomeIfNeeded()
@@ -256,7 +257,7 @@ describe('Correct/remove — remove confirmed items', () => {
     renderWorkspace()
     await openSection('Materials', 'Used')
     await screen.findByText('OSB')
-    fireEvent.click(within(card('OSB')).getByRole('button', { name: /remove/i }))
+    fireEvent.click(openRowActions(card('OSB')).getByRole('button', { name: 'Remove item' }))
     fireEvent.click(within(card('OSB')).getByRole('button', { name: /^remove$/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not remove/i)
     expect(screen.getByText('OSB')).toBeInTheDocument()
@@ -270,7 +271,7 @@ describe('Correct/remove — move Used ↔ Left over', () => {
     renderWorkspace()
     await openSection('Materials', 'Used')
     await screen.findByText('OSB')
-    fireEvent.click(within(card('OSB')).getByRole('button', { name: /move to left over/i }))
+    fireEvent.click(openRowActions(card('OSB')).getByRole('button', { name: /move to left over/i }))
     await waitFor(() => expect(api.updateMemoryItem).toHaveBeenCalledWith(
       JOB.id, 'used-1', expect.objectContaining({ memoryType: 'leftover_material' })))
     await waitFor(() => expect(screen.queryByText('OSB')).not.toBeInTheDocument())
@@ -282,7 +283,7 @@ describe('Correct/remove — move Used ↔ Left over', () => {
     renderWorkspace()
     await openSection('Materials', 'Left over')
     await screen.findByText('sand')
-    fireEvent.click(within(card('sand')).getByRole('button', { name: /move to used/i }))
+    fireEvent.click(openRowActions(card('sand')).getByRole('button', { name: /move to used/i }))
     await waitFor(() => expect(api.updateMemoryItem).toHaveBeenCalledWith(
       JOB.id, 'left-1', expect.objectContaining({ memoryType: 'used_material' })))
     await waitFor(() => expect(screen.queryByText('sand')).not.toBeInTheDocument())

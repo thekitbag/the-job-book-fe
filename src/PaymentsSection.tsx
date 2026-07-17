@@ -214,37 +214,41 @@ export default function PaymentsSection({ jobId, payments }: { jobId: string; pa
   }
 
   const hasTotal = data.customerTotalAmount !== null
+  // Paid against the customer total, same 6px bar as Spend's spent-vs-budget.
+  const paidPct = hasTotal && parseFloat(data.customerTotalAmount!) > 0
+    ? Math.min(100, Math.round((parseFloat(data.totalPaidAmount ?? '0') / parseFloat(data.customerTotalAmount!)) * 100))
+    : 0
 
   return (
     <div className="pay-section" role="tabpanel" aria-label="Payments">
-      {/* Summary: money in only. Known spend lives in Spend and is untouched. */}
-      <section className="pay-summary" aria-label="Payment summary">
-        <div className="pay-summary-row">
-          <span className="pay-summary-label">Customer total</span>
-          <span className="pay-summary-value">{data.customerTotalLabel ?? 'Not set'}</span>
-        </div>
-        <div className="pay-summary-row">
-          <span className="pay-summary-label">Paid</span>
-          <span className="pay-summary-value">{data.totalPaidAmount !== null ? `£${data.totalPaidAmount}` : 'None yet'}</span>
-        </div>
-        {hasTotal && !data.overpaid && (
-          <div className="pay-summary-row">
-            <span className="pay-summary-label">Still owed</span>
-            <span className="pay-summary-value">£{data.stillOwedAmount}</span>
-          </div>
-        )}
+      {/* Summary: money in only — known spend lives in Spend and is untouched.
+          Deliberately the same hero primitives as the Spend summary (figure, of,
+          accent sub-line, bar) on the same ink band, so the two money screens
+          read identically instead of drifting apart. */}
+      <section className={`mem-hero${data.overpaid ? ' mem-hero--over' : ''}`} aria-label="Payment summary">
+        <p className="mem-hero-amount">
+          {data.totalPaidAmount !== null ? `£${data.totalPaidAmount}` : 'None yet'}
+          {hasTotal && <span className="mem-hero-of"> of £{data.customerTotalAmount}</span>}
+        </p>
+        {/* Overpaid is a warning state, so it takes warning-red — same
+            treatment as over budget on Spend. */}
         {data.overpaid && (
-          <p className="pay-overpaid" role="status">
-            Paid £{data.overpaidAmount} more than the customer total — worth checking the total or the payments.
+          <p className="mem-hero-warning" role="status">
+            <span className="mem-hero-warning-dot" aria-hidden="true" />
+            £{data.overpaidAmount} more than the customer total
           </p>
         )}
+        {/* The accent sub-line is tappable, like "left to spend ›": the
+            customer total is what defines what's still owed, so it opens it. */}
         <button
           type="button"
-          className="pay-edit-total"
+          className="mem-hero-sub"
+          aria-label={hasTotal ? 'Edit customer total' : 'Set customer total'}
           onClick={() => { setTotalDraft(data.customerTotalAmount ?? ''); setFormError(null); setTotalSheetOpen(true) }}
         >
-          {hasTotal ? 'Edit customer total' : 'Set customer total'}
+          {hasTotal && !data.overpaid ? `£${data.stillOwedAmount} still owed ›` : hasTotal ? 'Edit customer total ›' : 'Set customer total ›'}
         </button>
+        {hasTotal && <div className="mem-hero-bar"><span style={{ width: `${paidPct}%` }} /></div>}
       </section>
 
       <div className="lens-add-head">

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -45,7 +46,7 @@ test.describe('Worth checking resolution', () => {
 
   test('Fix memory clears Worth checking and updates the card', async ({ page }) => {
     await openUsedTab(page)
-    await sandCard(page).getByRole('button', { name: /fix memory/i }).click()
+    await (await openRowActions(page, sandCard(page))).getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="locationOrUse"]').fill('in the lockup')
     await page.getByRole('button', { name: /save memory/i }).click()
@@ -63,6 +64,6 @@ test.describe('Worth checking resolution', () => {
 
     await expect(card.getByText('Worth checking')).toBeVisible()
     await expect(card.getByRole('button', { name: /this is right/i })).toHaveCount(0)
-    await expect(card.getByRole('button', { name: /fix memory/i })).toBeVisible()
+    await expect((await openRowActions(page, card)).getByRole('button', { name: /fix memory/i })).toBeVisible()
   })
 })
