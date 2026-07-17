@@ -101,7 +101,10 @@ function renderWorkspace(job: Job = JOB) {
 }
 async function openSpend() {
   fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
-  return screen.findByRole('region', { name: /not counted yet/i })
+  const area = await screen.findByRole('region', { name: /not counted yet/i })
+  // The items live behind the summary row's "Add prices" disclosure.
+  fireEvent.click(within(area).getByRole('button', { name: /add prices/i }))
+  return area
 }
 
 describe('Spend cost-basis attention', () => {

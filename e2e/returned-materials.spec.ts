@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openRowActions } from './helpers'
 
 // 390×844, VITE_USE_MOCK_API=true — Returned materials.
 // Returned is a peer Materials state, not a delete: returning fence posts moves
@@ -52,8 +53,8 @@ test.describe('Returned materials', () => {
     const before = await knownSpend(page)
 
     await goToSection(page, 'Materials', 'Left over')
-    await expect(postsCard(page)).toContainText('6')
-    await postsCard(page).getByRole('button', { name: /mark as returned/i }).click()
+    await expect(postsCard(page)).toContainText('6 · from Jewson')
+    await (await openRowActions(page, postsCard(page))).getByRole('button', { name: /mark as returned/i }).click()
 
     const sheet = page.getByRole('dialog', { name: /mark as returned/i })
     await sheet.getByRole('textbox', { name: /how many did you take back/i }).fill('4')
@@ -63,7 +64,7 @@ test.describe('Returned materials', () => {
     await expect(sheet).toBeHidden()
 
     // Left over keeps the 2 he still has.
-    await expect(postsCard(page)).toContainText('2')
+    await expect(postsCard(page)).toContainText('2 · from Jewson')
 
     await page.getByRole('tab', { name: 'Returned' }).click()
     const returned = page.getByRole('tabpanel', { name: /returned materials/i })
@@ -76,19 +77,17 @@ test.describe('Returned materials', () => {
     await page.getByRole('tab', { name: 'Bought' }).click()
     await expect(page.getByRole('tabpanel', { name: /bought materials/i })).toContainText('hardcore')
 
-    // Net spend is £80 lower, and says why.
+    // Net spend is £80 lower. The Spend screen states the net figure only —
+    // the refund itself is shown under Materials → Returned, not here.
     const after = await knownSpend(page)
     expect(after).not.toBe(before)
-    const hero = page.getByRole('region', { name: /known spend/i })
-    await expect(hero).toContainText('Bought and labour')
-    await expect(hero).toContainText('−£80')
-    await expect(page.getByRole('region', { name: /^refunds$/i })).toContainText('4 fence posts')
+    await expect(page.getByRole('region', { name: /known spend/i })).not.toContainText('refund')
   })
 
   test('over-returning is refused without moving anything', async ({ page }) => {
     await gotoApp(page)
     await goToSection(page, 'Materials', 'Left over')
-    await postsCard(page).getByRole('button', { name: /mark as returned/i }).click()
+    await (await openRowActions(page, postsCard(page))).getByRole('button', { name: /mark as returned/i }).click()
 
     const sheet = page.getByRole('dialog', { name: /mark as returned/i })
     await sheet.getByRole('textbox', { name: /how many did you take back/i }).fill('9')
@@ -101,7 +100,7 @@ test.describe('Returned materials', () => {
     await expect(sheet.getByRole('textbox', { name: /refund/i })).toHaveValue('180')
 
     await sheet.getByRole('button', { name: /cancel/i }).click()
-    await expect(postsCard(page)).toContainText('6')
+    await expect(postsCard(page)).toContainText('6 · from Jewson')
     await page.getByRole('tab', { name: 'Returned' }).click()
     await expect(page.getByRole('tabpanel', { name: /returned materials/i })).toContainText(/nothing returned yet/i)
   })
@@ -109,7 +108,7 @@ test.describe('Returned materials', () => {
   test('Record stays available through the return flow', async ({ page }) => {
     await gotoApp(page)
     await goToSection(page, 'Materials', 'Left over')
-    await postsCard(page).getByRole('button', { name: /mark as returned/i }).click()
+    await (await openRowActions(page, postsCard(page))).getByRole('button', { name: /mark as returned/i }).click()
     const sheet = page.getByRole('dialog', { name: /mark as returned/i })
     await sheet.getByRole('textbox', { name: /how many did you take back/i }).fill('6')
     await sheet.getByRole('button', { name: /save return/i }).click()

@@ -45,7 +45,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     await goToSection(page, 'Spend')
     await page.waitForTimeout(900)
     const timberCat = page.getByRole('region', { name: /budget category timber/i })
-    await expect(timberCat.getByText('£120 known spend')).toBeVisible()
+    await expect(timberCat.locator('.budget-figure', { hasText: 'Spent' }).getByText('£120', { exact: true })).toBeVisible()
   })
 
   test('a bought/ordered draft with no suggestion can be left uncategorised', async ({ page }) => {
@@ -72,7 +72,7 @@ test.describe('Budget category in review + Job memory bought tab', () => {
 
     // single job-level Known spend (bought £1390 + labour £880 = £2270)
     await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2270/)).toBeVisible()
-    await expect(page.getByRole('region', { name: /budget category cladding/i }).getByText('£1200 known spend')).toBeVisible()
+    await expect(page.getByRole('region', { name: /budget category cladding/i }).locator('.budget-figure', { hasText: 'Spent' }).getByText('£1200', { exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: /uncategorised spend/i }).getByText('hardcore')).toBeVisible()
   })
 

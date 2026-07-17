@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openNotCounted } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -30,11 +31,12 @@ async function openSpend(page: Page) {
 }
 
 const attention = (page: Page) => page.getByRole('region', { name: /not counted yet/i })
+// The items sit behind the summary row's "Add prices" disclosure.
 
 test.describe('Spend cost-basis attention', () => {
   test('ambiguous cost-like item is near the top and asks each vs total', async ({ page }) => {
     await openSpend(page)
-    const area = attention(page)
+    const area = await openNotCounted(page)
     await expect(area).toBeVisible()
     await expect(area.getByText(/insulation/i)).toBeVisible()
     await expect(area.getByText(/each or .*total/i).first()).toBeVisible()
@@ -47,7 +49,7 @@ test.describe('Spend cost-basis attention', () => {
 
   test('unit cost shown only with safe quantity; no-cost item asks for a price', async ({ page }) => {
     await openSpend(page)
-    const area = attention(page)
+    const area = await openNotCounted(page)
     const insulation = area.locator('.cost-check-item', { hasText: 'insulation' })
     await expect(insulation.getByRole('button', { name: /Set as .*each/i })).toBeVisible()
     const sealant = area.locator('.cost-check-item', { hasText: 'sealant' })
@@ -65,7 +67,7 @@ test.describe('Spend cost-basis attention', () => {
     const hero = page.getByRole('region', { name: /^known spend$/i })
     await expect(hero.getByText(/£2270/)).toBeVisible()
 
-    const insulation = attention(page).locator('.cost-check-item', { hasText: 'insulation' })
+    const insulation = (await openNotCounted(page)).locator('.cost-check-item', { hasText: 'insulation' })
     await insulation.getByRole('button', { name: /Confirm .*total/i }).click()
     await page.waitForTimeout(800)
 

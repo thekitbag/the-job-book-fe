@@ -145,7 +145,9 @@ describe('Auto-total — Fix Memory', () => {
     renderWorkspace()
     fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
     const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
-    fireEvent.click(within(counted).getByRole('button', { name: /fix memory/i }))
+    // Fix memory now sits behind the row's "…" overflow.
+    fireEvent.click(within(counted).getByRole('button', { name: /more actions for osb/i }))
+    fireEvent.click(within(counted).getByRole('menuitem', { name: /fix memory/i }))
 
     const editForm = screen.getByRole('form', { name: /edit memory/i })
     // change quantity 5 → 6; the derived preview follows

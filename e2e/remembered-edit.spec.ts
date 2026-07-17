@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openRowOverflow } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -34,7 +35,7 @@ test.describe('Remembered-memory edit & focus', () => {
 
     // hardcore is the uncategorised counted bought note.
     const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
-    await hardcore.getByRole('button', { name: /fix memory/i }).click()
+    await (await openRowOverflow(hardcore)).getByRole('menuitem', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="quantity"]').fill('10')
     await form.locator('input[name="costAmount"]').fill('4.50')
@@ -52,7 +53,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await page.waitForTimeout(800)
 
     const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
-    await hardcore.getByRole('button', { name: /fix memory/i }).click()
+    await (await openRowOverflow(hardcore)).getByRole('menuitem', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.getByLabel('Type').selectOption('customer_change')
     await page.getByRole('button', { name: /save memory/i }).click()

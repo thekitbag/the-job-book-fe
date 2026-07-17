@@ -17,16 +17,19 @@ async function openPayments(page: import('@playwright/test').Page) {
 }
 
 test.describe('Customer payments', () => {
-  test('the home card shows received of customer total', async ({ page }) => {
+  test('the home card shows paid of customer total', async ({ page }) => {
     await gotoApp(page)
     await page.waitForTimeout(700)
-    await expect(page.getByRole('button', { name: 'Open Payments' })).toContainText('£1500 received of £4200')
+    const card = page.getByRole('button', { name: 'Open Payments' })
+    await expect(card.locator('.ws-home-card-value')).toHaveText('£1500')
+    await expect(card.locator('.ws-home-card-denom')).toHaveText('of £4200')
   })
 
   test('the workspace shows customer total, paid, still owed, and history', async ({ page }) => {
     await openPayments(page)
     const panel = page.getByRole('tabpanel', { name: 'Payments' })
-    await expect(panel.getByText('Customer total', { exact: true })).toBeVisible()
+    // The summary is the shared ink-band hero now: one figure with its
+    // denominator and an accent line, matching Spend.
     await expect(panel.getByText('£4200')).toBeVisible()
     await expect(panel.getByText('Still owed')).toBeVisible()
     await expect(panel.getByText('£2700')).toBeVisible()
@@ -61,7 +64,9 @@ test.describe('Customer payments', () => {
     await page.waitForTimeout(600)
     const spendAfter = await page.getByRole('button', { name: 'Open Spend' }).textContent()
     expect(spendAfter).toBe(spendBefore)
-    await expect(page.getByRole('button', { name: 'Open Payments' })).toContainText('£2500 received of £4200')
+    const paidCard = page.getByRole('button', { name: 'Open Payments' })
+    await expect(paidCard.locator('.ws-home-card-value')).toHaveText('£2500')
+    await expect(paidCard.locator('.ws-home-card-denom')).toHaveText('of £4200')
   })
 
   test('editing the customer total updates still owed', async ({ page }) => {

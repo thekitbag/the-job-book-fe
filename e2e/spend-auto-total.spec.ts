@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openRowOverflow } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -49,7 +50,8 @@ test.describe('Auto-total unit cost', () => {
     await expect(osb.getByText('£100')).toBeVisible()
 
     // Fix Memory: change quantity → the total recalculates
-    await osb.getByRole('button', { name: /fix memory/i }).click()
+    // Uncategorised rows keep fix/source/remove behind the "…" overflow.
+    await (await openRowOverflow(osb)).getByRole('menuitem', { name: /fix memory/i }).click()
     const edit = page.getByRole('form', { name: /edit memory/i })
     await edit.locator('input[name="quantity"]').fill('6')
     await expect(edit.getByText(/£120 total/)).toBeVisible()

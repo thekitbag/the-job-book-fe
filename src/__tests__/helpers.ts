@@ -1,4 +1,16 @@
+import { fireEvent, screen, within } from '@testing-library/react'
 import type { CandidateFact, LocalNote } from '../types'
+
+/**
+ * Materials / Job-log items render as plain tappable ledger rows: the row is
+ * the only tap target and every action (return, move, source, fix, remove)
+ * lives in one bottom sheet behind it. Opens that sheet for a given card and
+ * returns queries scoped to it.
+ */
+export function openRowActions(card: HTMLElement) {
+  fireEvent.click(card.querySelector('.mem-row-tap') as HTMLElement)
+  return within(screen.getByRole('dialog'))
+}
 
 let seq = 0
 

@@ -103,9 +103,13 @@ test.describe('Current job home', () => {
     await expect(page.getByRole('button', { name: 'Open Spend' })).toContainText('£2270')
   })
 
+  // The nav row keeps the figure and its denominator as separate elements so
+  // the numbers right-align into a column, so they are asserted separately.
   test('the Labour card shows the job-total labour hours', async ({ page }) => {
     await page.waitForTimeout(700)
-    await expect(page.getByRole('button', { name: 'Open Labour' })).toContainText(/\d+h logged/)
+    const labour = page.getByRole('button', { name: 'Open Labour' })
+    await expect(labour.locator('.ws-home-card-value')).toHaveText(/^\d+h$/)
+    await expect(labour.locator('.ws-home-card-denom')).toHaveText('logged')
   })
 
   test('latest activity sits below the section cards', async ({ page }) => {

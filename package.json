@@ -13,8 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@fontsource-variable/bricolage-grotesque": "^5.2.10",
-    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource-variable/schibsted-grotesk": "^5.2.8",
     "@posthog/react": "^1.10.3",
     "idb": "^8.0.3",
     "posthog-js": "^1.399.2",

@@ -63,10 +63,22 @@ const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'hom
   payment: { section: 'payments' },
 }
 
-// ── Job home: stable section cards ───────────────────────────────────────────
-// Spend/Labour carry live context (known spend vs budget, hours logged); the
-// other two describe what lives inside. Cards render even while memory is
+// ── Job home: stable section nav ─────────────────────────────────────────────
+// Spend/Payments/Labour carry a live figure and its denominator (known spend of
+// budget, received of total, hours logged); Materials/Job log have no number, so
+// they carry a short muted description instead. Rows render even while memory is
 // loading or failed — navigation must never disappear with the data.
+//
+// value/denom are separate rather than one string so the figures can be set in
+// tabular numerals and right-aligned into a column, ledger-style, while the
+// denominator stays muted.
+
+type NavRow = {
+  section: Exclude<Section, 'home'>
+  title: string
+  value: string | null
+  denom: string | null
+}
 
 function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, onOpen }: {
   total: TotalKnownCost | null
@@ -80,41 +92,51 @@ function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, o
   const hasBudget = budget !== null && budget > 0
   const hasHours = labourHours?.totalHours != null
 
-  const spendContext = total?.knownSpendAmount
-    ? `${formatMoney(known, total.knownSpendCurrency)}${hasBudget ? ` of ${formatMoney(budget!, 'GBP')}` : ''}`
-    : 'None yet'
-  const labourContext = hasHours ? `${labourHours!.totalHours}h logged` : 'None yet'
-
-  // Payments card: money in — worded as "received" so it can never read as
-  // spend. Falls back quietly while the summary loads or if it failed.
+  // Payments: money in — worded as "received" so it can never read as spend.
+  // Falls back quietly while the summary loads or if it failed.
   const paid = paymentsSummary?.totalPaidAmount
   const customerTotal = paymentsSummary?.customerTotalAmount
-  const paymentsContext = paid
-    ? `${formatMoney(parseFloat(paid), 'GBP')} received${customerTotal ? ` of ${formatMoney(parseFloat(customerTotal), 'GBP')}` : ''}`
-    : 'No payments yet'
 
-  const cards: { section: Exclude<Section, 'home'>; icon: string; title: string; context: string }[] = [
-    { section: 'spend', icon: '£', title: 'Spend', context: spendContext },
-    { section: 'payments', icon: '🧾', title: 'Payments', context: paymentsContext },
-    { section: 'labour', icon: '⏱', title: 'Labour', context: labourContext },
-    { section: 'materials', icon: '🧰', title: 'Materials', context: 'Bought · used · left over · returned' },
-    { section: 'joblog', icon: '📓', title: 'Job log', context: 'Notes · photos' },
+  const rows: NavRow[] = [
+    {
+      section: 'spend', title: 'Spend',
+      value: total?.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : null,
+      denom: total?.knownSpendAmount ? (hasBudget ? `of ${formatMoney(budget!, 'GBP')}` : null) : 'None yet',
+    },
+    {
+      section: 'payments', title: 'Payments',
+      value: paid ? formatMoney(parseFloat(paid), 'GBP') : null,
+      // Bare "£2,550 of £15,000", per the mock's Payments row — the section is
+      // called Payments, which already says which way the money went.
+      denom: paid
+        ? (customerTotal ? `of ${formatMoney(parseFloat(customerTotal), 'GBP')}` : null)
+        : 'No payments yet',
+    },
+    {
+      section: 'labour', title: 'Labour',
+      value: hasHours ? `${labourHours!.totalHours}h` : null,
+      denom: hasHours ? 'logged' : 'None yet',
+    },
+    { section: 'materials', title: 'Materials', value: null, denom: 'Bought · used · left · returned' },
+    { section: 'joblog', title: 'Job log', value: null, denom: 'Notes · photos' },
   ]
 
   return (
     <nav className="ws-home-cards" aria-label="Job sections">
-      {cards.map(c => (
+      {rows.map(r => (
         <button
-          key={c.section}
+          key={r.section}
           type="button"
           className="ws-home-card"
-          aria-label={`Open ${c.title}`}
-          onClick={() => onOpen(c.section)}
+          aria-label={`Open ${r.title}`}
+          onClick={() => onOpen(r.section)}
         >
-          <span className="ws-home-card-icon" aria-hidden="true">{c.icon}</span>
           <span className="ws-home-card-text">
-            <span className="ws-home-card-title">{c.title}</span>
-            <span className="ws-home-card-context">{c.context}</span>
+            <span className="ws-home-card-title">{r.title}</span>
+            <span className="ws-home-card-figures">
+              {r.value && <span className="ws-home-card-value">{r.value}</span>}
+              {r.denom && <span className="ws-home-card-denom">{r.denom}</span>}
+            </span>
           </span>
           <span className="ws-home-card-chev" aria-hidden="true">›</span>
         </button>
@@ -578,8 +600,13 @@ export default function CurrentJobWorkspace({
     return content
   }
 
+  // Spend / Payments / Labour each open with a full-bleed ink band running the
+  // page header straight into the lens's hero, so the page tells the shell to
+  // join them (see .ws-page--banded). Nothing may render between the two.
+  const banded = section === 'spend' || section === 'payments' || section === 'labour'
+
   return (
-    <div className="ws-page">
+    <div className={`ws-page${banded ? ' ws-page--banded' : ''}`}>
       {(mem.openMenuCatId || headerMenuOpen) && (
         <div
           className="mem-menu-scrim"
@@ -739,10 +766,14 @@ export default function CurrentJobWorkspace({
       )}
 
       <div className="ws-body">
-        {showBanner && (
+        {/* App-level notices belong on job home only. They are about recording
+            and installing, neither of which a section screen is for — and the
+            Spend screen in particular is specified as hero + rows and nothing
+            else, with its header and hero running together as one ink band. */}
+        {section === 'home' && showBanner && (
           <InstallBanner isIosSafari={isIosSafari} onInstall={triggerInstall} onDismiss={dismissInstall} />
         )}
-        {showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
+        {section === 'home' && showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
 
         {section === 'home' && (
           <div className="ws-overview">

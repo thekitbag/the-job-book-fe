@@ -27,11 +27,13 @@ test.describe('Labour entry point & budget clarity', () => {
     await goToSection(page, 'Labour')
     await page.waitForTimeout(900)
 
-    await expect(page.getByText('24h job total')).toBeVisible()
+    const jobTotal = page.getByRole('region', { name: 'Labour hours' })
+    await expect(jobTotal).toContainText('24h')
+    await expect(jobTotal).toContainText('job total')
     const money = page.getByRole('region', { name: 'Labour cost' })
-    await expect(money.getByText('£880 known spend')).toBeVisible()
-    await expect(money.getByText('£1500 budget')).toBeVisible()
-    await expect(money.getByText('£620 remaining')).toBeVisible()
+    await expect(money.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
+    await expect(money.locator('.budget-figure', { hasText: 'Budget' }).getByText('£1500', { exact: true })).toBeVisible()
+    await expect(money.locator('.budget-figure', { hasText: 'Left' }).getByText('£620', { exact: true })).toBeVisible()
 
     // labour add lives here and rolls into Spend
     await page.getByRole('button', { name: 'Add labour', exact: true }).click()
@@ -43,7 +45,7 @@ test.describe('Labour entry point & budget clarity', () => {
     await page.waitForTimeout(900)
     await expect(page.getByRole('region', { name: 'Labour Today' }).getByText('Priya')).toBeVisible()
     // labour cost context updates from the refetched summary (880 + 60)
-    await expect(money.getByText('£940 known spend')).toBeVisible()
+    await expect(money.locator('.budget-figure', { hasText: 'Cost' }).getByText('£940', { exact: true })).toBeVisible()
   })
 
   test('Spend shows the budget trio, includes labour, and never offers add-to-labour', async ({ page }) => {
@@ -59,10 +61,11 @@ test.describe('Labour entry point & budget clarity', () => {
 
     // Labour group shows its own trio and guides entry to Labour
     const group = page.getByRole('region', { name: /^labour spend$/i })
-    await expect(group.getByText('£880 known spend')).toBeVisible()
-    await expect(group.getByText('£1500 budget')).toBeVisible()
-    await expect(group.getByText('£620 remaining')).toBeVisible()
-    await expect(group.getByText(/Add labour from the Labour tab/)).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Spent' }).getByText('£880', { exact: true })).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Budget' }).getByText('£1500', { exact: true })).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Left' }).getByText('£620', { exact: true })).toBeVisible()
+    // The standing "add labour on the Labour tab" line is gone — static prose
+    // the theme cuts. No add action here is what steers entry to Labour.
     await expect(group.getByRole('button', { name: /add/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Add to labour' })).toHaveCount(0)
 
