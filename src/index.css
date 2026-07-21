@@ -190,13 +190,16 @@ button {
 }
 
 .auth-title {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--green-700);
-  margin: 0 0 1.25rem;
+  margin: 0 0 1.5rem;
   text-align: center;
+  line-height: 0;
+}
+/* The lockup sits on the paper auth card, so the light (ink) version is used.
+   Height-capped and centred; clear space is baked into the asset. */
+.auth-logo {
+  height: 38px;
+  width: auto;
+  max-width: 100%;
 }
 
 .auth-form {

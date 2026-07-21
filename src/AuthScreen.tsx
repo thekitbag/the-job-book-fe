@@ -102,7 +102,13 @@ export default function AuthScreen({ onAuthSuccess }: { onAuthSuccess: (user: Au
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title">The Job Book</h1>
+        {/* Horizontal logo lockup (mark + wordmark). The PNG is used rather
+            than the SVG because the SVG's wordmark is <text> in Schibsted
+            Grotesk, and an img-loaded SVG can't reach the page's web font — it
+            would fall back to a different typeface. alt carries the name. */}
+        <h1 className="auth-title">
+          <img className="auth-logo" src="/logo-horizontal.png" alt="The Job Book" />
+        </h1>
 
         {mode === 'login' && (
           <form className="auth-form" aria-label="Log in" onSubmit={handleLogin}>
