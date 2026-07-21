@@ -60,16 +60,26 @@ const PILOT_JOB = {
 // ── PWA asset and manifest config ─────────────────────────────────────────────
 
 describe('PWA assets and manifest config', () => {
-  it('SVG icon file is present in public dir', () => {
-    expect(existsSync(resolve(PUBLIC_DIR, 'icon.svg'))).toBe(true)
+  // Ledger-theme logo pack (7g Notch Book). Every asset the manifest and
+  // index.html reference must exist in public/.
+  it.each([
+    'app-icon-192.png',
+    'app-icon-512.png',
+    'app-icon-maskable-192.png',
+    'app-icon-maskable-512.png',
+    'apple-touch-icon-180.png',
+    'favicon.svg',
+    'favicon-32.png',
+    'favicon-16.png',
+    'logo-horizontal.png',
+  ])('%s is present in public dir', file => {
+    expect(existsSync(resolve(PUBLIC_DIR, file))).toBe(true)
   })
 
-  it('192x192 PNG icon is present in public dir', () => {
-    expect(existsSync(resolve(PUBLIC_DIR, 'icon-192.png'))).toBe(true)
-  })
-
-  it('512x512 PNG icon is present in public dir', () => {
-    expect(existsSync(resolve(PUBLIC_DIR, 'icon-512.png'))).toBe(true)
+  it('the old green icons are gone', () => {
+    for (const old of ['icon.svg', 'icon-192.png', 'icon-512.png']) {
+      expect(existsSync(resolve(PUBLIC_DIR, old))).toBe(false)
+    }
   })
 
   it('vite config declares correct app name and short name', () => {
@@ -88,16 +98,37 @@ describe('PWA assets and manifest config', () => {
     expect(config).toContain("start_url: '/'")
   })
 
-  it('vite config references PNG icons in manifest', () => {
+  it('manifest uses the ink theme colour, not the old green', () => {
     const config = readFileSync(CONFIG_PATH, 'utf-8')
-    expect(config).toContain('icon-192.png')
-    expect(config).toContain('icon-512.png')
+    expect(config).toContain("theme_color: '#111111'")
+    expect(config).not.toContain('1a6f38')
+  })
+
+  it('vite config references the new app icons in the manifest', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    expect(config).toContain('app-icon-192.png')
+    expect(config).toContain('app-icon-512.png')
+    expect(config).toContain('app-icon-maskable-512.png')
+  })
+
+  it('maskable and any icons are separate manifest entries', () => {
+    const config = readFileSync(CONFIG_PATH, 'utf-8')
+    // A single "any maskable" would make Android crop the un-padded tile.
+    expect(config).not.toContain("purpose: 'any maskable'")
+    expect(config).toContain("purpose: 'maskable'")
   })
 
   it('workbox glob patterns cover PNG icons for offline precache', () => {
     const config = readFileSync(CONFIG_PATH, 'utf-8')
     expect(config).toContain('globPatterns')
     expect(config).toContain('png')
+  })
+
+  it('index.html wires the favicon, apple-touch icon, and ink theme colour', () => {
+    const html = readFileSync(resolve(PROJECT_ROOT, 'index.html'), 'utf-8')
+    expect(html).toContain('favicon.svg')
+    expect(html).toContain('apple-touch-icon-180.png')
+    expect(html).toContain('theme-color" content="#111111"')
   })
 })
 
