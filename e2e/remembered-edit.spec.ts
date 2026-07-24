@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { openRowOverflow } from './helpers'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -30,12 +30,12 @@ async function signIn(page: Page) {
 test.describe('Remembered-memory edit & focus', () => {
   test('Job memory: Fix memory updates a bought note in place', async ({ page }) => {
     await signIn(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
 
     // hardcore is the uncategorised counted bought note.
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
-    await (await openRowOverflow(hardcore)).getByRole('menuitem', { name: /fix memory/i }).click()
+    const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
+    await (await openRowActions(page, hardcore)).getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="quantity"]').fill('10')
     await form.locator('input[name="costAmount"]').fill('4.50')
@@ -43,17 +43,18 @@ test.describe('Remembered-memory edit & focus', () => {
     await page.waitForTimeout(600)
 
     await expect(page.getByText('10 bags').first()).toBeVisible()
-    await expect(page.getByText('£4.50 each').first()).toBeVisible()
+    // The row shows the recalculated total (10 × £4.50 = £45) as its price.
+    await expect(hardcore.locator('.mem-row-tap-price')).toHaveText('£45')
     await expect(page.getByRole('form', { name: /edit memory/i })).toHaveCount(0)
   })
 
   test('Job memory: changing a bought note type moves it to the Notes tab', async ({ page }) => {
     await signIn(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
 
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
-    await (await openRowOverflow(hardcore)).getByRole('menuitem', { name: /fix memory/i }).click()
+    const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
+    await (await openRowActions(page, hardcore)).getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.getByLabel('Type').selectOption('customer_change')
     await page.getByRole('button', { name: /save memory/i }).click()

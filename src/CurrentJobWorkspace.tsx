@@ -43,7 +43,9 @@ type MaterialsTab = 'bought' | 'used' | 'leftover' | 'returned'
 type JobLogFilter = 'all' | 'notes' | 'photos'
 
 const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
-  spend: 'Spend',
+  // The 'spend' section is user-facing "Budget": it tracks committed/allocated
+  // job cost against budget, not cash paid out. Internal key stays 'spend'.
+  spend: 'Budget',
   payments: 'Payments',
   labour: 'Labour',
   materials: 'Materials',
@@ -78,6 +80,8 @@ type NavRow = {
   title: string
   value: string | null
   denom: string | null
+  // Optional third line (Budget uses it for the remaining-budget figure).
+  sub?: string | null
 }
 
 function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, onOpen }: {
@@ -97,11 +101,18 @@ function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, o
   const paid = paymentsSummary?.totalPaidAmount
   const customerTotal = paymentsSummary?.customerTotalAmount
 
+  // Budget card: committed/known cost of the total budget, plus the remaining
+  // budget as a third line (per the spec's job-home example). "Remaining", not
+  // "left to spend" — this tracks committed cost, not cash out.
+  const remaining = hasBudget ? budget! - known : null
   const rows: NavRow[] = [
     {
-      section: 'spend', title: 'Spend',
+      section: 'spend', title: 'Budget',
       value: total?.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : null,
       denom: total?.knownSpendAmount ? (hasBudget ? `of ${formatMoney(budget!, 'GBP')}` : null) : 'None yet',
+      sub: remaining !== null
+        ? (remaining < 0 ? `${formatMoney(-remaining, 'GBP')} over budget` : `${formatMoney(remaining, 'GBP')} remaining budget`)
+        : null,
     },
     {
       section: 'payments', title: 'Payments',
@@ -136,6 +147,7 @@ function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, o
             <span className="ws-home-card-figures">
               {r.value && <span className="ws-home-card-value">{r.value}</span>}
               {r.denom && <span className="ws-home-card-denom">{r.denom}</span>}
+              {r.sub && <span className="ws-home-card-denom ws-home-card-sub">{r.sub}</span>}
             </span>
           </span>
           <span className="ws-home-card-chev" aria-hidden="true">›</span>

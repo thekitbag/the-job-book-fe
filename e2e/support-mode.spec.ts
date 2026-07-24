@@ -68,7 +68,7 @@ test.describe('Support mode — founder flow', () => {
     await expect(banner).toContainText('Support mode:')
     await expect(banner).toContainText('viewing as Mike')
 
-    for (const tab of ['Spend', 'Labour', 'Used', 'Notes', /To check/]) {
+    for (const tab of ['Budget', 'Labour', 'Used', 'Notes', /To check/]) {
       await page.getByRole('tab', { name: tab }).click()
       await page.waitForTimeout(300)
       await expect(banner).toBeVisible()
@@ -84,7 +84,7 @@ test.describe('Support mode — founder flow', () => {
     const jobTotal = page.getByRole('region', { name: 'Labour hours' })
     await expect(jobTotal).toContainText('24h')
     await expect(jobTotal).toContainText('job total')
-    await page.getByRole('tab', { name: 'Spend' }).click()
+    await page.getByRole('tab', { name: 'Budget' }).click()
     await expect(page.getByText(/£2270/)).toBeVisible()
 
     // exit returns to the support surface with no target data left

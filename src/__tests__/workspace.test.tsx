@@ -140,7 +140,7 @@ describe('CurrentJobWorkspace — shell', () => {
     // the old Overview | Spend | Labour | Used | Notes strip is gone
     expect(screen.queryByRole('tablist', { name: /job lenses/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
-    for (const card of ['Open Spend', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
       expect(screen.getByRole('button', { name: card })).toBeInTheDocument()
     }
   })
@@ -159,7 +159,7 @@ describe('CurrentJobWorkspace — shell', () => {
     const user = userEvent.setup()
     renderWorkspace()
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
-    for (const card of ['Open Spend', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
       await user.click(screen.getByRole('button', { name: card }))
       expect(screen.getAllByRole('button', { name: /record/i })).toHaveLength(1)
       expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
@@ -171,7 +171,7 @@ describe('CurrentJobWorkspace — shell', () => {
     const user = userEvent.setup()
     renderWorkspace()
     for (const [card, heading] of [
-      ['Open Spend', 'Spend'], ['Open Payments', 'Payments'], ['Open Labour', 'Labour'],
+      ['Open Budget', 'Budget'], ['Open Payments', 'Payments'], ['Open Labour', 'Labour'],
       ['Open Materials', 'Materials'], ['Open Job log', 'Job log'],
     ] as const) {
       await user.click(screen.getByRole('button', { name: card }))
@@ -179,7 +179,7 @@ describe('CurrentJobWorkspace — shell', () => {
       // the job title stays visible as workspace context
       expect(screen.getByText('Garden Room')).toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: /job home/i }))
-      expect(screen.getByRole('button', { name: 'Open Spend' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Open Budget' })).toBeInTheDocument()
     }
   })
 
@@ -498,7 +498,7 @@ describe('CurrentJobWorkspace — home card context', () => {
       totals: { budgetAmount: '5000', budgetCurrency: 'GBP', knownSpendAmount: '2270', knownSpendCurrency: 'GBP', remainingAmount: '2730', remainingLabel: null, overBudget: false },
     })
     renderWorkspace()
-    const card = screen.getByRole('button', { name: 'Open Spend' })
+    const card = screen.getByRole('button', { name: 'Open Budget' })
     await waitFor(() => expect(card).toHaveTextContent(/£2270/))
     expect(card).toHaveTextContent(/£5000/)
   })

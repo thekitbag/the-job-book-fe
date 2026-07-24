@@ -14,7 +14,7 @@ import {
 } from './api'
 import { identifyAnalyticsUser, track } from './analytics'
 import AuthScreen from './AuthScreen'
-import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, deriveRefundsSummary, formatCostLabel, formatTotalLabel, friendlyDayLabel } from './memoryScan'
+import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, deriveRefundsSummary, formatCostLabel, formatTotalLabel, friendlyDayLabel, moneyFigure } from './memoryScan'
 import type {
   AuthUser,
   BudgetSummaryResponse,
@@ -256,7 +256,7 @@ function ReadOnlyMemoryCard({ item }: { item: MemoryViewItem }) {
   }
   if (isReturned) {
     const refund = formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
-    rows.push(['Refund', refund ? `${refund} refund` : 'None recorded — spend is unchanged'])
+    rows.push(['Refund', refund ? `${refund} refund` : 'None recorded — cost is unchanged'])
     // Support inspection value: which leftover this came out of.
     if (item.returnedFromMemoryItemId) rows.push(['Returned from', item.returnedFromMemoryItemId])
   } else {
@@ -303,7 +303,7 @@ function reviewItemHeadline(pm: ProposedMemory): string {
 
 type ViewAsTab = 'spend' | 'payments' | 'labour' | 'used' | 'notes' | 'review'
 const VIEW_AS_TABS: { key: ViewAsTab; label: string }[] = [
-  { key: 'spend', label: 'Spend' },
+  { key: 'spend', label: 'Budget' },
   { key: 'payments', label: 'Payments' },
   { key: 'labour', label: 'Labour' },
   { key: 'used', label: 'Used' },
@@ -387,27 +387,36 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
       {!failed && memory && (
         <>
           {tab === 'spend' && (
-            <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
-              <section className="mem-hero" aria-label="Known spend">
-                <p className="mem-hero-cap">Known spend</p>
+            <div className="mem-tabpanel" role="tabpanel" aria-label="Budget">
+              {/* Budget: committed/known cost against budget. Figures are formatted
+                  from amounts, never the backend's spend-era *Label fields. */}
+              <section className="mem-hero" aria-label="Budget">
+                <p className="mem-hero-cap">Budget</p>
                 <p className="mem-hero-amount">
-                  {budget?.totals.knownSpendAmount ? `£${budget.totals.knownSpendAmount}` : (memory.costSummary?.totalKnownCost?.knownSpendLabel ?? 'None yet')}
+                  {moneyFigure(budget?.totals.knownSpendAmount ?? memory.costSummary?.totalKnownCost?.knownSpendAmount ?? null) ?? 'None yet'}
+                  {budget?.totals.budgetAmount && <span className="mem-hero-of"> of {moneyFigure(budget.totals.budgetAmount)}</span>}
                 </p>
                 {/* Support sees the same refund adjustment Mike does, so a net
                     total is never unexplained on a support call either. */}
                 {refunds?.knownRefundLabel && (
                   <p className="mem-hero-sub">{refunds.knownRefundLabel} — net of refunds</p>
                 )}
-                {budget?.totals.remainingLabel && <p className="mem-hero-sub">{budget.totals.remainingLabel}</p>}
+                {budget?.totals.remainingAmount && (
+                  <p className="mem-hero-sub">
+                    {budget.totals.overBudget
+                      ? `${moneyFigure(budget.totals.remainingAmount.replace('-', ''))} over budget`
+                      : `${moneyFigure(budget.totals.remainingAmount)} remaining budget`}
+                  </p>
+                )}
               </section>
 
               {labourGroup && (labourGroup.rows.length > 0 || labourGroup.budgetCategory) && (
-                <section className="budget-cat" aria-label="Labour spend">
+                <section className="budget-cat" aria-label="Labour">
                   <div className="budget-cat-head"><h3 className="budget-cat-name">Labour</h3></div>
                   <div className="budget-cat-figures">
-                    <div className="budget-figure"><dt>Spent</dt><dd>{labourGroup.knownSpendLabel ?? 'None yet'}</dd></div>
+                    <div className="budget-figure"><dt>Cost</dt><dd>{moneyFigure(labourGroup.knownSpendAmount) ?? 'None yet'}</dd></div>
                     {labourGroup.budgetLabel
-                      ? <div className="budget-figure"><dt>{labourGroup.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{labourGroup.remainingLabel}</dd></div>
+                      ? <div className="budget-figure"><dt>{labourGroup.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{moneyFigure(labourGroup.remainingAmount?.replace('-', '') ?? null)}</dd></div>
                       : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
                   </div>
                   {labourGroup.rows.map(r => (
@@ -422,9 +431,9 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                   <section key={cs.category.id} className="budget-cat" aria-label={`Budget category ${cs.category.name}`}>
                     <div className="budget-cat-head"><h3 className="budget-cat-name">{cs.category.name}</h3></div>
                     <div className="budget-cat-figures">
-                      <div className="budget-figure"><dt>Spent</dt><dd>{cs.knownSpendLabel ?? 'None yet'}</dd></div>
+                      <div className="budget-figure"><dt>Cost</dt><dd>{moneyFigure(cs.knownSpendAmount) ?? 'None yet'}</dd></div>
                       {cs.budgetLabel
-                        ? <div className="budget-figure"><dt>{cs.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{cs.remainingLabel}</dd></div>
+                        ? <div className="budget-figure"><dt>{cs.overBudget ? 'Over budget' : 'Remaining'}</dt><dd>{moneyFigure(cs.remainingAmount?.replace('-', '') ?? null)}</dd></div>
                         : <div className="budget-figure"><dt>Budget</dt><dd>No budget set</dd></div>}
                     </div>
                     {cs.rows.filter(r => !labourRowIds.has(r.memoryItemId)).map(r => (
@@ -434,8 +443,8 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                 ))}
 
               {(budget?.uncategorized.rows ?? []).filter(r => !labourRowIds.has(r.memoryItemId)).length > 0 && (
-                <section aria-label="Uncategorised spend">
-                  <p className="mem-section-label">Uncategorised spend</p>
+                <section aria-label="Uncategorised cost">
+                  <p className="mem-section-label">Not in a category yet</p>
                   {(budget?.uncategorized.rows ?? []).filter(r => !labourRowIds.has(r.memoryItemId)).map(r => (
                     <p key={r.memoryItemId} className="support-spend-row support-spend-row--card"><span>{r.itemLabel}</span><span>{r.lineTotalLabel}</span></p>
                   ))}

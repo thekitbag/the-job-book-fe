@@ -325,7 +325,7 @@ describe('Returned materials — returning a leftover', () => {
 describe('Returned materials — spend', () => {
   it('a trusted refund reduces net known spend and says why', async () => {
     renderWorkspace()
-    await openSection('Spend')
+    await openSection('Budget')
     expect(await screen.findByText('£920')).toBeInTheDocument() // gross, before any return
 
     const sheet = await openReturnSheet()
@@ -333,8 +333,8 @@ describe('Returned materials — spend', () => {
     fireEvent.click(sheet.getByRole('button', { name: /save return/i }))
     await waitFor(() => expect(api.returnMemoryItem).toHaveBeenCalled())
 
-    await openSection('Spend')
-    const hero = within(await screen.findByRole('region', { name: /known spend/i }))
+    await openSection('Budget')
+    const hero = within(await screen.findByRole('region', { name: /^budget$/i }))
     // Net of the £80 refund. Spend states the net figure only — the refund
     // itself is shown under Materials → Returned, not on this screen.
     expect(hero.getByText('£840')).toBeInTheDocument()
@@ -354,7 +354,7 @@ describe('Returned materials — spend', () => {
     expect(returned).toHaveTextContent(/4 · .*£80 refund/)
 
     // And it never appears among the spend rows as a purchase.
-    await openSection('Spend')
+    await openSection('Budget')
     expect(screen.queryByText('£80 refund')).not.toBeInTheDocument()
   })
 
@@ -367,8 +367,8 @@ describe('Returned materials — spend', () => {
     await waitFor(() => expect(api.returnMemoryItem).toHaveBeenCalledWith(
       JOB.id, 'left-posts', expect.objectContaining({ refundAmount: null })))
 
-    await openSection('Spend')
-    const hero = within(await screen.findByRole('region', { name: /known spend/i }))
+    await openSection('Budget')
+    const hero = within(await screen.findByRole('region', { name: /^budget$/i }))
     expect(hero.getByText('£920')).toBeInTheDocument()
 
     // Still visible in Returned, and honest about the money.
@@ -408,7 +408,7 @@ describe('Returned materials — failure', () => {
     expect(await sheet.findByRole('alert')).toHaveTextContent(/could not save the return/i)
 
     fireEvent.click(sheet.getByRole('button', { name: /cancel/i }))
-    await openSection('Spend')
+    await openSection('Budget')
     expect(await screen.findByText('£920')).toBeInTheDocument()
   })
 
@@ -469,8 +469,8 @@ describe('Returned materials — support view-as', () => {
 
   it('shows the refund coming off known spend', async () => {
     await openViewAs()
-    fireEvent.click(await screen.findByRole('tab', { name: 'Spend' }))
-    const hero = within(await screen.findByRole('region', { name: /known spend/i }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Budget' }))
+    const hero = within(await screen.findByRole('region', { name: /^budget$/i }))
     expect(hero.getByText(/£80 refunded — net of refunds/i)).toBeInTheDocument()
   })
 })

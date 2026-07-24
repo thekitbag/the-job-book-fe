@@ -53,9 +53,9 @@ test.describe('Job photos', () => {
     await gotoApp(page)
 
     // baseline known spend from the Spend hero
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
-    const hero = page.getByRole('region', { name: /^known spend$/i })
+    const hero = page.getByRole('region', { name: /^budget$/i })
     await expect(hero.getByText(/£2270/)).toBeVisible()
 
     const section = await openPhotos(page)
@@ -69,7 +69,7 @@ test.describe('Job photos', () => {
     await expect(section.locator('.photo-card').first().locator('img[alt="Job photo"]')).toBeVisible()
 
     // receipt/photo upload must not change known spend
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
     await expect(hero.getByText(/£2270/)).toBeVisible()
   })

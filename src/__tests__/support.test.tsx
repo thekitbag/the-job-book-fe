@@ -216,7 +216,7 @@ describe('Support mode — read-only view-as', () => {
   it('renders target data with no Record/Add/Fix/remove/move/review/photo-upload controls on any tab', async () => {
     await enterViewAs()
     expect(await screen.findByText(/£320/)).toBeInTheDocument()
-    for (const t of ['Spend', 'Payments', 'Labour', 'Used', 'Notes', /To check/]) {
+    for (const t of ['Budget', 'Payments', 'Labour', 'Used', 'Notes', /To check/]) {
       fireEvent.click(screen.getByRole('tab', { name: t }))
       expect(screen.queryByRole('button', { name: /record/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /^add /i })).toBeNull()

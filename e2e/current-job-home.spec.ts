@@ -37,7 +37,7 @@ test.describe('Current job home', () => {
   })
 
   test('opens on job home with the four stable section cards and no old tab strip', async ({ page }) => {
-    for (const card of ['Open Spend', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
       await expect(page.getByRole('button', { name: card })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0)
@@ -51,7 +51,7 @@ test.describe('Current job home', () => {
 
   test('section cards fit the phone width without horizontal scroll', async ({ page }) => {
     const viewport = page.viewportSize()!
-    for (const card of ['Open Spend', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
       const box = await page.getByRole('button', { name: card }).boundingBox()
       expect(box).not.toBeNull()
       expect(box!.x).toBeGreaterThanOrEqual(0)
@@ -72,7 +72,7 @@ test.describe('Current job home', () => {
 
   test('Record is visible on home and every section workspace', async ({ page }) => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
-    for (const section of ['Spend', 'Payments', 'Labour', 'Materials', 'Job log']) {
+    for (const section of ['Budget', 'Payments', 'Labour', 'Materials', 'Job log']) {
       await goToSection(page, section)
       await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
     }
@@ -84,7 +84,7 @@ test.describe('Current job home', () => {
     // job context stays visible
     await expect(page.locator('.ws-job-location')).toHaveText('Garden Room')
     await page.getByRole('button', { name: /job home/i }).click()
-    await expect(page.getByRole('button', { name: 'Open Spend' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open Budget' })).toBeVisible()
   })
 
   test('Things to check banner opens the review queue and returns', async ({ page }) => {
@@ -100,7 +100,7 @@ test.describe('Current job home', () => {
   test('the Spend card shows total known cost (bought + labour)', async ({ page }) => {
     await page.waitForTimeout(700)
     // £2270 = bought + trusted labour, the job-level total known cost.
-    await expect(page.getByRole('button', { name: 'Open Spend' })).toContainText('£2270')
+    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2270')
   })
 
   // The nav row keeps the figure and its denominator as separate elements so
@@ -133,7 +133,7 @@ test.describe('Current job home', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
     await page.waitForTimeout(500)
     await expect(page.locator('.ws-status-chip')).toHaveText(/Planning/)
-    await expect(page.getByRole('button', { name: 'Open Spend' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open Budget' })).toBeVisible()
   })
 
   test('home does not show a days-since-start metric', async ({ page }) => {
@@ -150,7 +150,7 @@ test.describe('Current job home', () => {
 
     // Section-per-type mapping mirrors CurrentJobWorkspace's ACTIVITY_DEST.
     const expectedTitle: Record<string, string> = {
-      Bought: 'Spend', Labour: 'Labour', Used: 'Materials', Note: 'Job log', Photo: 'Job log',
+      Bought: 'Budget', Labour: 'Labour', Used: 'Materials', Note: 'Job log', Photo: 'Job log',
     }
     await firstRow.click()
     await expect(page.locator('.ws-job-title')).toHaveText(expectedTitle[typeLabel!.trim()])

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -50,38 +51,41 @@ test.describe('Labour entry point & budget clarity', () => {
 
   test('Spend shows the budget trio, includes labour, and never offers add-to-labour', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(900)
 
     // job-level trio: known spend, total budget, remaining
-    const hero = page.getByRole('region', { name: /^known spend$/i })
+    const hero = page.getByRole('region', { name: /^budget$/i })
     await expect(hero.getByText(/£2270/)).toBeVisible()
     await expect(hero.getByText(/of £7500/)).toBeVisible()
     await expect(hero.getByText(/£5230 remaining/)).toBeVisible()
 
     // Labour group shows its own trio and guides entry to Labour
-    const group = page.getByRole('region', { name: /^labour spend$/i })
-    await expect(group.locator('.budget-figure', { hasText: 'Spent' }).getByText('£880', { exact: true })).toBeVisible()
+    const group = page.getByRole('region', { name: /^labour$/i })
+    await expect(group.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
     await expect(group.locator('.budget-figure', { hasText: 'Budget' }).getByText('£1500', { exact: true })).toBeVisible()
-    await expect(group.locator('.budget-figure', { hasText: 'Left' }).getByText('£620', { exact: true })).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Remaining' }).getByText('£620', { exact: true })).toBeVisible()
     // The standing "add labour on the Labour tab" line is gone — static prose
     // the theme cuts. No add action here is what steers entry to Labour.
     await expect(group.getByRole('button', { name: /add/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Add to labour' })).toHaveCount(0)
 
-    // generic Add spend must not offer the labour category
-    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
-    const select = page.getByRole('dialog', { name: 'Add spend' }).getByLabel('Budget category')
+    // generic Add cost must not offer the labour category
+    await page.getByRole('button', { name: 'Add cost', exact: true }).click()
+    const select = page.getByRole('dialog', { name: 'Add cost' }).getByLabel('Budget category')
     const options = await select.locator('option').allTextContents()
     expect(options).toContain('timber')
     expect(options).not.toContain('labour')
-    await page.getByRole('dialog', { name: 'Add spend' }).getByRole('button', { name: 'Close' }).click()
+    await page.getByRole('dialog', { name: 'Add cost' }).getByRole('button', { name: 'Close' }).click()
 
     // historical non-labour Labour-category spend: visible once, fixable
-    const hist = group.getByRole('group', { name: /existing spend in the labour category/i })
+    const hist = group.getByRole('group', { name: /existing cost in the labour category/i })
     await expect(hist.getByText('agency invoice')).toBeVisible()
-    await expect(hist.getByRole('button', { name: /fix memory/i })).toBeVisible()
+    // shown exactly once across the Budget tab (before any drawer opens)
     await expect(page.getByText('agency invoice')).toHaveCount(1)
+    // Fix memory lives in the row's tap-to-open action drawer.
+    const drawer = await openRowActions(page, hist.locator('.mem-card', { hasText: 'agency invoice' }))
+    await expect(drawer.getByRole('button', { name: /fix memory/i })).toBeVisible()
   })
 
   test('job title can be renamed and the new title persists across the app', async ({ page }) => {

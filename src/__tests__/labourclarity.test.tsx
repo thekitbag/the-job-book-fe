@@ -152,9 +152,9 @@ describe('Labour tab — budget context from budgetSummary.labour', () => {
 describe('Spend — labour entry point discouraged, historical spend safe', () => {
   it('generic Add spend does not offer the labour category', async () => {
     renderWorkspace()
-    openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add spend' })
+    openTab('Budget')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add cost' })
     const options = Array.from(within(sheet).getByLabelText('Budget category').querySelectorAll('option')).map(o => o.textContent)
     expect(options).toContain('timber')
     expect(options).not.toContain('labour')
@@ -162,8 +162,8 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
 
   it('the Labour group has no add action and guides to the Labour tab', async () => {
     renderWorkspace()
-    openTab('Spend')
-    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
     expect(within(group).queryByRole('button', { name: /add/i })).toBeNull()
     // The standing "add labour on the Labour tab" guidance is gone entirely —
     // static prose the theme asks us to cut. The absence of an add action here
@@ -180,8 +180,8 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
   // an additional ordinary "Budget category Labour" card alongside it.
   it('with spend and a Labour category both present, there is exactly one Add-category control and no duplicate Labour card', async () => {
     renderWorkspace()
-    openTab('Spend')
-    await screen.findByRole('region', { name: /^labour spend$/i })
+    openTab('Budget')
+    await screen.findByRole('region', { name: /^labour$/i })
 
     expect(screen.getAllByRole('button', { name: /add budget category/i })).toHaveLength(1)
     // the ordinary "timber" category still renders as its own card…
@@ -202,36 +202,36 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
   it('shows the ⋯ menu on the Labour group even when the backend labour summary omits budgetCategory', async () => {
     mockGetBudgetSummary.mockResolvedValue({ ...budgetSummary(), labour: { ...budgetSummary().labour!, budgetCategory: null } })
     renderWorkspace()
-    openTab('Spend')
-    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
     expect(within(group).getByRole('button', { name: /actions for labour/i })).toBeInTheDocument()
   })
 
   it('historical non-labour Labour-category spend is visible once, with Fix memory', async () => {
     renderWorkspace()
-    openTab('Spend')
-    const group = await screen.findByRole('region', { name: /^labour spend$/i })
-    const hist = within(group).getByRole('group', { name: /existing spend in the labour category/i })
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
+    const hist = within(group).getByRole('group', { name: /existing cost in the labour category/i })
     expect(within(hist).getByText('agency invoice')).toBeInTheDocument()
-    // The "why is this here" explanation is gone; the heading and the rows'
-    // own Fix memory action carry it.
-    expect(within(hist).getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
-    // shown exactly once across the whole Spend tab
+    // shown exactly once across the whole Budget tab (before any drawer opens)
     expect(screen.getAllByText('agency invoice')).toHaveLength(1)
     // and the proper labour row is not in it
     expect(within(hist).queryByText(/electrics/)).toBeNull()
+    // Fix memory now lives in the row's tap-to-open action drawer.
+    fireEvent.click(hist.querySelector('.mem-row-tap') as HTMLElement)
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
   })
 
   it('category cards show the full trio: spent, budget, and remaining', async () => {
     renderWorkspace()
-    openTab('Spend')
+    openTab('Budget')
     const timber = await screen.findByRole('region', { name: /budget category timber/i })
     figure(timber, 'Budget', '£4000').toBeInTheDocument()
-    figure(timber, 'Left', '£4000').toBeInTheDocument()
-    const labour = screen.getByRole('region', { name: /^labour spend$/i })
-    figure(labour, 'Spent', '£280').toBeInTheDocument()
+    figure(timber, 'Remaining', '£4000').toBeInTheDocument()
+    const labour = screen.getByRole('region', { name: /^labour$/i })
+    figure(labour, 'Cost', '£280').toBeInTheDocument()
     figure(labour, 'Budget', '£1500').toBeInTheDocument()
-    figure(labour, 'Left', '£1220').toBeInTheDocument()
+    figure(labour, 'Remaining', '£1220').toBeInTheDocument()
   })
 })
 
@@ -345,8 +345,8 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
     noCat.labour = { ...noCat.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
     mockGetBudgetSummary.mockResolvedValue(noCat)
     renderWorkspace()
-    openTab('Spend')
-    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
 
     // no standalone "Set Labour budget" button — only the ⋯ trigger
     expect(within(group).queryByRole('button', { name: /set labour budget/i })).toBeNull()
@@ -361,8 +361,8 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
 
   it('the Spend Labour group ⋯ trigger stays in place once a category exists, with Edit/Remove budget', async () => {
     renderWorkspace()
-    openTab('Spend')
-    const group = await screen.findByRole('region', { name: /^labour spend$/i })
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
     const menuBtn = within(group).getByRole('button', { name: /actions for labour/i })
     fireEvent.click(menuBtn)
     expect(within(group).getByRole('menuitem', { name: /edit budget/i })).toBeInTheDocument()

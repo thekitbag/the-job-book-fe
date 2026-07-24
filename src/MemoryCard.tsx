@@ -28,12 +28,12 @@ const MOVE_TARGET: Record<string, { type: MemoryType; label: string }> = {
 // matters most: removing a fact must never read as deleting the voice note.
 function removalConsequences(item: MemoryViewItem): string[] {
   const lines: string[] = []
-  if (SPEND_TYPES.has(item.memoryType)) lines.push('It will no longer count in known spend.')
+  if (SPEND_TYPES.has(item.memoryType)) lines.push('It will no longer count towards Budget.')
   else if (item.memoryType === 'returned_material') {
     // Removing a return is for a return that never happened. Say what comes
     // back, so it can't be mistaken for undoing the purchase.
     lines.push('It will no longer show as returned.')
-    if (safeRefund(item)) lines.push('Its refund will stop coming off your known spend.')
+    if (safeRefund(item)) lines.push('Its refund will stop coming off your Budget.')
   }
   else if (item.memoryType === 'general_note') lines.push('It will be removed from the job log.')
   else lines.push('It will be removed from this job.')
@@ -54,7 +54,7 @@ function returnedRows(item: MemoryViewItem, named: boolean): [string, string][] 
   if (refund) rows.push(['Refund', `${refund} refund`])
   // No refund figure yet: say so, rather than leave a silent gap that looks
   // like the money simply vanished from the job.
-  else rows.push(['Refund', 'None recorded — spend is unchanged'])
+  else rows.push(['Refund', 'None recorded — cost is unchanged'])
   return rows
 }
 
@@ -234,15 +234,22 @@ export default function MemoryCard({
     const refund = item.memoryType === 'returned_material'
       ? formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
       : null
-    const meta = [
-      [item.quantity, item.unit].filter(Boolean).join(' ') || null,
-      item.supplierName ? `from ${item.supplierName}` : null,
-      // Where a leftover actually is ("in the van") is the point of recording it.
-      item.locationOrUse,
-      refund ? `${refund} refund` : null,
-      dateLabel,
-    ].filter(Boolean).join(' · ')
+    // Labour reads "Paul · 6h · £20/hour"; everything else "3 packs · from Jewson".
+    const isLabour = item.memoryType === 'labour'
+    const rateLabel = isLabour && item.costQualifier === 'per_hour' && item.costAmount ? `£${item.costAmount}/hour` : null
+    const meta = (isLabour
+      ? [item.labourPerson, item.labourHours ? `${item.labourHours}h` : null, rateLabel]
+      : [
+          [item.quantity, item.unit].filter(Boolean).join(' ') || null,
+          item.supplierName ? `from ${item.supplierName}` : null,
+          // Where a leftover actually is ("in the van") is the point of recording it.
+          item.locationOrUse,
+          refund ? `${refund} refund` : null,
+        ]
+    ).concat(dateLabel ? [dateLabel] : []).filter(Boolean).join(' · ')
     const label = name ?? item.summary
+    // Uncategorised cost entries can be filed to a category from the drawer.
+    const canPickCategory = CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId
 
     return (
       <div className={`mem-card mem-card--sheet${uncertain ? ' mem-card--unresolved' : ''}`}>
@@ -255,10 +262,10 @@ export default function MemoryCard({
           <span className="mem-row-tap-chev" aria-hidden="true">›</span>
         </button>
 
-        {/* A bought/labour item that isn't in Known spend — still said on the
+        {/* A cost item that isn't counted in Budget yet — still said on the
             row, not hidden in the sheet: it explains a figure Mike can see. */}
         {excludedCopy && (
-          <p className="mem-card-notcounted">Not in Known spend yet · {excludedCopy}</p>
+          <p className="mem-card-notcounted">Not counted yet · {excludedCopy}</p>
         )}
 
         {/* Worth checking is a question, not an action, so it stays in front of
@@ -292,7 +299,15 @@ export default function MemoryCard({
         {actionsOpen && (
           <BottomSheet title={label} onClose={() => setActionsOpen(false)}>
             {meta && <p className="row-sheet-sub">{meta}</p>}
+            {/* Cost stated in cost language — never "paid": Budget tracks
+                committed cost, not money out. */}
+            {price && <p className="row-sheet-cost">{price} cost</p>}
             <div className="row-sheet-actions">
+              {canPickCategory && (
+                <button type="button" className="row-sheet-opt" disabled={assigningCategory} onClick={() => { setActionsOpen(false); setPicking(true) }}>
+                  Choose category <span aria-hidden="true">›</span>
+                </button>
+              )}
               {canReturn && (
                 <button type="button" className="row-sheet-opt" onClick={() => { setActionsOpen(false); setReturning(true) }}>
                   Mark as returned <span aria-hidden="true">›</span>
@@ -316,6 +331,19 @@ export default function MemoryCard({
               </button>
             </div>
             <button type="button" className="row-sheet-cancel" onClick={() => setActionsOpen(false)}>Cancel</button>
+          </BottomSheet>
+        )}
+
+        {/* Category picker, opened from the drawer for an uncategorised cost. */}
+        {picking && (
+          <BottomSheet title="Choose a category" onClose={() => setPicking(false)}>
+            <div className="pick-cat-list">
+              {categories.map(c => (
+                <button key={c.id} type="button" className="pick-cat-opt" onClick={() => { onAssignCategory(c.id); setPicking(false) }}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
           </BottomSheet>
         )}
 
@@ -344,9 +372,9 @@ export default function MemoryCard({
       <StructuredFields item={item} dateLabel={isRow ? dateLabel : undefined} />
       {!isRow && dateLabel && <p className="mem-card-date">{dateLabel}</p>}
 
-      {/* Bought/labour item that isn't in Known spend — say so explicitly. */}
+      {/* Cost item that isn't counted in Budget yet — say so explicitly. */}
       {excludedCopy && (
-        <p className="mem-card-notcounted">Not in Known spend yet · {excludedCopy}</p>
+        <p className="mem-card-notcounted">Not counted yet · {excludedCopy}</p>
       )}
 
       {uncertain && !ackUnsure && (

@@ -176,7 +176,7 @@ describe('Correct/remove — spend item dates', () => {
 describe('Correct/remove — remove confirmed items', () => {
   it('removing a spend item needs confirmation, explains known spend + kept source, then updates totals', async () => {
     renderWorkspace()
-    await openSection('Spend')
+    await openSection('Budget')
     // seeded spend total (600) visible before removal
     await screen.findByText(/£600/)
     await openSection('Materials')
@@ -185,7 +185,7 @@ describe('Correct/remove — remove confirmed items', () => {
     expect(api.removeMemoryItem).not.toHaveBeenCalled()
     const confirm = within(card('plasterboard'))
     expect(confirm.getByText(/remove this item\?/i)).toBeInTheDocument()
-    expect(confirm.getByText(/no longer count in known spend/i)).toBeInTheDocument()
+    expect(confirm.getByText(/no longer count towards budget/i)).toBeInTheDocument()
     expect(confirm.getByText(/original voice note will be kept/i)).toBeInTheDocument()
     fireEvent.click(confirm.getByRole('button', { name: /^remove$/i }))
     await waitFor(() => expect(api.removeMemoryItem).toHaveBeenCalledWith(JOB.id, 'buy-1'))
