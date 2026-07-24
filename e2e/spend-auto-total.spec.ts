@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { openRowOverflow } from './helpers'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -29,11 +29,11 @@ async function gotoApp(page: Page) {
 test.describe('Auto-total unit cost', () => {
   test('direct-add each shows a derived total, saves it, and Fix Memory recalculates', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(600)
 
-    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
-    const form = page.getByRole('form', { name: 'Add spend' })
+    await page.getByRole('button', { name: 'Add cost', exact: true }).click()
+    const form = page.getByRole('form', { name: 'Add cost' })
     await form.locator('input[name="materialName"]').fill('OSB')
     await form.locator('input[name="quantity"]').fill('5')
     await form.locator('input[name="unit"]').fill('sheets')
@@ -44,14 +44,13 @@ test.describe('Auto-total unit cost', () => {
     await expect(form.getByText(/£100 total/)).toBeVisible()
     await form.getByRole('button', { name: /^Save / }).click()
 
-    // saved item shows unit cost + derived total from the refetched mock
-    const osb = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'OSB' })
-    await expect(osb.getByText('£20 each')).toBeVisible()
-    await expect(osb.getByText('£100')).toBeVisible()
+    // Saved row shows the quantity context and the derived total as its price.
+    const osb = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'OSB' })
+    await expect(osb.locator('.mem-row-tap-meta')).toContainText('5 sheets')
+    await expect(osb.locator('.mem-row-tap-price')).toHaveText('£100')
 
-    // Fix Memory: change quantity → the total recalculates
-    // Uncategorised rows keep fix/source/remove behind the "…" overflow.
-    await (await openRowOverflow(osb)).getByRole('menuitem', { name: /fix memory/i }).click()
+    // Fix Memory lives in the row's tap-to-open action drawer.
+    await (await openRowActions(page, osb)).getByRole('button', { name: /fix memory/i }).click()
     const edit = page.getByRole('form', { name: /edit memory/i })
     await edit.locator('input[name="quantity"]').fill('6')
     await expect(edit.getByText(/£120 total/)).toBeVisible()
@@ -59,7 +58,7 @@ test.describe('Auto-total unit cost', () => {
     await page.waitForTimeout(700)
 
     await expect(
-      page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'OSB' }).getByText('£120'),
+      page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'OSB' }).getByText('£120'),
     ).toBeVisible()
   })
 

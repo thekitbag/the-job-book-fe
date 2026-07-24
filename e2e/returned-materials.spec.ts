@@ -31,7 +31,7 @@ function postsCard(page: Page) {
 }
 
 async function knownSpend(page: Page): Promise<string> {
-  await goToSection(page, 'Spend')
+  await goToSection(page, 'Budget')
   return (await page.locator('.mem-hero-amount').first().innerText()).trim()
 }
 
@@ -81,7 +81,7 @@ test.describe('Returned materials', () => {
     // the refund itself is shown under Materials → Returned, not here.
     const after = await knownSpend(page)
     expect(after).not.toBe(before)
-    await expect(page.getByRole('region', { name: /known spend/i })).not.toContainText('refund')
+    await expect(page.getByRole('region', { name: /^budget$/i })).not.toContainText('refund')
   })
 
   test('over-returning is refused without moving anything', async ({ page }) => {

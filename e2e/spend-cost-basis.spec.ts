@@ -26,7 +26,7 @@ async function openSpend(page: Page) {
     await page.getByRole('button', { name: /sign in/i }).click()
     await page.waitForTimeout(400)
   }
-  await goToSection(page, 'Spend')
+  await goToSection(page, 'Budget')
   await page.waitForTimeout(700)
 }
 
@@ -64,7 +64,7 @@ test.describe('Spend cost-basis attention', () => {
 
   test('Confirm as total moves the amount into known spend from the refetched summary', async ({ page }) => {
     await openSpend(page)
-    const hero = page.getByRole('region', { name: /^known spend$/i })
+    const hero = page.getByRole('region', { name: /^budget$/i })
     await expect(hero.getByText(/£2270/)).toBeVisible()
 
     const insulation = (await openNotCounted(page)).locator('.cost-check-item', { hasText: 'insulation' })

@@ -29,10 +29,10 @@ async function gotoApp(page: Page) {
 test.describe('Direct add job detail', () => {
   test('add spend appears in Spend and Record stays visible', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(600)
-    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
-    const form = page.getByRole('form', { name: 'Add spend' })
+    await page.getByRole('button', { name: 'Add cost', exact: true }).click()
+    const form = page.getByRole('form', { name: 'Add cost' })
     await form.locator('input[name="materialName"]').fill('composite decking')
     await form.locator('input[name="costAmount"]').fill('240')
     await form.getByRole('button', { name: /^Save / }).click()

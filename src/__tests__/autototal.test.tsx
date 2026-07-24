@@ -78,9 +78,9 @@ function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 async function openAddSpend() {
-  fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
-  return screen.getByRole('form', { name: 'Add spend' })
+  fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
+  return screen.getByRole('form', { name: 'Add cost' })
 }
 function fill(form: HTMLElement, name: string, value: string) {
   fireEvent.change(form.querySelector(`[name="${name}"]`)!, { target: { value } })
@@ -143,11 +143,11 @@ describe('Auto-total — Fix Memory', () => {
       },
     })
     renderWorkspace()
-    fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
-    const counted = await screen.findByRole('region', { name: /uncategorised spend/i })
-    // Fix memory now sits behind the row's "…" overflow.
-    fireEvent.click(within(counted).getByRole('button', { name: /more actions for osb/i }))
-    fireEvent.click(within(counted).getByRole('menuitem', { name: /fix memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
+    const counted = await screen.findByRole('region', { name: /uncategorised cost/i })
+    // Fix memory now lives in the row's tap-to-open action drawer.
+    fireEvent.click(counted.querySelector('.mem-row-tap') as HTMLElement)
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /fix memory/i }))
 
     const editForm = screen.getByRole('form', { name: /edit memory/i })
     // change quantity 5 → 6; the derived preview follows

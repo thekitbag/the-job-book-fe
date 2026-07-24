@@ -131,22 +131,22 @@ test.describe('Labour tab — daily view', () => {
 test.describe('Spend tab — Labour group', () => {
   test('trusted labour shows once under Labour with the category budget; hours-only is not spend', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(900)
 
     // Labour group: £280 (rated, categorised) + £600 (total, NO category) = £880,
     // against the seeded £1500 labour category budget.
-    const group = page.getByRole('region', { name: /^labour spend$/i })
-    await expect(group.locator('.budget-figure', { hasText: 'Spent' }).getByText('£880', { exact: true })).toBeVisible()
-    await expect(group.locator('.budget-figure', { hasText: 'Left' }).getByText('£620', { exact: true })).toBeVisible()
+    const group = page.getByRole('region', { name: /^labour$/i })
+    await expect(group.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Remaining' }).getByText('£620', { exact: true })).toBeVisible()
 
     // no second home for labour: the manual labour category card is suppressed
     await expect(page.getByRole('region', { name: /budget category labour/i })).toHaveCount(0)
 
     // the no-category £600 roof labour is under Labour, not Uncategorised
-    await group.getByRole('button', { name: /show notes/i }).click()
+    await group.getByRole('button', { name: /show items/i }).click()
     await expect(group.getByText('roof')).toBeVisible()
-    const uncat = page.getByRole('region', { name: /^uncategorised spend$/i })
+    const uncat = page.getByRole('region', { name: /^uncategorised cost$/i })
     await expect(uncat.getByText('roof')).toHaveCount(0)
     // hours-only labour (Mike/Kurt) is nowhere in Spend
     await expect(uncat.getByText('Mike')).toHaveCount(0)

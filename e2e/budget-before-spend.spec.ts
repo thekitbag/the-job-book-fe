@@ -42,16 +42,16 @@ test.describe('Budget setup before spend', () => {
 
   test('a brand new job with no spend still offers a way to add a budget category', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion')
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(700)
 
-    await expect(page.getByText(/nothing spent yet/i)).toBeVisible()
+    await expect(page.getByText(/no costs yet/i)).toBeVisible()
     await expect(page.getByRole('button', { name: /add budget category/i })).toBeVisible()
   })
 
   test('adding a category before any spend shows an empty category card, and Add to <category> still works', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion 2')
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(700)
 
     await page.getByRole('button', { name: /add budget category/i }).click()
@@ -69,12 +69,12 @@ test.describe('Budget setup before spend', () => {
     const addTo = card.getByRole('button', { name: /add to materials/i })
     await expect(addTo).toBeVisible()
     await addTo.click()
-    await expect(page.getByRole('heading', { name: /add spend/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /add cost/i })).toBeVisible()
   })
 
   test('Record stays visible throughout the empty-Spend budget setup flow', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion 3')
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(700)
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
 

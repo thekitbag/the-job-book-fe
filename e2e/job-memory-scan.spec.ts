@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { openRowOverflow } from './helpers'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -31,7 +31,7 @@ async function gotoApp(page: Page) {
 
 async function openSpend(page: Page) {
   await gotoApp(page)
-  await goToSection(page, 'Spend')
+  await goToSection(page, 'Budget')
   await page.waitForTimeout(800)
 }
 
@@ -41,10 +41,10 @@ test.describe('Job memory lens tabs', () => {
     await expect(page.getByRole('button', { name: /things to check/i })).toBeVisible()
   })
 
-  test('opens the Spend tab with a single Known spend figure', async ({ page }) => {
+  test('opens the Budget tab with a single committed-cost figure', async ({ page }) => {
     await openSpend(page)
-    await expect(page.locator('.ws-job-title')).toHaveText('Spend')
-    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2270/)).toBeVisible()
+    await expect(page.locator('.ws-job-title')).toHaveText('Budget')
+    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2270/)).toBeVisible()
   })
 
   test('Materials keeps used and leftover reachable, flagging worth-checking', async ({ page }) => {
@@ -62,25 +62,26 @@ test.describe('Job memory lens tabs', () => {
     await expect(page.getByText(/uneven floor near back door/i)).toBeVisible()
   })
 
-  test('bought notes keep Fix memory and a collapsed source', async ({ page }) => {
+  test('bought rows open an action drawer with Fix memory and source', async ({ page }) => {
     await openSpend(page)
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
-    // Uncategorised rows keep one primary action; fix/source live behind "…".
-    const menu = await openRowOverflow(hardcore)
-    await expect(menu.getByRole('menuitem', { name: /fix memory/i })).toBeVisible()
+    const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
+    // Tapping the row opens one action drawer; fix/source live inside it.
+    const drawer = await openRowActions(page, hardcore)
+    await expect(drawer.getByRole('button', { name: /fix memory/i })).toBeVisible()
     await expect(hardcore.getByText('This came from your note')).not.toBeVisible()
-    await menu.getByRole('menuitem', { name: /show source/i }).click()
+    await drawer.getByRole('button', { name: /show source/i }).click()
     await expect(hardcore.getByText('This came from your note')).toBeVisible()
   })
 
   test('editing a bought note updates it in place', async ({ page }) => {
     await openSpend(page)
-    const hardcore = page.getByRole('region', { name: /uncategorised spend/i }).locator('.mem-card', { hasText: 'hardcore' })
-    await (await openRowOverflow(hardcore)).getByRole('menuitem', { name: /fix memory/i }).click()
+    const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
+    const drawer = await openRowActions(page, hardcore)
+    await drawer.getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     await form.locator('input[name="supplierName"]').fill('Selco')
     await page.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(600)
-    await expect(page.getByRole('region', { name: /uncategorised spend/i }).getByText('Selco')).toBeVisible()
+    await expect(page.getByRole('region', { name: /uncategorised cost/i }).getByText('Selco')).toBeVisible()
   })
 })

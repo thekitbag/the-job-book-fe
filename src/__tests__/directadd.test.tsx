@@ -108,8 +108,8 @@ async function openTab(name: string) {
 describe('Direct add — entry points', () => {
   it('each lens shows its own direct add action', async () => {
     renderWorkspace()
-    await openTab('Spend')
-    expect(await screen.findByRole('button', { name: 'Add spend' })).toBeInTheDocument()
+    await openTab('Budget')
+    expect(await screen.findByRole('button', { name: 'Add cost' })).toBeInTheDocument()
     await openTab('Labour')
     expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
     await openTab('Used')
@@ -123,9 +123,9 @@ describe('Direct add — entry points', () => {
 
   it('keeps the pinned Record action available with a form open', async () => {
     renderWorkspace()
-    await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
-    expect(screen.getByRole('form', { name: 'Add spend' })).toBeInTheDocument()
+    await openTab('Budget')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
+    expect(screen.getByRole('form', { name: 'Add cost' })).toBeInTheDocument()
     // The pinned Record bar stays mounted while a direct-add form is open.
     expect(document.querySelector('.ws-record-bar')).toBeTruthy()
   })
@@ -145,9 +145,9 @@ describe('Direct add — submit contracts', () => {
       },
     })
     renderWorkspace()
-    await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
-    const form = screen.getByRole('form', { name: 'Add spend' })
+    await openTab('Budget')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
+    const form = screen.getByRole('form', { name: 'Add cost' })
     fireEvent.change(form.querySelector('input[name="materialName"]')!, { target: { value: 'decking' } })
     fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '120' } })
     fireEvent.click(within(form).getByRole('button', { name: /^Save / }))
@@ -257,14 +257,14 @@ const BUDGET_WITH_TIMBER: BudgetSummaryResponse = {
 describe('Manual Add V2 — bottom sheet', () => {
   it('Spend direct add opens in a dialog sheet and closing returns to the section', async () => {
     renderWorkspace()
-    await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add spend' })
-    expect(within(sheet).getByRole('form', { name: 'Add spend' })).toBeInTheDocument()
+    await openTab('Budget')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add cost' })
+    expect(within(sheet).getByRole('form', { name: 'Add cost' })).toBeInTheDocument()
     fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     // section state is untouched behind the sheet
-    expect(screen.getByRole('tabpanel', { name: 'Spend' })).toBeInTheDocument()
+    expect(screen.getByRole('tabpanel', { name: 'Budget' })).toBeInTheDocument()
   })
 
   it('Escape closes the sheet', async () => {
@@ -278,8 +278,8 @@ describe('Manual Add V2 — bottom sheet', () => {
 
   it('offers a "Record instead" link that closes the sheet back to the global Record', async () => {
     renderWorkspace()
-    await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
+    await openTab('Budget')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
     fireEvent.click(screen.getByRole('button', { name: 'Record instead' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     // the one global Record action is right there
@@ -294,10 +294,10 @@ describe('Manual Add V2 — spend category context', () => {
 
   it('category card add opens the sheet titled and preselected for that category', async () => {
     renderWorkspace()
-    await openTab('Spend')
+    await openTab('Budget')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
     fireEvent.click(within(card).getByRole('button', { name: 'Add to timber' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add spend — timber' })
+    const sheet = screen.getByRole('dialog', { name: 'Add cost — timber' })
     const select = within(sheet).getByLabelText('Budget category') as HTMLSelectElement
     expect(select.value).toBe('cat-timber')
     // changeable/clearable through the normal select
@@ -307,11 +307,11 @@ describe('Manual Add V2 — spend category context', () => {
 
   it('saving category-context spend sends budgetCategoryId and refetches summaries', async () => {
     renderWorkspace()
-    await openTab('Spend')
+    await openTab('Budget')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
     fireEvent.click(within(card).getByRole('button', { name: 'Add to timber' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add spend — timber' })
-    fireEvent.change(within(sheet).getByRole('form', { name: 'Add spend' }).querySelector('input[name="materialName"]')!, { target: { value: '4x2 CLS' } })
+    const sheet = screen.getByRole('dialog', { name: 'Add cost — timber' })
+    fireEvent.change(within(sheet).getByRole('form', { name: 'Add cost' }).querySelector('input[name="materialName"]')!, { target: { value: '4x2 CLS' } })
     const viewCalls = mockGetMemoryView.mock.calls.length
     const budgetCalls = mockGetBudgetSummary.mock.calls.length
     fireEvent.click(within(sheet).getByRole('button', { name: /^Save / }))
@@ -327,7 +327,7 @@ describe('Manual Add V2 — spend category context', () => {
 
   it('an empty category card explains itself and offers the category add', async () => {
     renderWorkspace()
-    await openTab('Spend')
+    await openTab('Budget')
     const card = await screen.findByRole('region', { name: /budget category timber/i })
     expect(within(card).getByText('Nothing yet')).toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Add to timber' })).toBeInTheDocument()
@@ -339,9 +339,9 @@ describe('Manual Add V2 — empty states', () => {
   it('Spend, Labour, Used, and Notes empty states offer manual add and never a Record action', async () => {
     renderWorkspace()
 
-    await openTab('Spend')
-    const spendPanel = await screen.findByRole('tabpanel', { name: 'Spend' })
-    expect(within(spendPanel).getByText('Nothing spent yet')).toBeInTheDocument()
+    await openTab('Budget')
+    const spendPanel = await screen.findByRole('tabpanel', { name: 'Budget' })
+    expect(within(spendPanel).getByText('No costs yet')).toBeInTheDocument()
 
     await openTab('Labour')
     const labourPanel = await screen.findByRole('tabpanel', { name: 'Labour' })
@@ -393,7 +393,7 @@ describe('Manual Add V2 — empty states', () => {
 describe('Manual Add V2 — founder feedback acceptance', () => {
   it('has no standalone plus-only add buttons anywhere', async () => {
     renderWorkspace()
-    for (const t of ['Spend', 'Labour', 'Used', 'Notes']) {
+    for (const t of ['Budget', 'Labour', 'Used', 'Notes']) {
       await openTab(t)
       // no round "+" chrome, and no button whose accessible name is just "+"
       expect(document.querySelector('.btn-lens-add')).toBeNull()
@@ -410,8 +410,8 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
     pushCreated({ memoryType: 'general_note', summary: 'a note' })
     renderWorkspace()
 
-    await openTab('Spend')
-    expect(await screen.findByRole('button', { name: 'Add spend' })).toBeInTheDocument()
+    await openTab('Budget')
+    expect(await screen.findByRole('button', { name: 'Add cost' })).toBeInTheDocument()
     await openTab('Labour')
     expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
     await openTab('Used')
@@ -424,9 +424,9 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
 
   it('the sheet has no drag/swipe handle', async () => {
     renderWorkspace()
-    await openTab('Spend')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add spend' }))
-    expect(screen.getByRole('dialog', { name: 'Add spend' })).toBeInTheDocument()
+    await openTab('Budget')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
+    expect(screen.getByRole('dialog', { name: 'Add cost' })).toBeInTheDocument()
     expect(document.querySelector('.bottom-sheet-handle')).toBeNull()
   })
 

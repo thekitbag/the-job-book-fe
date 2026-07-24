@@ -207,10 +207,11 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
   const hasBudget = budget !== null && budget > 0
   const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
   const over = !!totals?.overBudget
-  // No kicker: the screen is called Spend and the figure is the biggest thing
-  // on it. "Known spend" stays as the region's accessible name.
+  const remaining = totals?.remainingAmount != null ? parseFloat(totals.remainingAmount) : null
+  // No kicker: the screen is called Budget and the figure is the biggest thing
+  // on it. The region's accessible name is "Budget".
   return (
-    <section className={`mem-hero${over ? ' mem-hero--over' : ''}`} aria-label="Known spend">
+    <section className={`mem-hero${over ? ' mem-hero--over' : ''}`} aria-label="Budget">
       <p className="mem-hero-amount">
         {total.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}
         {hasBudget && <span className="mem-hero-of"> of {formatMoney(budget!, 'GBP')}</span>}
@@ -227,10 +228,11 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
         ? <>
             {/* The remaining figure is accent-coloured, so by the theme's rule
                 it has to do something: it jumps to the per-category breakdown
-                that explains it. */}
-            {!over && (
+                that explains it. Client-formatted "remaining budget" — never the
+                backend's spend-era label. */}
+            {!over && remaining !== null && (
               <button type="button" className="mem-hero-sub" onClick={onShowBreakdown}>
-                {totals?.remainingLabel ?? ''} ›
+                {formatMoney(remaining, 'GBP')} remaining budget ›
               </button>
             )}
             <div className="mem-hero-bar"><span style={{ width: `${pct}%` }} /></div>
@@ -348,7 +350,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
                 <button type="button" role="menuitem" onClick={() => { setOpenMenuCatId(null); setEditingBudgetId(c.id) }}>Edit budget</button>
                 <button type="button" role="menuitem" className="budget-cat-menu-danger" disabled={savingCatId === c.id} onClick={() => {
                   setOpenMenuCatId(null)
-                  if (window.confirm(`Remove "${c.name}"? Its spend moves to Uncategorised.`)) handleArchiveCategory(c.id)
+                  if (window.confirm(`Remove "${c.name}"? Its cost moves to Uncategorised.`)) handleArchiveCategory(c.id)
                 }}>Remove category</button>
               </div>
             )}
@@ -356,10 +358,10 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         </div>
         <BudgetBar spend={cs.knownSpendAmount} budget={cs.budgetAmount} over={cs.overBudget} />
         <div className="budget-cat-figures">
-          <div className="budget-figure"><dt>Spent</dt><dd>{moneyFigure(cs.knownSpendAmount) ?? 'None yet'}</dd></div>
+          <div className="budget-figure"><dt>Cost</dt><dd>{moneyFigure(cs.knownSpendAmount) ?? 'None yet'}</dd></div>
           <div className="budget-figure"><dt>Budget</dt><dd>{moneyFigure(cs.budgetAmount) ?? 'Not set'}</dd></div>
           {cs.budgetLabel && (
-            <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over' : 'Left'}</dt><dd>{moneyFigure(cs.remainingAmount?.replace('-', '') ?? null)}</dd></div>
+            <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over' : 'Remaining'}</dt><dd>{moneyFigure(cs.remainingAmount?.replace('-', '') ?? null)}</dd></div>
           )}
         </div>
         {notes.length === 0 && (
@@ -370,7 +372,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
         <div className="budget-cat-foot">
           {notes.length > 0 && (
             <button type="button" className="notes-toggle" aria-expanded={open} onClick={() => toggleCat(c.id)}>
-              <span>{open ? 'Hide notes' : `Show notes (${notes.length})`}</span>
+              <span>{open ? 'Hide items' : `Show items (${notes.length})`}</span>
               <span className="notes-toggle-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
             </button>
           )}
@@ -378,22 +380,22 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             kind="spend"
             variant="button"
             buttonLabel={`Add to ${c.name}`}
-            label="Add spend"
-            title={`Add spend — ${c.name}`}
+            label="Add cost"
+            title={`Add cost — ${c.name}`}
             initialCategoryId={c.id}
             categories={spendAddCategories}
             onAdd={addMemoryItem}
           />
         </div>
         {notes.length > 0 && open && <div className="cat-notes">{notes.map(item => (
-          <MemoryCard key={item.id} item={item} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+          <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
         ))}</div>}
       </section>
     )
   }
 
   return (
-    <div className="mem-tabpanel" role="tabpanel" aria-label="Spend">
+    <div className="mem-tabpanel" role="tabpanel" aria-label="Budget">
       {hasSpendContent && totalKnownCost && (
         <KnownSpendHero
           total={totalKnownCost}
@@ -455,9 +457,9 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
 
       {!hasSpendContent && (
         <EmptyState
-          title="Nothing spent yet"
-          hint="Add what you’ve bought for this job, or say it with Record and it’ll be picked up for you."
-          action={<DirectAddForm kind="spend" variant="button" label="Add spend" categories={spendAddCategories} onAdd={addMemoryItem} />}
+          title="No costs yet"
+          hint="Add what you’ve bought or committed for this job, or say it with Record and it’ll be picked up for you."
+          action={<DirectAddForm kind="spend" variant="button" label="Add cost" categories={spendAddCategories} onAdd={addMemoryItem} />}
         />
       )}
 
@@ -467,7 +469,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
       <section aria-label="Budget categories" ref={byCategoryRef}>
         <DirectAddForm
           kind="spend"
-          label="Add spend"
+          label="Add cost"
           sectionLabel="By category"
           categories={spendAddCategories}
           onAdd={addMemoryItem}
@@ -492,7 +494,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             />
           </div>
         ) : (
-          <section className="budget-cat budget-cat--labour" aria-label="Labour spend">
+          <section className="budget-cat budget-cat--labour" aria-label="Labour">
             <div className="budget-cat-head">
               <h3 className="budget-cat-name">Labour</h3>
               {/* Always the "⋯" — whether or not a Labour budget category
@@ -527,20 +529,20 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             </div>
             <BudgetBar spend={labourSpendGroup.knownSpendAmount} budget={labourSpendGroup.budgetAmount} over={labourSpendGroup.overBudget} />
             <div className="budget-cat-figures">
-              <div className="budget-figure"><dt>Spent</dt><dd>{moneyFigure(labourSpendGroup.knownSpendAmount) ?? 'None yet'}</dd></div>
+              <div className="budget-figure"><dt>Cost</dt><dd>{moneyFigure(labourSpendGroup.knownSpendAmount) ?? 'None yet'}</dd></div>
               <div className="budget-figure"><dt>Budget</dt><dd>{moneyFigure(labourSpendGroup.budgetAmount) ?? 'Not set'}</dd></div>
               {labourSpendGroup.budgetLabel && (
-                <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}><dt>{labourSpendGroup.overBudget ? 'Over' : 'Left'}</dt><dd>{moneyFigure(labourSpendGroup.remainingAmount?.replace('-', '') ?? null)}</dd></div>
+                <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}><dt>{labourSpendGroup.overBudget ? 'Over' : 'Remaining'}</dt><dd>{moneyFigure(labourSpendGroup.remainingAmount?.replace('-', '') ?? null)}</dd></div>
               )}
             </div>
             {labourGroupItems.length > 0
               ? <>
                   <button type="button" className="notes-toggle" aria-expanded={!!expandedCats[LABOUR_GROUP_KEY]} onClick={() => toggleCat(LABOUR_GROUP_KEY)}>
-                    <span>{expandedCats[LABOUR_GROUP_KEY] ? 'Hide notes' : `Show notes (${labourGroupItems.length})`}</span>
+                    <span>{expandedCats[LABOUR_GROUP_KEY] ? 'Hide items' : `Show items (${labourGroupItems.length})`}</span>
                     <span className="notes-toggle-chev" aria-hidden="true">{expandedCats[LABOUR_GROUP_KEY] ? '▴' : '▾'}</span>
                   </button>
                   {expandedCats[LABOUR_GROUP_KEY] && <div className="cat-notes">{labourGroupItems.map(item => (
-                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} />
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" />
                   ))}</div>}
                 </>
               : <p className="cat-empty">Nothing yet</p>}
@@ -562,11 +564,11 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
                 category: visible, counted once through normal spend rules, and
                 fixable — but never a fresh add target. */}
             {historicalLabourCategoryItems.length > 0 && (
-              <div className="labour-historical" role="group" aria-label="Existing spend in the Labour category">
-                <p className="labour-historical-title">Existing spend in this category</p>
+              <div className="labour-historical" role="group" aria-label="Existing cost in the Labour category">
+                <p className="labour-historical-title">Existing cost in this category</p>
                 <div className="cat-notes">
                   {historicalLabourCategoryItems.map(item => (
-                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
                   ))}
                 </div>
               </div>
@@ -588,13 +590,13 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
       {/* Zone 3: plain rows on white. These are items, not categories — no band,
           no stat grid, and a smaller name — so the two can't be confused. */}
       {uncatItems.length > 0 && (
-        <section className="uncat" aria-label="Uncategorised spend">
+        <section className="uncat" aria-label="Uncategorised cost">
           <div className="uncat-head">
             <span className="mem-section-label uncat-kicker">Not in a category yet</span>
             <span className="uncat-count">{uncatItems.length} · {formatMoney(uncatTotal, 'GBP')}</span>
           </div>
           <div className="uncat-rows">
-            {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} variant="row" />)}
+            {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} variant="sheet" />)}
           </div>
         </section>
       )}

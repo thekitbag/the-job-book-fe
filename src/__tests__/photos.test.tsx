@@ -230,8 +230,8 @@ describe('Job photos — section and upload', () => {
     // no spend/budget refresh is triggered — photos are evidence, not spend
     expect(mockGetBudgetSummary.mock.calls.length).toBe(budgetCallsBefore)
     fireEvent.click(screen.getByRole('button', { name: /job home/i }))
-    fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
-    const hero = await screen.findByRole('region', { name: /^known spend$/i })
+    fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
+    const hero = await screen.findByRole('region', { name: /^budget$/i })
     expect(within(hero).getByText(/£600/)).toBeInTheDocument()
   })
 

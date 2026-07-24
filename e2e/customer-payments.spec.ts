@@ -41,8 +41,8 @@ test.describe('Customer payments', () => {
   test('adding a stage payment updates paid and still owed — and Spend is untouched', async ({ page }) => {
     await gotoApp(page)
     // wait for the money-out summary to load before snapshotting it
-    await expect(page.getByRole('button', { name: 'Open Spend' })).toContainText('£2270')
-    const spendBefore = await page.getByRole('button', { name: 'Open Spend' }).textContent()
+    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2270')
+    const spendBefore = await page.getByRole('button', { name: 'Open Budget' }).textContent()
 
     await page.getByRole('button', { name: 'Open Payments' }).click()
     await page.waitForTimeout(600)
@@ -62,7 +62,7 @@ test.describe('Customer payments', () => {
     // money out unchanged
     await page.getByRole('button', { name: /job home/i }).click()
     await page.waitForTimeout(600)
-    const spendAfter = await page.getByRole('button', { name: 'Open Spend' }).textContent()
+    const spendAfter = await page.getByRole('button', { name: 'Open Budget' }).textContent()
     expect(spendAfter).toBe(spendBefore)
     const paidCard = page.getByRole('button', { name: 'Open Payments' })
     await expect(paidCard.locator('.ws-home-card-value')).toHaveText('£2500')

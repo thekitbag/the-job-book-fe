@@ -100,7 +100,7 @@ function renderWorkspace(job: Job = JOB) {
   return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 async function openSpend() {
-  fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
   const area = await screen.findByRole('region', { name: /not counted yet/i })
   // The items live behind the summary row's "Add prices" disclosure.
   fireEvent.click(within(area).getByRole('button', { name: /add prices/i }))
@@ -189,7 +189,7 @@ describe('Spend cost-basis attention', () => {
     fireEvent.click(within(insulation).getByRole('button', { name: 'Confirm £120 total' }))
     await screen.findByText(/couldn’t refresh/i)
     // last server-confirmed hero figure is preserved
-    expect(within(screen.getByRole('region', { name: /^known spend$/i })).getByText(/£40/)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: /^budget$/i })).getByText(/£40/)).toBeInTheDocument()
   })
 
   it('ignores a resolution refetch that resolves after a job switch', async () => {

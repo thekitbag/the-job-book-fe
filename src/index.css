@@ -4247,10 +4247,15 @@ code {
 .ws-home-card-figures {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
   margin-left: auto;
   min-width: 0;
 }
+/* Budget's third line (remaining budget) always drops beneath the value/denom,
+   right-aligned, so a long "£X remaining budget" never crowds the row. */
+.ws-home-card-sub { flex-basis: 100%; text-align: right; }
 .ws-home-card-value {
   font-size: var(--text-lg);
   font-weight: 700;

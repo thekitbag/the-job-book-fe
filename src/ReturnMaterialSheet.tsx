@@ -71,7 +71,7 @@ function ReturnFields({ item, submitting, error, onSubmit, onCancel }: {
       {/* Says plainly what a refund does, so the spend total never moves
           unexplained — and leaving it blank stays a legitimate answer. */}
       <p className="return-form-hint">
-        A refund comes off your known spend. Leave it blank if you haven’t been paid back yet.
+        A refund comes off your Budget. Leave it blank if you haven’t recorded one yet.
       </p>
       <label className="queue-field">
         <span className="queue-field-label">Date returned</span>

@@ -42,10 +42,10 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     // Back to capture, open Job memory — the confirmed timber spend (£120) now
     // sits under the timber budget category.
     await page.getByRole('button', { name: /back/i }).click()
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(900)
     const timberCat = page.getByRole('region', { name: /budget category timber/i })
-    await expect(timberCat.locator('.budget-figure', { hasText: 'Spent' }).getByText('£120', { exact: true })).toBeVisible()
+    await expect(timberCat.locator('.budget-figure', { hasText: 'Cost' }).getByText('£120', { exact: true })).toBeVisible()
   })
 
   test('a bought/ordered draft with no suggestion can be left uncategorised', async ({ page }) => {
@@ -67,13 +67,13 @@ test.describe('Budget category in review + Job memory bought tab', () => {
   test('Job memory Spend tab shows one Known spend with category cards', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(900)
 
     // single job-level Known spend (bought £1390 + labour £880 = £2270)
-    await expect(page.getByRole('region', { name: /^known spend$/i }).getByText(/£2270/)).toBeVisible()
-    await expect(page.getByRole('region', { name: /budget category cladding/i }).locator('.budget-figure', { hasText: 'Spent' }).getByText('£1200', { exact: true })).toBeVisible()
-    await expect(page.getByRole('region', { name: /uncategorised spend/i }).getByText('hardcore')).toBeVisible()
+    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2270/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /budget category cladding/i }).locator('.budget-figure', { hasText: 'Cost' }).getByText('£1200', { exact: true })).toBeVisible()
+    await expect(page.getByRole('region', { name: /uncategorised cost/i }).getByText('hardcore')).toBeVisible()
   })
 
   test('there is no separate Budget destination — one spend model', async ({ page }) => {

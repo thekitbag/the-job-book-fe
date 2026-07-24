@@ -30,18 +30,18 @@ async function gotoApp(page: Page) {
 test.describe('Manual Add V2', () => {
   test('spend direct add opens in a bottom sheet and saves', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
-    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
+    await page.getByRole('button', { name: 'Add cost', exact: true }).click()
 
-    const sheet = page.getByRole('dialog', { name: 'Add spend' })
+    const sheet = page.getByRole('dialog', { name: 'Add cost' })
     await expect(sheet).toBeVisible()
     // no drag/swipe handle — dismissal is ×, backdrop, Escape only
     await expect(page.locator('.bottom-sheet-handle')).toHaveCount(0)
     // opening must not auto-focus a field (no surprise mobile keyboard)
     const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? 'BODY')
     expect(['INPUT', 'TEXTAREA', 'SELECT']).not.toContain(activeTag)
-    const form = sheet.getByRole('form', { name: 'Add spend' })
+    const form = sheet.getByRole('form', { name: 'Add cost' })
     await form.locator('input[name="materialName"]').fill('composite decking')
     await form.locator('input[name="costAmount"]').fill('240')
     await form.getByRole('button', { name: /^Save / }).click()
@@ -54,7 +54,7 @@ test.describe('Manual Add V2', () => {
 
   test('category card add preselects the category and the item lands in it', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
 
     // electrics is a seeded category with no spend — its empty state offers the add
@@ -62,40 +62,40 @@ test.describe('Manual Add V2', () => {
     await expect(card.getByText('Nothing yet')).toBeVisible()
     await card.getByRole('button', { name: 'Add to electrics' }).click()
 
-    const sheet = page.getByRole('dialog', { name: 'Add spend — electrics' })
+    const sheet = page.getByRole('dialog', { name: 'Add cost — electrics' })
     await expect(sheet).toBeVisible()
     // category is preselected and visible (changeable through the same select)
     await expect(sheet.getByLabel('Budget category')).toHaveValue('cat-electrics')
-    const form = sheet.getByRole('form', { name: 'Add spend' })
+    const form = sheet.getByRole('form', { name: 'Add cost' })
     await form.locator('input[name="materialName"]').fill('consumer unit')
     await form.locator('input[name="costAmount"]').fill('180')
     await form.getByRole('button', { name: /^Save / }).click()
     await page.waitForTimeout(900)
 
     // saved with the category → shows inside the electrics card per backend summary
-    await expect(card.locator('.budget-figure', { hasText: 'Spent' }).getByText('£180', { exact: true })).toBeVisible()
-    await card.getByRole('button', { name: /show notes/i }).click()
+    await expect(card.locator('.budget-figure', { hasText: 'Cost' }).getByText('£180', { exact: true })).toBeVisible()
+    await card.getByRole('button', { name: /show items/i }).click()
     await expect(card.getByText('consumer unit')).toBeVisible()
   })
 
   test('closing the sheet returns to the same section state', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Spend')
+    await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
     // expand a category's notes first
     const cladding = page.getByRole('region', { name: /budget category cladding/i })
-    await cladding.getByRole('button', { name: /show notes/i }).click()
+    await cladding.getByRole('button', { name: /show items/i }).click()
     await expect(cladding.getByText('plasterboard').first()).toBeVisible()
 
-    await page.getByRole('button', { name: 'Add spend', exact: true }).click()
-    await page.getByRole('dialog', { name: 'Add spend' }).getByRole('button', { name: 'Close' }).click()
+    await page.getByRole('button', { name: 'Add cost', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Add cost' }).getByRole('button', { name: 'Close' }).click()
     // the expanded notes are still expanded — no section state lost
     await expect(cladding.getByText('plasterboard').first()).toBeVisible()
   })
 
   test('the global Record bar is the only voice action; empty states offer manual add only', async ({ page }) => {
     await gotoApp(page)
-    for (const tab of ['Spend', 'Labour', 'Used', 'Notes']) {
+    for (const tab of ['Budget', 'Labour', 'Used', 'Notes']) {
       if (tab === 'Used') await goToSection(page, 'Materials', 'Used')
       else if (tab === 'Notes') await goToSection(page, 'Job log', 'Notes')
       else await goToSection(page, tab)

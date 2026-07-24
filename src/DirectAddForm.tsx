@@ -60,8 +60,10 @@ function DirectAddFields({
   const [noteType, setNoteType] = useState<MemoryType>('general_note')
 
   const isMaterialUse = kind === 'used' || kind === 'leftover'
+  // User-facing form name. 'spend' is the Budget "cost" concept (internal kind
+  // name stays 'spend'); its add action reads "Add cost".
   const label =
-    kind === 'spend' ? 'Add spend' :
+    kind === 'spend' ? 'Add cost' :
     kind === 'labour' ? 'Add labour' :
     kind === 'used' ? 'Add used item' :
     kind === 'leftover' ? 'Add leftover' : 'Add note'

@@ -123,7 +123,7 @@ describe('Payments — job home card', () => {
 
   it('the Payments card is separate from the Spend card and never changes Spend context', async () => {
     renderWorkspace()
-    const spend = screen.getByRole('button', { name: 'Open Spend' })
+    const spend = screen.getByRole('button', { name: 'Open Budget' })
     await waitFor(() => expect(spend).toHaveTextContent('£600'))
     expect(spend).not.toHaveTextContent(/received/)
   })
@@ -279,7 +279,7 @@ describe('Payments — workspace', () => {
     expect(vi.mocked(getBudgetSummary).mock.calls.length).toBe(budgetCalls)
     // and the Spend card still shows the same known spend
     await user.click(screen.getByRole('button', { name: /job home/i }))
-    expect(screen.getByRole('button', { name: 'Open Spend' })).toHaveTextContent('£600')
+    expect(screen.getByRole('button', { name: 'Open Budget' })).toHaveTextContent('£600')
   })
 })
 

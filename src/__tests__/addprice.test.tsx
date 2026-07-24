@@ -82,7 +82,7 @@ function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 async function openNotCounted() {
-  fireEvent.click(screen.getByRole('button', { name: 'Open Spend' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
   const area = await screen.findByRole('region', { name: /not counted yet/i })
   // The items live behind the summary row's "Add prices" disclosure.
   fireEvent.click(within(area).getByRole('button', { name: /add prices/i }))
@@ -110,7 +110,7 @@ describe('Add price to a no-price bought item', () => {
     await waitFor(() => expect(mockGetMemoryView.mock.calls.length).toBeGreaterThanOrEqual(2))
     await waitFor(() => expect(mockGetBudgetSummary.mock.calls.length).toBeGreaterThanOrEqual(2))
     // known spend updates and the item leaves "Not counted yet"
-    await waitFor(() => expect(within(screen.getByRole('region', { name: /^known spend$/i })).getByText(/£120/)).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByRole('region', { name: /^budget$/i })).getByText(/£120/)).toBeInTheDocument())
     await waitFor(() => expect(screen.queryByRole('region', { name: /not counted yet/i })).not.toBeInTheDocument())
   })
 
