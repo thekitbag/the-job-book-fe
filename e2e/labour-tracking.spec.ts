@@ -83,10 +83,11 @@ test.describe('Labour tab — daily view', () => {
     await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
 
-    // fix Mike's entry: 4h → 7h and move it to yesterday
+    // fix Mike's entry: 4h → 7h and move it to yesterday — via the row drawer.
     const today = page.getByRole('region', { name: 'Labour Today' })
     const mike = today.locator('.labour-entry', { hasText: 'Mike' })
-    await mike.getByRole('button', { name: /fix memory/i }).click()
+    await mike.locator('.labour-entry-tap').click()
+    await page.getByRole('dialog').getByRole('button', { name: /fix memory/i }).click()
     const form = page.getByRole('form', { name: /edit memory/i })
     const yesterday = new Date(Date.now() - 86_400_000)
     const p = (n: number) => String(n).padStart(2, '0')

@@ -676,6 +676,18 @@ describe('Workspace — Labour tab', () => {
     expect(within(labour).getAllByText('No cost added').length).toBeGreaterThan(0)
   })
 
+  it('a labour row opens the shared action drawer — no inline Fix memory CTA', async () => {
+    renderWorkspace()
+    openTab('Labour')
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
+    // Rows carry no repeated inline CTA; actions live behind the tap.
+    expect(within(labour).queryByRole('button', { name: /fix memory/i })).toBeNull()
+    fireEvent.click(within(labour).getByText('electrics').closest('.labour-entry-tap')!)
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: /remove item/i })).toBeInTheDocument()
+  })
+
   it('renders an entry without a named person safely, and keeps worth-checking visible but untotalled', async () => {
     renderWorkspace()
     openTab('Labour')

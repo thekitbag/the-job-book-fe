@@ -68,9 +68,14 @@ test.describe('Job memory lens tabs', () => {
     // Tapping the row opens one action drawer; fix/source live inside it.
     const drawer = await openRowActions(page, hardcore)
     await expect(drawer.getByRole('button', { name: /fix memory/i })).toBeVisible()
-    await expect(hardcore.getByText('This came from your note')).not.toBeVisible()
+    // Source is never expanded inline on the underlying row.
+    await expect(hardcore.getByText('This came from your note')).toHaveCount(0)
+    // Show source pushes into the drawer's Source sub-state; Back returns.
     await drawer.getByRole('button', { name: /show source/i }).click()
-    await expect(hardcore.getByText('This came from your note')).toBeVisible()
+    await expect(drawer.getByText(/this came from your note/i)).toBeVisible()
+    await expect(hardcore.getByText('This came from your note')).toHaveCount(0)
+    await drawer.getByRole('button', { name: /back/i }).click()
+    await expect(drawer.getByRole('button', { name: /fix memory/i })).toBeVisible()
   })
 
   test('editing a bought note updates it in place', async ({ page }) => {

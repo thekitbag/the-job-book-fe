@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MemoryEditForm from './MemoryEditForm'
 import ReturnMaterialSheet from './ReturnMaterialSheet'
 import BottomSheet from './BottomSheet'
+import ItemActionDrawer from './ItemActionDrawer'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
 import { costDetailRows, deriveEachTotal, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
@@ -204,7 +205,7 @@ export default function MemoryCard({
   const [picking, setPicking] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [showSource, setShowSource] = useState(false)
-  const [actionsOpen, setActionsOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [returning, setReturning] = useState(false)
   const dateLabel = DATED_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
   const name = itemName(item)
@@ -225,8 +226,8 @@ export default function MemoryCard({
 
   const isRow = variant === 'row'
 
-  // ── Tappable ledger row + one actions sheet ──
-  if (variant === 'sheet' && !confirmingRemove) {
+  // ── Tappable ledger row + one action drawer (state machine) ──
+  if (variant === 'sheet') {
     // "3 packs · from Jewson" — quantity and where it came from. Spend-dated
     // types keep their date here (it is the only place it now shows, and a
     // bought line without a date is a worse record). A returned item's money is
@@ -250,10 +251,12 @@ export default function MemoryCard({
     const label = name ?? item.summary
     // Uncategorised cost entries can be filed to a category from the drawer.
     const canPickCategory = CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId
+    // Cost stated in cost language — never "paid": Budget tracks committed cost.
+    const costLine = price ? `${price} cost` : null
 
     return (
       <div className={`mem-card mem-card--sheet${uncertain ? ' mem-card--unresolved' : ''}`}>
-        <button type="button" className="mem-row-tap" onClick={() => setActionsOpen(true)}>
+        <button type="button" className="mem-row-tap" aria-label={`Open actions for ${label}`} onClick={() => setDrawerOpen(true)}>
           <span className="mem-row-tap-text">
             <span className="mem-row-tap-name">{label}</span>
             {meta && <span className="mem-row-tap-meta">{meta}</span>}
@@ -263,13 +266,13 @@ export default function MemoryCard({
         </button>
 
         {/* A cost item that isn't counted in Budget yet — still said on the
-            row, not hidden in the sheet: it explains a figure Mike can see. */}
+            row, not hidden in the drawer: it explains a figure Mike can see. */}
         {excludedCopy && (
           <p className="mem-card-notcounted">Not counted yet · {excludedCopy}</p>
         )}
 
         {/* Worth checking is a question, not an action, so it stays in front of
-            him rather than moving behind the row's sheet. */}
+            him rather than moving behind the row's drawer. */}
         {uncertain && <p className="mem-row-check">Worth checking</p>}
         {uncertain && !ackUnsure && (
           <div className="mem-resolve">
@@ -282,77 +285,35 @@ export default function MemoryCard({
           </div>
         )}
 
-        {showSource && item.source && (
-          <div className="mem-source-body mem-row-source">
-            <p className="mem-source-label">This came from your note</p>
-            <p className="mem-source-time">Saved {formatSavedStamp(item.source.capturedAt)}</p>
-            {item.source.transcriptText && (
-              <>
-                <p className="mem-source-label">What the system heard</p>
-                <blockquote className="mem-source-quote">{item.source.transcriptText}</blockquote>
-              </>
-            )}
-          </div>
-        )}
+        {/* One drawer, whose content pushes/replaces between actions and the
+            Show source / Fix memory / Remove item sub-states. */}
+        <ItemActionDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          item={item}
+          title={label}
+          meta={meta || null}
+          costLine={costLine}
+          categories={categories}
+          canPickCategory={canPickCategory}
+          onAssignCategory={onAssignCategory}
+          assigningCategory={assigningCategory}
+          onReturnStart={canReturn ? () => { setDrawerOpen(false); setReturning(true) } : undefined}
+          move={move}
+          onMove={onMove}
+          mutating={mutating}
+          submitting={submitting}
+          errorMsg={errorMsg}
+          onSave={onSave}
+          onRemove={onRemove}
+        />
 
-        {/* Every action for this item, in one place, at row scale. */}
-        {actionsOpen && (
-          <BottomSheet title={label} onClose={() => setActionsOpen(false)}>
-            {meta && <p className="row-sheet-sub">{meta}</p>}
-            {/* Cost stated in cost language — never "paid": Budget tracks
-                committed cost, not money out. */}
-            {price && <p className="row-sheet-cost">{price} cost</p>}
-            <div className="row-sheet-actions">
-              {canPickCategory && (
-                <button type="button" className="row-sheet-opt" disabled={assigningCategory} onClick={() => { setActionsOpen(false); setPicking(true) }}>
-                  Choose category <span aria-hidden="true">›</span>
-                </button>
-              )}
-              {canReturn && (
-                <button type="button" className="row-sheet-opt" onClick={() => { setActionsOpen(false); setReturning(true) }}>
-                  Mark as returned <span aria-hidden="true">›</span>
-                </button>
-              )}
-              {move && (
-                <button type="button" className="row-sheet-opt" disabled={mutating} onClick={() => { setActionsOpen(false); onMove(move.type) }}>
-                  {move.label} <span aria-hidden="true">›</span>
-                </button>
-              )}
-              {item.source && (
-                <button type="button" className="row-sheet-opt" onClick={() => { setActionsOpen(false); setShowSource(v => !v) }}>
-                  {showSource ? 'Hide source' : 'Show source'} <span aria-hidden="true">›</span>
-                </button>
-              )}
-              <button type="button" className="row-sheet-opt" onClick={() => { setActionsOpen(false); onStartEdit() }}>
-                Fix memory <span aria-hidden="true">›</span>
-              </button>
-              <button type="button" className="row-sheet-opt row-sheet-opt--danger" onClick={() => { setActionsOpen(false); setConfirmingRemove(true) }}>
-                Remove item
-              </button>
-            </div>
-            <button type="button" className="row-sheet-cancel" onClick={() => setActionsOpen(false)}>Cancel</button>
-          </BottomSheet>
-        )}
-
-        {/* Category picker, opened from the drawer for an uncategorised cost. */}
-        {picking && (
-          <BottomSheet title="Choose a category" onClose={() => setPicking(false)}>
-            <div className="pick-cat-list">
-              {categories.map(c => (
-                <button key={c.id} type="button" className="pick-cat-opt" onClick={() => { onAssignCategory(c.id); setPicking(false) }}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </BottomSheet>
-        )}
-
-        {/* Controlled: the return form opens from the sheet's row, not from a
-            second button sitting on the item. */}
+        {/* The return form is its own flow, opened after the action drawer
+            closes — a transition, never a stacked second drawer. */}
         {canReturn && (
           <ReturnMaterialSheet item={item} onReturn={onReturn} controlledOpen={returning} onOpenChange={setReturning} />
         )}
-        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+        {errorMsg && !drawerOpen && <p className="queue-item-error" role="alert">{errorMsg}</p>}
       </div>
     )
   }
