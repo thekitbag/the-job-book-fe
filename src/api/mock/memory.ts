@@ -2,6 +2,7 @@ import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryVie
 import { deriveCostSummary, deriveEachTotal, deriveGrossKnownCost, deriveLabourHoursSummary, deriveLabourSummary, deriveRefundsSummary, deriveTotalKnownCost } from '../../memoryScan'
 import { ApiError } from '../client'
 import { MOCK_JOBS } from './jobs'
+import { recordMockRefund } from './money'
 import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
 
 export function mockMemoryView(jobId: string): MemoryViewResponse {
@@ -178,6 +179,9 @@ export function mockReturnMemoryItem(jobId: string, memoryItemId: string, req: R
     remainingLeftoverItem = { ...source }
   }
   upsertMockItem(sections, returnedItem)
+  // A trusted GBP refund is actual money in — record it in Money, keeping the
+  // Budget refund behaviour above. No refund figure → Money is untouched.
+  if (hasRefund) recordMockRefund(jobId, returnedItem)
   return { returnedItem: { ...returnedItem }, remainingLeftoverItem }
 }
 

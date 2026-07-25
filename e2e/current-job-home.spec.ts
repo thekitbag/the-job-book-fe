@@ -37,7 +37,7 @@ test.describe('Current job home', () => {
   })
 
   test('opens on job home with the four stable section cards and no old tab strip', async ({ page }) => {
-    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Money', 'Open Labour', 'Open Materials', 'Open Job log']) {
       await expect(page.getByRole('button', { name: card })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0)
@@ -51,7 +51,7 @@ test.describe('Current job home', () => {
 
   test('section cards fit the phone width without horizontal scroll', async ({ page }) => {
     const viewport = page.viewportSize()!
-    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Money', 'Open Labour', 'Open Materials', 'Open Job log']) {
       const box = await page.getByRole('button', { name: card }).boundingBox()
       expect(box).not.toBeNull()
       expect(box!.x).toBeGreaterThanOrEqual(0)
@@ -72,7 +72,7 @@ test.describe('Current job home', () => {
 
   test('Record is visible on home and every section workspace', async ({ page }) => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
-    for (const section of ['Budget', 'Payments', 'Labour', 'Materials', 'Job log']) {
+    for (const section of ['Budget', 'Money', 'Labour', 'Materials', 'Job log']) {
       await goToSection(page, section)
       await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
     }

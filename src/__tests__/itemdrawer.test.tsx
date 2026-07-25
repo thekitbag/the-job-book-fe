@@ -116,3 +116,37 @@ describe('ItemActionDrawer — one drawer, push/replace sub-states', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
+
+describe('ItemActionDrawer — Mark as paid', () => {
+  const controls = (over: Partial<Parameters<typeof ItemActionDrawer>[0]['markPaid'] & object> = {}) => ({
+    isPaid: () => false,
+    canMarkPaid: () => true,
+    onMarkPaid: vi.fn(),
+    pendingItemId: null,
+    ...over,
+  })
+
+  it('offers Mark as paid for an eligible, unpaid cost item and fires + closes on tap', () => {
+    const onMarkPaid = vi.fn()
+    const props = renderDrawer({ markPaid: controls({ onMarkPaid }) })
+    fireEvent.click(drawer().getByRole('button', { name: /mark as paid/i }))
+    expect(onMarkPaid).toHaveBeenCalledWith(props.item)
+    expect(props.onClose).toHaveBeenCalled()
+  })
+
+  it('shows a Paid state and no Mark as paid once the item is paid', () => {
+    renderDrawer({ markPaid: controls({ isPaid: () => true }) })
+    expect(drawer().getByText(/paid — recorded in money out/i)).toBeInTheDocument()
+    expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
+  })
+
+  it('omits Mark as paid when the item is not eligible', () => {
+    renderDrawer({ markPaid: controls({ canMarkPaid: () => false }) })
+    expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
+  })
+
+  it('never shows Mark as paid when Money is not wired (no markPaid prop)', () => {
+    renderDrawer()
+    expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
+  })
+})

@@ -515,6 +515,9 @@ export function useJobMemory(job: Job) {
 
   return {
     data, loadState, errorMsg, reload, refreshError, refreshSummary, refetch,
+    // Refetch the authoritative budget summary (e.g. after mark-paid, to
+    // confirm Budget cost is unchanged / pick up any paid metadata).
+    reloadBudget: loadBudget,
     addMemoryItem,
     budgetSummary, budgetCategories,
     ordered, labourSummary, totalKnownCost, grossKnownCost, refunds, labourHours, labourSpendGroup,

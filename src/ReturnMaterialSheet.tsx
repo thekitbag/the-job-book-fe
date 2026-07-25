@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { track } from './analytics'
 import BottomSheet from './BottomSheet'
 import { ApiError } from './api'
+import { useToast } from './Toast'
 import type { MemoryViewItem, ReturnMaterialRequest } from './types'
 
 const POS_DECIMAL = /^\d+(\.\d+)?$/
@@ -112,12 +113,21 @@ export default function ReturnMaterialSheet({ item, onReturn, controlledOpen, on
   const setOpen = (v: boolean) => (controlled ? onOpenChange?.(v) : setUncontrolledOpen(v))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   const submit = async (req: ReturnMaterialRequest) => {
     setSubmitting(true)
     setError(null)
     try {
       await onReturn(req)
+      // Say plainly what the return did to Money and to Budget. A trusted GBP
+      // refund is money in and comes off Budget; no refund means neither moved.
+      const refund = req.refundAmount && req.refundCurrency === 'GBP' ? req.refundAmount : null
+      if (refund) {
+        toast({ title: 'Marked returned', body: `Added £${refund} refund to Money in. Budget reduced by £${refund}.` })
+      } else {
+        toast({ title: 'Marked returned', body: 'No refund recorded. Money unchanged.', tone: 'plain' })
+      }
       setOpen(false)
     } catch (err: unknown) {
       // A 400 here is nearly always over-returning, but the copy asks him to

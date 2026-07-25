@@ -6,7 +6,7 @@ import {
   getSupportJobInspection,
   getSupportMemoryView,
   getSupportPhotos,
-  getSupportJobPayments,
+  getSupportJobMoney,
   getSupportReviewQueue,
   getSupportUserJobs,
   getSupportUsers,
@@ -19,7 +19,7 @@ import type {
   AuthUser,
   BudgetSummaryResponse,
   InspectionData,
-  JobPaymentsResponse,
+  JobMoneyResponse,
   JobPhoto,
   MemoryViewItem,
   MemoryViewResponse,
@@ -40,6 +40,12 @@ import type {
 // support mode cannot disturb the internal user's own workspace state.
 
 // ── Small shared bits ────────────────────────────────────────────────────────
+
+const KIND_LABEL_SUPPORT: Record<'customer_payment' | 'refund' | 'cost_paid', string> = {
+  customer_payment: 'Customer payment',
+  refund: 'Refund',
+  cost_paid: 'Paid out',
+}
 
 function formatWhen(iso: string | null): string {
   if (!iso) return '—'
@@ -301,10 +307,10 @@ function reviewItemHeadline(pm: ProposedMemory): string {
   return [qty, pm.materialName].filter(Boolean).join(' · ') || pm.summary
 }
 
-type ViewAsTab = 'spend' | 'payments' | 'labour' | 'used' | 'notes' | 'review'
+type ViewAsTab = 'spend' | 'money' | 'labour' | 'used' | 'notes' | 'review'
 const VIEW_AS_TABS: { key: ViewAsTab; label: string }[] = [
   { key: 'spend', label: 'Budget' },
-  { key: 'payments', label: 'Payments' },
+  { key: 'money', label: 'Money' },
   { key: 'labour', label: 'Labour' },
   { key: 'used', label: 'Used' },
   { key: 'notes', label: 'Notes' },
@@ -317,9 +323,9 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
   const [budget, setBudget] = useState<BudgetSummaryResponse | null>(null)
   const [queue, setQueue] = useState<ReviewQueue | null>(null)
   const [photos, setPhotos] = useState<JobPhoto[] | null>(null)
-  // Payments load separately and tolerate absence: an older backend without
-  // the support payments endpoint must not break the whole view-as screen.
-  const [payments, setPayments] = useState<JobPaymentsResponse | null>(null)
+  // Money loads separately and tolerates absence: an older backend without the
+  // support Money endpoint must not break the whole view-as screen.
+  const [money, setMoney] = useState<JobMoneyResponse | null>(null)
   const [failed, setFailed] = useState(false)
 
   const load = useCallback(() => {
@@ -335,16 +341,16 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
       })
       .catch((err: unknown) => {
         // never leave stale target-user data visible behind an error
-        setMemory(null); setBudget(null); setQueue(null); setPhotos(null); setPayments(null)
+        setMemory(null); setBudget(null); setQueue(null); setPhotos(null); setMoney(null)
         if (isNoAccess(err)) onNoAccess(); else setFailed(true)
       })
-    // Payments load fully independently: an older backend without the support
-    // payments endpoint (or a payments-only failure) must not take down the
-    // rest of the view-as screen — the tab just shows "no payment data".
+    // Money loads fully independently: an older backend without the support
+    // Money endpoint (or a Money-only failure) must not take down the rest of
+    // the view-as screen — the tab just shows "no money data".
     Promise.resolve()
-      .then(() => getSupportJobPayments(job.id))
-      .then(setPayments)
-      .catch(() => setPayments(null))
+      .then(() => getSupportJobMoney(job.id))
+      .then(setMoney)
+      .catch(() => setMoney(null))
   }, [job.id, onNoAccess])
   useEffect(() => { load() }, [load])
 
@@ -456,36 +462,41 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
             </div>
           )}
 
-          {tab === 'payments' && (
-            <div className="mem-tabpanel" role="tabpanel" aria-label="Payments">
-              {/* Read-only: no add/edit/delete/set-total controls in support mode. */}
-              {payments === null ? (
-                <p className="mem-tab-empty">No payment data available for this job.</p>
+          {tab === 'money' && (
+            <div className="mem-tabpanel" role="tabpanel" aria-label="Money">
+              {/* Read-only: no add/edit/delete/mark-paid/set-total controls in
+                  support mode — the same Money the user sees, nothing writable. */}
+              {money === null ? (
+                <p className="mem-tab-empty">No money data available for this job.</p>
               ) : (
                 <>
-                  <section className="pay-summary" aria-label="Payment summary">
+                  <section className="pay-summary" aria-label="Money summary">
+                    <div className="pay-summary-row">
+                      <span className="pay-summary-label">Money in</span>
+                      <span className="pay-summary-value">{money.moneyInAmount !== null ? `£${money.moneyInAmount}` : 'None yet'}</span>
+                    </div>
+                    <div className="pay-summary-row">
+                      <span className="pay-summary-label">Money out</span>
+                      <span className="pay-summary-value">{money.moneyOutAmount !== null ? `£${money.moneyOutAmount}` : 'None yet'}</span>
+                    </div>
                     <div className="pay-summary-row">
                       <span className="pay-summary-label">Customer total</span>
-                      <span className="pay-summary-value">{payments.customerTotalLabel ?? 'Not set'}</span>
+                      <span className="pay-summary-value">{money.customerTotalLabel ?? 'Not set'}</span>
                     </div>
-                    <div className="pay-summary-row">
-                      <span className="pay-summary-label">Paid</span>
-                      <span className="pay-summary-value">{payments.totalPaidAmount !== null ? `£${payments.totalPaidAmount}` : 'None yet'}</span>
-                    </div>
-                    {payments.stillOwedAmount !== null && !payments.overpaid && (
+                    {money.stillOwedAmount !== null && !money.overpaid && (
                       <div className="pay-summary-row">
                         <span className="pay-summary-label">Still owed</span>
-                        <span className="pay-summary-value">£{payments.stillOwedAmount}</span>
+                        <span className="pay-summary-value">£{money.stillOwedAmount}</span>
                       </div>
                     )}
-                    {payments.overpaid && <p className="pay-overpaid">£{payments.overpaidAmount} overpaid</p>}
+                    {money.overpaid && <p className="pay-overpaid">£{money.overpaidAmount} overpaid</p>}
                   </section>
-                  {payments.payments.length === 0
-                    ? <p className="mem-tab-empty">No payments recorded.</p>
-                    : payments.payments.map(p => (
-                        <p key={p.id} className="support-spend-row support-spend-row--card">
-                          <span>{p.note ? `${p.note}${p.reference ? ` · Ref: ${p.reference}` : ''}` : (p.reference ? `Ref: ${p.reference}` : 'Payment')}</span>
-                          <span>{p.amountLabel}</span>
+                  {money.rows.length === 0
+                    ? <p className="mem-tab-empty">No money movement recorded.</p>
+                    : money.rows.map(r => (
+                        <p key={r.id} className={`support-spend-row support-spend-row--card support-money-row--${r.direction}`}>
+                          <span>{r.sourceItemLabel ?? (r.note ? `${r.note}${r.reference ? ` · Ref: ${r.reference}` : ''}` : (r.reference ? `Ref: ${r.reference}` : KIND_LABEL_SUPPORT[r.kind]))}</span>
+                          <span>{r.amountLabel}</span>
                         </p>
                       ))}
                 </>

@@ -5,6 +5,7 @@ import ItemActionDrawer from './ItemActionDrawer'
 import LabourBudgetControl from './LabourBudgetControl'
 import { friendlyDayLabel, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
+import type { MarkPaidControls } from './markPaid'
 import type { LabourDayItem } from './types'
 
 // Spent-against-budget bar, matching the category bands on Spend — only drawn
@@ -30,7 +31,7 @@ function LabourBar({ spend, budget, over }: { spend: string | null; budget: stri
 // A labour entry as a tappable ledger row: tapping opens the shared item action
 // drawer (Show source / Fix memory / Remove item as sub-states), the same
 // pattern Budget, Materials and Job log use. No inline Fix memory or edit form.
-function LabourEntry({ entry, mem }: { entry: LabourDayItem; mem: JobMemory }) {
+function LabourEntry({ entry, mem, markPaid }: { entry: LabourDayItem; mem: JobMemory; markPaid?: MarkPaidControls }) {
   const { sectionItems, cardProps } = mem
   // Join back to the full memory-view item so the drawer's edit/remove act on it.
   const item = sectionItems('labour').find(i => i.id === entry.memoryItemId)
@@ -79,6 +80,7 @@ function LabourEntry({ entry, mem }: { entry: LabourDayItem; mem: JobMemory }) {
         categories={[]}
         onAssignCategory={() => {}}
         assigningCategory={false}
+        markPaid={markPaid}
         onMove={() => {}}
         mutating={p.mutating}
         submitting={p.submitting}
@@ -90,7 +92,7 @@ function LabourEntry({ entry, mem }: { entry: LabourDayItem; mem: JobMemory }) {
   )
 }
 
-export default function LabourTab({ mem }: { mem: JobMemory }) {
+export default function LabourTab({ mem, markPaid }: { mem: JobMemory; markPaid?: MarkPaidControls }) {
   const { labourHours, labourSpendGroup, addMemoryItem, refreshError, refetch, budgetError, handleSetLabourBudget } = mem
   const days = labourHours?.days ?? []
 
@@ -156,7 +158,7 @@ export default function LabourTab({ mem }: { mem: JobMemory }) {
                 <h3 className="labour-day-label">{friendlyDayLabel(day.date)}</h3>
                 {day.totalLabel && <span className="labour-day-total">{day.totalLabel}</span>}
               </div>
-              {day.items.map(entry => <LabourEntry key={entry.memoryItemId} entry={entry} mem={mem} />)}
+              {day.items.map(entry => <LabourEntry key={entry.memoryItemId} entry={entry} mem={mem} markPaid={markPaid} />)}
             </section>
           ))}
         </>

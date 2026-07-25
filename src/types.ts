@@ -960,3 +960,71 @@ export interface PatchJobPaymentRequest {
   note?: string | null
   reference?: string | null
 }
+
+// ── Money (actual movement — in and out) ─────────────────────────────────────
+// The unified Money read model. Budget tracks committed/allocated cost; Money
+// tracks what has actually moved. Existing customer payments project in here as
+// money-in rows without any physical migration.
+
+export type MoneyDirection = 'in' | 'out'
+// customer_payment / refund → in; cost_paid → out.
+export type MoneyKind = 'customer_payment' | 'refund' | 'cost_paid'
+
+export interface MoneyRow {
+  id: string
+  jobId: string
+  direction: MoneyDirection
+  kind: MoneyKind
+  amount: string
+  currency: 'GBP'
+  amountLabel: string // "+£1000" / "-£336" — signed, direction-aware
+  occurredAt: string
+  note: string | null
+  reference: string | null
+  // Links a money-out / refund row back to the memory item that caused it.
+  sourceMemoryItemId: string | null
+  sourceItemLabel: string | null
+  sourceMemoryType: string | null
+  editable: boolean
+  removable: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// GET /api/jobs/:jobId/money — combined totals + one history list, newest first.
+export interface JobMoneyResponse {
+  jobId: string
+  generatedAt: string
+
+  customerTotalAmount: string | null
+  customerTotalCurrency: 'GBP' | null
+  customerTotalLabel: string | null
+
+  moneyInAmount: string | null
+  moneyInCurrency: 'GBP' | null
+  moneyInLabel: string | null // e.g. "£4000 received"
+
+  moneyOutAmount: string | null
+  moneyOutCurrency: 'GBP' | null
+  moneyOutLabel: string | null // e.g. "£1124 paid out"
+
+  stillOwedAmount: string | null
+  stillOwedCurrency: 'GBP' | null
+  stillOwedLabel: string | null
+
+  overpaid: boolean
+  overpaidAmount: string | null
+  overpaidLabel: string | null
+
+  rows: MoneyRow[]
+}
+
+// POST /api/jobs/:jobId/money/out — mark a trusted Budget cost item as paid.
+// The amount is derived server-side from the trusted Budget line total; the
+// frontend never sends it (v1 is full-amount only).
+export interface MarkMoneyOutRequest {
+  sourceMemoryItemId: string
+  occurredAt?: string | null
+  note?: string | null
+  reference?: string | null
+}

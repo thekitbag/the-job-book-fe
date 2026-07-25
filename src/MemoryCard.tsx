@@ -6,6 +6,7 @@ import ItemActionDrawer from './ItemActionDrawer'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
 import { costDetailRows, deriveEachTotal, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
+import type { MarkPaidControls } from './markPaid'
 import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
 
 // Types shown with a structured type label + detail rows (not a prose summary).
@@ -166,6 +167,9 @@ export interface MemoryCardProps {
   onMove: (memoryType: MemoryType) => void
   // Left over items only. Rejects on failure so the sheet keeps Mike's values.
   onReturn: (req: ReturnMaterialRequest) => Promise<unknown>
+  // Budget cost items only (sheet variant): mark-as-paid capability, when the
+  // surrounding tab wires Money. Absent everywhere else.
+  markPaid?: MarkPaidControls
   // 'row' is the compact item scale used where rows must not be confusable with
   // the category bands above them (Spend → not in a category yet): a smaller
   // name, one primary action, everything else behind the row's "…".
@@ -194,6 +198,7 @@ export default function MemoryCard({
   onRemove,
   onMove,
   onReturn,
+  markPaid,
   variant = 'card',
 }: MemoryCardProps) {
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
@@ -253,12 +258,18 @@ export default function MemoryCard({
     const canPickCategory = CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId
     // Cost stated in cost language — never "paid": Budget tracks committed cost.
     const costLine = price ? `${price} cost` : null
+    const isPaid = markPaid?.isPaid(item) ?? false
 
     return (
       <div className={`mem-card mem-card--sheet${uncertain ? ' mem-card--unresolved' : ''}`}>
         <button type="button" className="mem-row-tap" aria-label={`Open actions for ${label}`} onClick={() => setDrawerOpen(true)}>
           <span className="mem-row-tap-text">
-            <span className="mem-row-tap-name">{label}</span>
+            <span className="mem-row-tap-name">
+              {label}
+              {/* A small paid tag — the money moved — without turning the row
+                  into a payments line. Budget inclusion is unaffected. */}
+              {isPaid && <span className="mem-row-paid-tag">Paid</span>}
+            </span>
             {meta && <span className="mem-row-tap-meta">{meta}</span>}
           </span>
           {price && <span className="mem-row-tap-price">{price}</span>}
@@ -299,6 +310,7 @@ export default function MemoryCard({
           onAssignCategory={onAssignCategory}
           assigningCategory={assigningCategory}
           onReturnStart={canReturn ? () => { setDrawerOpen(false); setReturning(true) } : undefined}
+          markPaid={markPaid}
           move={move}
           onMove={onMove}
           mutating={mutating}
