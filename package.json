@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "audit:ci": "node scripts/audit-ci.js"
   },
   "dependencies": {
     "@fontsource-variable/schibsted-grotesk": "^5.2.8",
