@@ -86,6 +86,16 @@ test.describe('Money — in and out', () => {
     expect(await page.getByRole('button', { name: 'Open Budget' }).textContent()).toBe(budgetBefore)
   })
 
+  test('a bought material can be marked paid from Materials too', async ({ page }) => {
+    await gotoApp(page)
+    await page.getByRole('button', { name: 'Open Materials' }).click()
+    // Bought is the default Materials tab.
+    await page.getByRole('button', { name: /open actions for hardcore/i }).click()
+    const drawer = page.getByRole('dialog')
+    await drawer.getByRole('button', { name: /mark as paid/i }).click()
+    await expect(page.getByText(/added £40 to money out\. budget cost unchanged\./i)).toBeVisible()
+  })
+
   test('editing the customer total updates still owed', async ({ page }) => {
     await openMoney(page)
     await page.getByRole('button', { name: /edit customer total/i }).click()

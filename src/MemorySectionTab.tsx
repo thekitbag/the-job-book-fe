@@ -3,6 +3,7 @@ import MemoryCard from './MemoryCard'
 import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
 import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
+import type { MarkPaidControls } from './markPaid'
 
 // "2 items left over" / "3 items bought" — the section kicker states how many,
 // which is the one thing a count-of-things section should say.
@@ -48,12 +49,15 @@ export default function MemorySectionTab({
   sectionAdds,
   emptyText,
   footer,
+  markPaid,
 }: {
   mem: JobMemory
   sectionKeys: string[]
   ariaLabel: string
   directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
   sectionAdds?: Partial<Record<string, SectionAdd>>
+  // Budget cost items only (e.g. Materials → Bought): mark-as-paid capability.
+  markPaid?: MarkPaidControls
   // Empty copy for a lens with no add action of its own (e.g. Returned, which
   // is only reachable from a Left over item). Falls back to generic copy.
   emptyText?: string
@@ -102,7 +106,7 @@ export default function MemorySectionTab({
                 ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} onAdd={addMemoryItem} actionHidden={s.items.length === 0} />
                 : <h2 className="mem-section-heading">{countLabel}</h2>}
               {s.items.length > 0
-                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" />)
+                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} />)
                 : s.add
                   ? <EmptyState
                       title={empty?.title ?? 'Nothing logged yet'}

@@ -906,6 +906,7 @@ export default function CurrentJobWorkspace({
                   sectionKeys={['ordered_materials']}
                   ariaLabel="Bought materials"
                   sectionAdds={{ ordered_materials: { kind: 'spend', label: 'Add bought item' } }}
+                  markPaid={markPaid}
                 />
               ) : materialsTab === 'used' ? (
                 <MemorySectionTab
