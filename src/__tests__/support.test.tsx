@@ -17,7 +17,7 @@ vi.mock('../api', async (importOriginal) => {
     getSupportBudgetSummary: vi.fn(),
     getSupportReviewQueue: vi.fn(),
     getSupportPhotos: vi.fn(),
-    getSupportJobPayments: vi.fn(() => Promise.reject(new Error('none'))),
+    getSupportJobMoney: vi.fn(() => Promise.reject(new Error('none'))),
     // workspace deps for the entry-point test
     getMemoryView: vi.fn(() => Promise.resolve({ job: JOB, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
     getBudgetSummary: vi.fn(() => Promise.reject(new Error('none'))),
@@ -191,32 +191,34 @@ describe('Support mode — read-only view-as', () => {
     }
   })
 
-  it('shows payments read-only with no add/edit/delete/set-total controls', async () => {
-    vi.mocked(api.getSupportJobPayments).mockResolvedValue({
+  it('shows Money read-only with no add/edit/delete/mark-paid/set-total controls', async () => {
+    vi.mocked(api.getSupportJobMoney).mockResolvedValue({
       jobId: 'job-1', generatedAt: '',
       customerTotalAmount: '4200', customerTotalCurrency: 'GBP', customerTotalLabel: '£4200',
-      totalPaidAmount: '1500', totalPaidCurrency: 'GBP', totalPaidLabel: '£1500 paid',
+      moneyInAmount: '1500', moneyInCurrency: 'GBP', moneyInLabel: '£1500 received',
+      moneyOutAmount: '336', moneyOutCurrency: 'GBP', moneyOutLabel: '£336 paid out',
       stillOwedAmount: '2700', stillOwedCurrency: 'GBP', stillOwedLabel: '£2700 still owed',
       overpaid: false, overpaidAmount: null, overpaidLabel: null,
-      payments: [{
-        id: 'sp-1', jobId: 'job-1', amount: '1500', currency: 'GBP', amountLabel: '£1500',
-        paidAt: '2026-07-06T12:00:00.000Z', note: 'Deposit', reference: 'INV-1',
-        createdAt: '', updatedAt: '',
-      }],
+      rows: [
+        { id: 'sp-1', jobId: 'job-1', direction: 'in', kind: 'customer_payment', amount: '1500', currency: 'GBP', amountLabel: '+£1500', occurredAt: '2026-07-06T12:00:00.000Z', note: 'Deposit', reference: 'INV-1', sourceMemoryItemId: null, sourceItemLabel: null, sourceMemoryType: null, editable: true, removable: true, createdAt: '', updatedAt: '' },
+        { id: 'me-1', jobId: 'job-1', direction: 'out', kind: 'cost_paid', amount: '336', currency: 'GBP', amountLabel: '-£336', occurredAt: '2026-07-07T12:00:00.000Z', note: null, reference: null, sourceMemoryItemId: 'm1', sourceItemLabel: 'Cement', sourceMemoryType: 'ordered_material', editable: false, removable: true, createdAt: '', updatedAt: '' },
+      ],
     })
     await enterViewAs()
-    fireEvent.click(screen.getByRole('tab', { name: 'Payments' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Money' }))
     expect(await screen.findByText('£4200')).toBeInTheDocument()
     expect(screen.getByText('£2700')).toBeInTheDocument()
     expect(screen.getByText(/Deposit/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /add payment/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /edit|delete|set customer total|clear total/i })).toBeNull()
+    expect(screen.getByText('Cement')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add (customer )?payment/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /mark as paid/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /edit|delete|remove marker|set customer total|clear total/i })).toBeNull()
   })
 
   it('renders target data with no Record/Add/Fix/remove/move/review/photo-upload controls on any tab', async () => {
     await enterViewAs()
     expect(await screen.findByText(/£320/)).toBeInTheDocument()
-    for (const t of ['Budget', 'Payments', 'Labour', 'Used', 'Notes', /To check/]) {
+    for (const t of ['Budget', 'Money', 'Labour', 'Used', 'Notes', /To check/]) {
       fireEvent.click(screen.getByRole('tab', { name: t }))
       expect(screen.queryByRole('button', { name: /record/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /^add /i })).toBeNull()

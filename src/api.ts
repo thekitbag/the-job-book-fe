@@ -17,6 +17,8 @@ export {
   getSupportJobPayments,
 } from './api/payments'
 export { _resetMockPaymentsForTesting } from './api/mock/payments'
+export { getJobMoney, markMoneyOut, deleteMoneyEvent, getSupportJobMoney } from './api/money'
+export { _resetMockMoneyForTesting } from './api/mock/money'
 export {
   getSupportUsers, getSupportUserJobs, getSupportJobInspection,
   getSupportMemoryView, getSupportBudgetSummary, getSupportReviewQueue, getSupportPhotos,

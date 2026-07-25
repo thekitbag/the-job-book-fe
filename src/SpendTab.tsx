@@ -7,6 +7,7 @@ import LabourBudgetControl from './LabourBudgetControl'
 import { memoryItemToEdit } from './memoryEdit'
 import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
+import type { MarkPaidControls } from './markPaid'
 import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
 
 const POS_DECIMAL = /^\d+(\.\d+)?$/
@@ -242,7 +243,7 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
   )
 }
 
-export default function SpendTab({ mem }: { mem: JobMemory }) {
+export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?: MarkPaidControls }) {
   const {
     totalKnownCost, refunds, budgetSummary, refreshError, refetch, addMemoryItem,
     sectionItems, includedIds, exclusionReason, cardProps,
@@ -388,7 +389,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
           />
         </div>
         {notes.length > 0 && open && <div className="cat-notes">{notes.map(item => (
-          <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+          <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
         ))}</div>}
       </section>
     )
@@ -542,7 +543,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
                     <span className="notes-toggle-chev" aria-hidden="true">{expandedCats[LABOUR_GROUP_KEY] ? '▴' : '▾'}</span>
                   </button>
                   {expandedCats[LABOUR_GROUP_KEY] && <div className="cat-notes">{labourGroupItems.map(item => (
-                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" />
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} />
                   ))}</div>}
                 </>
               : <p className="cat-empty">Nothing yet</p>}
@@ -568,7 +569,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
                 <p className="labour-historical-title">Existing cost in this category</p>
                 <div className="cat-notes">
                   {historicalLabourCategoryItems.map(item => (
-                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
                   ))}
                 </div>
               </div>
@@ -596,7 +597,7 @@ export default function SpendTab({ mem }: { mem: JobMemory }) {
             <span className="uncat-count">{uncatItems.length} · {formatMoney(uncatTotal, 'GBP')}</span>
           </div>
           <div className="uncat-rows">
-            {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} variant="sheet" />)}
+            {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} variant="sheet" markPaid={markPaid} />)}
           </div>
         </section>
       )}

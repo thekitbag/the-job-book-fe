@@ -1,0 +1,237 @@
+import type { JobMoneyResponse, MarkMoneyOutRequest, MemoryViewItem, MoneyRow } from '../../types'
+import { deriveEachTotal } from '../../memoryScan'
+import { ApiError } from '../client'
+import { findMockItem, mockSectionsFor } from './state'
+import { mockGetJobPayments } from './payments'
+
+// Stateful mock for Money — the unified actual-movement read model.
+//
+// Money has three row kinds. Customer payments are NOT stored here: they stay
+// in the payments mock and are projected in as money-in rows, exactly as the
+// real backend projects existing JobPayment records. This mock only owns the
+// new money events: cost_paid (money out) and refund (money in).
+//
+// Invariant this mock exists to protect: marking paid changes Money, never
+// Budget — nothing here reads or writes memory/budget spend state.
+
+type MoneyEvent = {
+  id: string
+  jobId: string
+  direction: 'in' | 'out'
+  kind: 'refund' | 'cost_paid'
+  amount: string
+  occurredAt: string
+  note: string | null
+  reference: string | null
+  sourceMemoryItemId: string | null
+  sourceItemLabel: string | null
+  sourceMemoryType: string | null
+  isDeleted: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+let nextId = 1
+const eventsByJob = new Map<string, MoneyEvent[]>()
+
+function events(jobId: string): MoneyEvent[] {
+  let e = eventsByJob.get(jobId)
+  if (!e) { e = []; eventsByJob.set(jobId, e) }
+  return e
+}
+
+const round2 = (n: number) => String(Math.round(n * 100) / 100)
+
+// A trusted, safe GBP line total for a cost-bearing item, or null when it has
+// none (missing/ambiguous price, non-GBP, worth-checking). Mirrors the backend
+// "only trusted Budget cost items can be paid" rule.
+function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GBP' } | null {
+  if (item.memoryType !== 'ordered_material' && item.memoryType !== 'labour') return null
+  if ((item.uncertaintyFlags ?? []).length > 0) return null
+  const currency = item.costCurrency || 'GBP'
+  if (currency !== 'GBP') return null
+  const total = item.totalCostAmount ?? deriveEachTotal(item)
+  if (!total || !(parseFloat(total) > 0)) return null
+  return { amount: total, currency: 'GBP' }
+}
+
+function itemLabel(item: MemoryViewItem): string {
+  if (item.memoryType === 'labour') return item.labourTask?.trim() || item.labourPerson?.trim() || 'Labour'
+  return item.materialName?.trim() || item.summary
+}
+
+function eventToRow(e: MoneyEvent): MoneyRow {
+  return {
+    id: e.id,
+    jobId: e.jobId,
+    direction: e.direction,
+    kind: e.kind,
+    amount: e.amount,
+    currency: 'GBP',
+    amountLabel: `${e.direction === 'in' ? '+' : '-'}£${e.amount}`,
+    occurredAt: e.occurredAt,
+    note: e.note,
+    reference: e.reference,
+    sourceMemoryItemId: e.sourceMemoryItemId,
+    sourceItemLabel: e.sourceItemLabel,
+    sourceMemoryType: e.sourceMemoryType,
+    editable: false,
+    removable: e.kind === 'cost_paid',
+    createdAt: e.createdAt,
+    updatedAt: e.updatedAt,
+  }
+}
+
+export function mockGetJobMoney(jobId: string): JobMoneyResponse {
+  const pay = mockGetJobPayments(jobId)
+  const active = events(jobId).filter(e => !e.isDeleted)
+
+  // Customer payments → money-in rows, kind customer_payment.
+  const paymentRows: MoneyRow[] = pay.payments.map(p => ({
+    id: p.id,
+    jobId,
+    direction: 'in',
+    kind: 'customer_payment',
+    amount: p.amount,
+    currency: 'GBP',
+    amountLabel: `+£${p.amount}`,
+    occurredAt: p.paidAt,
+    note: p.note,
+    reference: p.reference,
+    sourceMemoryItemId: null,
+    sourceItemLabel: null,
+    sourceMemoryType: null,
+    editable: true,
+    removable: true,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  }))
+
+  const rows = [...paymentRows, ...active.map(eventToRow)].sort(
+    (a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.createdAt.localeCompare(a.createdAt),
+  )
+
+  const refundIn = active.filter(e => e.kind === 'refund').reduce((n, e) => n + parseFloat(e.amount), 0)
+  const paymentsIn = pay.totalPaidAmount !== null ? parseFloat(pay.totalPaidAmount) : 0
+  const inNum = paymentsIn + refundIn
+  const outNum = active.filter(e => e.kind === 'cost_paid').reduce((n, e) => n + parseFloat(e.amount), 0)
+
+  const moneyInAmount = rows.some(r => r.direction === 'in') ? round2(inNum) : null
+  const moneyOutAmount = rows.some(r => r.direction === 'out') ? round2(outNum) : null
+
+  return {
+    jobId,
+    generatedAt: new Date().toISOString(),
+    // Customer total / still owed / overpaid keep their customer-payment
+    // semantics; merchant refunds never reduce what the customer still owes.
+    customerTotalAmount: pay.customerTotalAmount,
+    customerTotalCurrency: pay.customerTotalCurrency,
+    customerTotalLabel: pay.customerTotalLabel,
+    moneyInAmount,
+    moneyInCurrency: moneyInAmount !== null ? 'GBP' : null,
+    moneyInLabel: moneyInAmount !== null ? `£${moneyInAmount} received` : null,
+    moneyOutAmount,
+    moneyOutCurrency: moneyOutAmount !== null ? 'GBP' : null,
+    moneyOutLabel: moneyOutAmount !== null ? `£${moneyOutAmount} paid out` : null,
+    stillOwedAmount: pay.stillOwedAmount,
+    stillOwedCurrency: pay.stillOwedCurrency,
+    stillOwedLabel: pay.stillOwedLabel,
+    overpaid: pay.overpaid,
+    overpaidAmount: pay.overpaidAmount,
+    overpaidLabel: pay.overpaidLabel,
+    rows,
+  }
+}
+
+function parseOccurredAt(occurredAt: string | null | undefined): string {
+  if (!occurredAt) return new Date().toISOString()
+  // Date-only → UK local noon (kept simple as UTC noon in the mock).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) return `${occurredAt}T12:00:00.000Z`
+  return new Date(occurredAt).toISOString()
+}
+
+export function mockMarkMoneyOut(jobId: string, req: MarkMoneyOutRequest): JobMoneyResponse {
+  const item = findMockItem(mockSectionsFor(jobId), req.sourceMemoryItemId)
+  if (!item) throw new ApiError('Source item not found', 404)
+
+  const line = trustedLineTotal(item)
+  if (!line) {
+    const err = new ApiError('This item can’t be marked paid', 400) as ApiError & { code?: string }
+    err.code = 'INVALID_FIELD'
+    throw err
+  }
+
+  // One active paid-marker per source item.
+  const existing = events(jobId).find(
+    e => !e.isDeleted && e.kind === 'cost_paid' && e.sourceMemoryItemId === item.id,
+  )
+  if (existing) {
+    const err = new ApiError('Already marked paid', 400) as ApiError & { code?: string }
+    err.code = 'MONEY_EVENT_ALREADY_EXISTS'
+    throw err
+  }
+
+  const now = new Date().toISOString()
+  events(jobId).push({
+    id: `mock-money-${++nextId}`,
+    jobId,
+    direction: 'out',
+    kind: 'cost_paid',
+    amount: line.amount,
+    occurredAt: parseOccurredAt(req.occurredAt),
+    note: req.note?.trim() || null,
+    reference: req.reference?.trim() || null,
+    sourceMemoryItemId: item.id,
+    sourceItemLabel: itemLabel(item),
+    sourceMemoryType: item.memoryType,
+    isDeleted: false,
+    createdAt: now,
+    updatedAt: now,
+  })
+  return mockGetJobMoney(jobId)
+}
+
+export function mockDeleteMoneyEvent(jobId: string, moneyEventId: string): void {
+  const e = events(jobId).find(ev => ev.id === moneyEventId && !ev.isDeleted)
+  if (!e) {
+    const err = new ApiError('Money event not found', 404) as ApiError & { code?: string }
+    err.code = 'MONEY_EVENT_NOT_FOUND'
+    throw err
+  }
+  e.isDeleted = true
+  e.updatedAt = new Date().toISOString()
+}
+
+// Called by the returned-material mock when a trusted GBP refund is recorded:
+// one active refund money-in event per returned item, mirroring the backend.
+export function recordMockRefund(jobId: string, returnedItem: MemoryViewItem): void {
+  const amount = returnedItem.refundAmount
+  if (!amount || (returnedItem.refundCurrency ?? 'GBP') !== 'GBP') return
+  const dup = events(jobId).find(
+    e => !e.isDeleted && e.kind === 'refund' && e.sourceMemoryItemId === returnedItem.id,
+  )
+  if (dup) return
+  const now = new Date().toISOString()
+  events(jobId).push({
+    id: `mock-money-${++nextId}`,
+    jobId,
+    direction: 'in',
+    kind: 'refund',
+    amount,
+    occurredAt: returnedItem.happenedAt ? parseOccurredAt(returnedItem.happenedAt) : now,
+    note: null,
+    reference: null,
+    sourceMemoryItemId: returnedItem.id,
+    sourceItemLabel: itemLabel(returnedItem),
+    sourceMemoryType: returnedItem.memoryType,
+    isDeleted: false,
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+/** Test-only: reset all mock money-event state. */
+export function _resetMockMoneyForTesting(): void {
+  eventsByJob.clear()
+  nextId = 1
+}

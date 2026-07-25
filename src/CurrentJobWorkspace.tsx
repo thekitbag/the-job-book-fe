@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { getDraftFacts, getJobPhotos, getReviewQueue, patchJob } from './api'
+import { ApiError, getDraftFacts, getJobPhotos, getReviewQueue, patchJob } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
@@ -13,10 +13,12 @@ import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
-import PaymentsSection, { usePayments } from './PaymentsSection'
+import MoneySection, { useMoney } from './MoneySection'
+import { useToast } from './Toast'
+import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobPaymentsResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -30,10 +32,10 @@ const JOB_TYPE_LABELS: Record<string, string> = {
 const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs']
 
 // Stable section navigation: home is the root of the current-job workspace,
-// not a tab. The four sections are stable workspaces — future Payments becomes
-// a fifth card here, and Variations becomes a Job log filter, without another
+// not a tab. Money is the actual-movement surface (in + out) that replaced the
+// old Payments card; Variations becomes a Job log filter, without another
 // cramped top-level tab strip.
-type Section = 'home' | 'spend' | 'payments' | 'labour' | 'materials' | 'joblog'
+type Section = 'home' | 'spend' | 'money' | 'labour' | 'materials' | 'joblog'
 // Returned is a peer state, not something tucked inside Left over: material
 // that went back to the merchant really left the job, and hiding it under the
 // stock he still has would be a different (wrong) claim.
@@ -46,7 +48,7 @@ const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
   // The 'spend' section is user-facing "Budget": it tracks committed/allocated
   // job cost against budget, not cash paid out. Internal key stays 'spend'.
   spend: 'Budget',
-  payments: 'Payments',
+  money: 'Money',
   labour: 'Labour',
   materials: 'Materials',
   joblog: 'Job log',
@@ -62,7 +64,7 @@ const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'hom
   labour: { section: 'labour' },
   note: { section: 'joblog', joblogFilter: 'notes' },
   photo: { section: 'joblog', joblogFilter: 'photos' },
-  payment: { section: 'payments' },
+  payment: { section: 'money' },
 }
 
 // ── Job home: stable section nav ─────────────────────────────────────────────
@@ -84,11 +86,11 @@ type NavRow = {
   sub?: string | null
 }
 
-function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, onOpen }: {
+function HomeSectionCards({ total, budgetAmount, labourHours, moneySummary, onOpen }: {
   total: TotalKnownCost | null
   budgetAmount: string | null
   labourHours: LabourHoursSummary | null
-  paymentsSummary: JobPaymentsResponse | null
+  moneySummary: JobMoneyResponse | null
   onOpen: (section: Exclude<Section, 'home'>) => void
 }) {
   const known = total?.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
@@ -96,10 +98,10 @@ function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, o
   const hasBudget = budget !== null && budget > 0
   const hasHours = labourHours?.totalHours != null
 
-  // Payments: money in — worded as "received" so it can never read as spend.
-  // Falls back quietly while the summary loads or if it failed.
-  const paid = paymentsSummary?.totalPaidAmount
-  const customerTotal = paymentsSummary?.customerTotalAmount
+  // Money: actual movement — "received" and "paid out" so it can never read as
+  // committed cost. Falls back quietly while the summary loads or if it failed.
+  const moneyIn = moneySummary?.moneyInAmount
+  const moneyOut = moneySummary?.moneyOutAmount
 
   // Budget card: committed/known cost of the total budget, plus the remaining
   // budget as a third line (per the spec's job-home example). "Remaining", not
@@ -115,13 +117,12 @@ function HomeSectionCards({ total, budgetAmount, labourHours, paymentsSummary, o
         : null,
     },
     {
-      section: 'payments', title: 'Payments',
-      value: paid ? formatMoney(parseFloat(paid), 'GBP') : null,
-      // Bare "£2,550 of £15,000", per the mock's Payments row — the section is
-      // called Payments, which already says which way the money went.
-      denom: paid
-        ? (customerTotal ? `of ${formatMoney(parseFloat(customerTotal), 'GBP')}` : null)
-        : 'No payments yet',
+      section: 'money', title: 'Money',
+      // Plain in/out totals, e.g. "£4000 received · £1124 paid out".
+      value: moneyIn ? `${formatMoney(parseFloat(moneyIn), 'GBP')} received` : null,
+      denom: moneyOut ? `${formatMoney(parseFloat(moneyOut), 'GBP')} paid out`
+        : moneyIn ? null
+        : 'No money in or out yet',
     },
     {
       section: 'labour', title: 'Labour',
@@ -360,10 +361,22 @@ export default function CurrentJobWorkspace({
     setJoblogFilter('all')
   }, [job.id])
 
+  const mem = useJobMemory(job)
+  // Money (in + out) — loaded independently of memory/budget so a Money failure
+  // never hides the Budget/Labour lenses (and vice versa).
+  const money = useMoney(job.id)
+  const toast = useToast()
+  // Source item currently being marked paid, so its drawer control shows a
+  // busy state and a double-tap can't fire two markers.
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
+
   const openSection = useCallback((s: Exclude<Section, 'home'>) => {
     track('job_section_opened', { section: s })
+    // Opening Money refetches it, so a refund recorded from a return elsewhere
+    // (Materials) shows up without the section needing its own change signal.
+    if (s === 'money') void money.reload()
     setSection(s)
-  }, [])
+  }, [money])
 
   const openActivityItem = useCallback((item: LatestActivityItem) => {
     const dest = ACTIVITY_DEST[item.type]
@@ -371,6 +384,48 @@ export default function CurrentJobWorkspace({
     if (dest.joblogFilter) setJoblogFilter(dest.joblogFilter)
     openSection(dest.section)
   }, [openSection])
+
+  // Mark a trusted Budget cost item paid: records Money out, never touches
+  // Budget. The toast names both effects explicitly. On failure the item stays
+  // put and a retryable toast is shown (the drawer has already closed).
+  const handleMarkPaid = useCallback(async (item: MemoryViewItem) => {
+    if (markingPaidId) return
+    setMarkingPaidId(item.id)
+    try {
+      const row = await money.markPaid(item.id)
+      track('money_marked_paid', { job_id: job.id, memory_type: item.memoryType })
+      // Budget must be unchanged — refetch it so any stale figure can't imply
+      // otherwise, and so paid metadata (if any) is picked up.
+      void mem.reloadBudget()
+      const amount = row ? row.amount : null
+      toast({
+        title: 'Marked paid',
+        body: amount ? `Added £${amount} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
+      })
+    } catch (err: unknown) {
+      const already = err instanceof ApiError && err.status === 400
+      toast({
+        title: already ? 'Already marked paid' : 'Could not mark paid',
+        body: already ? 'This cost is already recorded in Money out.' : 'Nothing changed — try again.',
+        tone: 'plain',
+      })
+    } finally {
+      setMarkingPaidId(null)
+    }
+  }, [markingPaidId, money, mem, toast, job.id])
+
+  // Mark-paid capability handed to the Budget/Labour drawers. Eligibility leans
+  // on mem.includedIds — the authoritative "counts in Budget" set — so only a
+  // trusted, safe, GBP, active cost item is ever offered, plus not-already-paid.
+  const markPaid = useMemo<MarkPaidControls>(() => ({
+    isPaid: (item) => money.paidRowBySource.has(item.id),
+    canMarkPaid: (item) =>
+      markPaidEligibleType(item) &&
+      mem.includedIds.has(item.id) &&
+      !money.paidRowBySource.has(item.id),
+    onMarkPaid: (item) => { void handleMarkPaid(item) },
+    pendingItemId: markingPaidId,
+  }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, markingPaidId])
 
   const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
   const saveTitle = async () => {
@@ -418,11 +473,6 @@ export default function CurrentJobWorkspace({
   // Things to check — draft queue count. Loads independently; never blocks record.
   const [draftCount, setDraftCount] = useState(0)
   const [queueLoadState, setQueueLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
-
-  const mem = useJobMemory(job)
-  // Money in — loaded independently of memory/budget so a payments failure
-  // never hides the money-out lenses (and vice versa).
-  const payments = usePayments(job.id)
 
   const refreshNotes = useCallback(async () => {
     const fresh = await getNotesForJob(job.id)
@@ -540,22 +590,26 @@ export default function CurrentJobWorkspace({
     setShowExplainer(false)
   }, [])
 
-  // Payments appear in home latest activity as their own type. Merged after
-  // the memory/photo merge so the newest-first order covers all three sources.
+  // Customer payments (money in) appear in home latest activity as their own
+  // type. Merged after the memory/photo merge so newest-first covers all
+  // sources. Only customer_payment rows — cost-paid/refund movements are
+  // explained by their Budget/Materials items, not doubled up here.
   const latest = useMemo(() => {
     const memoryAndPhotos = mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 20), photos, 20)
-    const paymentItems: LatestActivityItem[] = (payments.data?.payments ?? []).map(p => ({
-      memoryItemId: p.id,
-      type: 'payment' as const,
-      typeLabel: 'Payment',
-      headline: p.note ? `${p.amountLabel} received — ${p.note}` : `${p.amountLabel} received`,
-      costLabel: null,
-      effectiveAt: p.paidAt,
-    }))
+    const paymentItems: LatestActivityItem[] = (money.data?.rows ?? [])
+      .filter(r => r.kind === 'customer_payment')
+      .map(r => ({
+        memoryItemId: r.id,
+        type: 'payment' as const,
+        typeLabel: 'Payment',
+        headline: r.note ? `£${r.amount} received — ${r.note}` : `£${r.amount} received`,
+        costLabel: null,
+        effectiveAt: r.occurredAt,
+      }))
     return [...memoryAndPhotos, ...paymentItems]
       .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
       .slice(0, 5)
-  }, [mem.data, photos, payments.data])
+  }, [mem.data, photos, money.data])
 
   // Job log "All": every note-type memory item and photo, merged newest-first.
   // Bought/used/labour stay in their own sections — the log is the narrative
@@ -612,10 +666,10 @@ export default function CurrentJobWorkspace({
     return content
   }
 
-  // Spend / Payments / Labour each open with a full-bleed ink band running the
+  // Budget / Money / Labour each open with a full-bleed ink band running the
   // page header straight into the lens's hero, so the page tells the shell to
   // join them (see .ws-page--banded). Nothing may render between the two.
-  const banded = section === 'spend' || section === 'payments' || section === 'labour'
+  const banded = section === 'spend' || section === 'money' || section === 'labour'
 
   return (
     <div className={`ws-page${banded ? ' ws-page--banded' : ''}`}>
@@ -807,7 +861,7 @@ export default function CurrentJobWorkspace({
               total={mem.totalKnownCost}
               budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
               labourHours={mem.labourHours}
-              paymentsSummary={payments.data}
+              moneySummary={money.data}
               onOpen={openSection}
             />
 
@@ -826,9 +880,9 @@ export default function CurrentJobWorkspace({
           </div>
         )}
 
-        {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} />)}
-        {section === 'payments' && <PaymentsSection jobId={job.id} payments={payments} />}
-        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} />)}
+        {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} markPaid={markPaid} />)}
+        {section === 'money' && <MoneySection jobId={job.id} money={money} />}
+        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} markPaid={markPaid} />)}
 
         {section === 'materials' && (
           <>

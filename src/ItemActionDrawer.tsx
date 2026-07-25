@@ -4,6 +4,7 @@ import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
 import { safeRefund } from './memoryScan'
+import type { MarkPaidControls } from './markPaid'
 import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem } from './types'
 
 const SPEND_TYPES = new Set<string>(['ordered_material', 'labour'])
@@ -41,6 +42,7 @@ export default function ItemActionDrawer({
   onAssignCategory,
   assigningCategory,
   onReturnStart,
+  markPaid,
   move,
   onMove,
   canEdit = true,
@@ -63,6 +65,8 @@ export default function ItemActionDrawer({
   assigningCategory: boolean
   // Materials leftover only: close this drawer and open the return flow.
   onReturnStart?: () => void
+  // Budget cost items only: mark the item paid (records Money out, not Budget).
+  markPaid?: MarkPaidControls
   move?: { type: MemoryType; label: string }
   onMove: (type: MemoryType) => void
   canEdit?: boolean
@@ -109,7 +113,24 @@ export default function ItemActionDrawer({
         <>
           {meta && <p className="row-sheet-sub">{meta}</p>}
           {costLine && <p className="row-sheet-cost">{costLine}</p>}
+          {/* Paid state is stated plainly, above the actions, so the drawer says
+              where the money is without turning Budget into a payments ledger. */}
+          {markPaid?.isPaid(item) && (
+            <p className="row-sheet-paid" role="status"><span aria-hidden="true">✓ </span>Paid — recorded in Money out</p>
+          )}
           <div className="row-sheet-actions">
+            {/* Mark as paid records actual Money out; it never changes Budget
+                cost. Only shown for an eligible, unpaid, trusted GBP cost item. */}
+            {markPaid && !markPaid.isPaid(item) && markPaid.canMarkPaid(item) && (
+              <button
+                type="button"
+                className="row-sheet-opt row-sheet-opt--pay"
+                disabled={markPaid.pendingItemId === item.id}
+                onClick={() => { markPaid.onMarkPaid(item); onClose() }}
+              >
+                {markPaid.pendingItemId === item.id ? 'Marking paid…' : 'Mark as paid'} <span aria-hidden="true">›</span>
+              </button>
+            )}
             {canPickCategory && (
               <button type="button" className="row-sheet-opt" disabled={assigningCategory} onClick={() => setSub('category')}>
                 Choose category <span aria-hidden="true">›</span>

@@ -34,6 +34,17 @@ vi.mock('../api', () => ({
   createJobPayment: vi.fn(),
   patchJobPayment: vi.fn(),
   deleteJobPayment: vi.fn(),
+  getJobMoney: vi.fn(() => Promise.resolve({
+    jobId: 'job-test-001', generatedAt: '',
+    customerTotalAmount: null, customerTotalCurrency: null, customerTotalLabel: null,
+    moneyInAmount: null, moneyInCurrency: null, moneyInLabel: null,
+    moneyOutAmount: null, moneyOutCurrency: null, moneyOutLabel: null,
+    stillOwedAmount: null, stillOwedCurrency: null, stillOwedLabel: null,
+    overpaid: false, overpaidAmount: null, overpaidLabel: null,
+    rows: [],
+  })),
+  markMoneyOut: vi.fn(),
+  deleteMoneyEvent: vi.fn(),
   resolveApiUrl: (url: string) => url,
 }))
 
@@ -140,7 +151,7 @@ describe('CurrentJobWorkspace — shell', () => {
     // the old Overview | Spend | Labour | Used | Notes strip is gone
     expect(screen.queryByRole('tablist', { name: /job lenses/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
-    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Money', 'Open Labour', 'Open Materials', 'Open Job log']) {
       expect(screen.getByRole('button', { name: card })).toBeInTheDocument()
     }
   })
@@ -159,7 +170,7 @@ describe('CurrentJobWorkspace — shell', () => {
     const user = userEvent.setup()
     renderWorkspace()
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
-    for (const card of ['Open Budget', 'Open Payments', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Budget', 'Open Money', 'Open Labour', 'Open Materials', 'Open Job log']) {
       await user.click(screen.getByRole('button', { name: card }))
       expect(screen.getAllByRole('button', { name: /record/i })).toHaveLength(1)
       expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
@@ -171,7 +182,7 @@ describe('CurrentJobWorkspace — shell', () => {
     const user = userEvent.setup()
     renderWorkspace()
     for (const [card, heading] of [
-      ['Open Budget', 'Budget'], ['Open Payments', 'Payments'], ['Open Labour', 'Labour'],
+      ['Open Budget', 'Budget'], ['Open Money', 'Money'], ['Open Labour', 'Labour'],
       ['Open Materials', 'Materials'], ['Open Job log', 'Job log'],
     ] as const) {
       await user.click(screen.getByRole('button', { name: card }))

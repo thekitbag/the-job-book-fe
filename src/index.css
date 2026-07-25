@@ -4515,6 +4515,120 @@ code {
   cursor: pointer;
 }
 
+/* ── Money (actual movement — in and out) ─────────────────────────────────── */
+/* The Money hero sits on the same banded ink block as Budget/Labour: two
+   figures side by side (in, out), light on ink. */
+.money-hero-figures { display: flex; gap: 28px; margin-top: 4px; }
+.money-hero-fig { display: flex; flex-direction: column; gap: 2px; }
+.money-hero-cap { font-size: var(--text-sm); font-weight: 700; letter-spacing: 0.02em; }
+.money-hero-fig .money-hero-amount {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+.ws-page--banded .money-hero-cap { color: var(--record-sub); }
+.ws-page--banded .money-hero-fig .money-hero-amount { color: var(--paper); }
+
+/* All / Money in / Money out — a plain segmented filter, ink underline for the
+   active view. */
+.money-filters { display: flex; gap: 20px; margin: 18px 0 4px; border-bottom: var(--rule-hair); }
+.money-filter {
+  border: none;
+  background: none;
+  padding: 8px 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--grey-text);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.money-filter--active { color: var(--ink); border-bottom-color: var(--ink); }
+
+.money-list { list-style: none; margin: 0; padding: 0; border-top: var(--rule-heavy); }
+.money-row {
+  border-bottom: var(--rule-hair);
+  padding: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.money-row-main { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.money-row-label { font-size: var(--text-md); font-weight: 700; color: var(--ink); }
+.money-row-source { font-weight: 500; color: var(--grey-text); }
+.money-row-amount { font-family: var(--font-display); font-size: 19px; font-weight: 800; white-space: nowrap; }
+/* Direction reads from the sign and the weight: money in is full ink, money out
+   is muted — no second colour needed on the ledger. */
+.money-row-amount--in { color: var(--ink); }
+.money-row-amount--out { color: var(--grey-text); }
+.money-row-meta-line { display: flex; gap: 8px; flex-wrap: wrap; }
+.money-row-when, .money-row-meta { font-size: var(--text-sm); color: var(--grey-text); }
+.money-row-actions { display: flex; align-items: center; gap: 20px; margin-top: 5px; }
+
+/* Paid tag on a Budget cost row — the money moved, said quietly so the row
+   never reads as a payments line. */
+.mem-row-paid-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--grey-text);
+  border: 1px solid var(--grey-hairline);
+  border-radius: 0;
+  vertical-align: middle;
+}
+/* Paid state + Mark-as-paid inside the item action drawer. */
+.row-sheet-paid { margin: 0 0 4px; font-size: var(--text-sm); font-weight: 700; color: var(--grey-text); }
+.row-sheet-opt--pay { color: var(--cobalt); font-weight: 700; }
+
+/* ── Toasts ───────────────────────────────────────────────────────────────── */
+/* Pinned above the Record bar; each toast says what moved in Money and Budget. */
+.toast-viewport {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 92px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--paper);
+  border: var(--rule-heavy);
+  border-left-width: 5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  padding: 12px 14px;
+}
+.toast--money { border-left-color: var(--cobalt); }
+.toast--plain { border-left-color: var(--ink); }
+.toast-text { flex: 1; min-width: 0; }
+.toast-title { margin: 0; font-size: var(--text-md); font-weight: 800; color: var(--ink); }
+.toast-body { margin: 2px 0 0; font-size: var(--text-sm); color: var(--grey-text); }
+.toast-dismiss {
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--grey-text);
+  padding: 0 2px;
+  min-height: 32px;
+  cursor: pointer;
+}
+/* Support read-only Money rows keep the same in/out muting. */
+.support-money-row--out span:last-child { color: var(--grey-text); }
+
 .mem-section-summary {
   font-weight: 800;
   color: var(--ink-900);

@@ -7,6 +7,7 @@ import './index.css'
 import App from './App'
 import PilotInspectionPage from './PilotInspectionPage'
 import SupportModePage from './SupportModePage'
+import { ToastProvider } from './Toast'
 import { analyticsClient, initAnalytics } from './analytics'
 
 // /internal/support is the active founder support tool (role INTERNAL only).
@@ -22,7 +23,10 @@ const isSupportRoute = window.location.pathname === '/internal/support'
 initAnalytics()
 const posthogClient = analyticsClient()
 
-const page = isSupportRoute ? <SupportModePage /> : isInspectionRoute ? <PilotInspectionPage /> : <App />
+const inner = isSupportRoute ? <SupportModePage /> : isInspectionRoute ? <PilotInspectionPage /> : <App />
+// Toasts are app-wide: money actions (mark paid, returns) explain their Money
+// and Budget impact through this surface from anywhere in the workspace.
+const page = <ToastProvider>{inner}</ToastProvider>
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
