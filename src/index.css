@@ -29,6 +29,7 @@
   --grey-press:   #f7f7f5;  /* pressed row */
   --cobalt:       #2440ff;  /* interactive ONLY — never decoration */
   --cobalt-on-ink:#9db1ff;  /* the accent when it sits on ink (cobalt is illegible there) */
+  --cobalt-wash:  #eef1ff;  /* faint cobalt fill — budget-cost cards, selected option */
   --warning-red:  #d92d20;  /* warning states ONLY (over budget, overdue) */
   --record-sub:   #9b9b97;  /* secondary text on the Record bar */
 
@@ -5113,6 +5114,75 @@ code {
    name's 22px — a phrase set at 22px shouts louder than the person's name. */
 .labour-entry-cost { font-size: var(--text-lg); font-weight: 700; color: var(--ink); white-space: nowrap; }
 .labour-entry-side .btn-mem-fix { min-height: 0; }
+/* Hours are the row's figure now (design 10a): person + effect left, hours big
+   on the right. Money never appears on a labour row. */
+.labour-entry-hours-big { font-size: 20px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+/* The Budget effect, one legible phrase. Budget cost is cobalt; hours-only and
+   no-rate are quiet greys so unpaid budget cost never reads as money out and
+   hours-only never looks lost. */
+.labour-entry-effect { margin: 4px 0 0; font-size: var(--text-md); font-weight: 600; }
+.labour-entry-effect--budget { color: var(--cobalt); }
+.labour-entry-effect--hours, .labour-entry-effect--no-rate { color: var(--grey-text); }
+
+/* Budgeted labour cost card (10a) — cobalt wash, secondary to the hours hero. */
+.labour-budget-card { margin: 14px 0 0; background: var(--cobalt-wash, #eef1ff); padding: 14px 16px; }
+.labour-budget-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.labour-budget-card-cap {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--text-sm); font-weight: 700; letter-spacing: 1px; color: var(--cobalt);
+}
+.labour-budget-card-amount { font-size: 26px; font-weight: 800; color: var(--cobalt); }
+.labour-help {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid #9db1ff; background: none; color: var(--cobalt);
+  font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.labour-budget-card-help { margin: 10px 0 0; font-size: var(--text-sm); color: #4756b0; line-height: 1.45; }
+
+/* People summary (10a) + Manage people list (10b). */
+.labour-people { margin: 24px 0 0; }
+.labour-people-head { display: flex; justify-content: space-between; align-items: baseline; }
+.labour-people-list, .manage-people-list { list-style: none; margin: 8px 0 0; padding: 0; border-top: var(--rule-heavy); }
+.labour-person-row {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 13px 0; border: none; border-bottom: var(--rule-hair); background: none;
+  text-align: left; cursor: pointer; min-height: 44px;
+}
+.labour-person-name { flex: 1; font-weight: 700; font-size: var(--text-xl); color: var(--ink); }
+.labour-person-you { font-size: var(--text-md); font-weight: 700; color: var(--record-sub); }
+.labour-person-figures { font-weight: 700; font-size: var(--text-md); color: var(--grey-text); white-space: nowrap; }
+.labour-person-chev { color: var(--cobalt); font-weight: 700; font-size: 19px; }
+/* Legible per-person Budget tag. */
+.labour-tag { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; padding: 3px 8px; white-space: nowrap; }
+.labour-tag--budget { background: var(--cobalt-wash, #eef1ff); color: var(--cobalt); }
+.labour-tag--hours { border: 1px solid var(--grey-hairline); color: var(--grey-text); }
+.labour-tag--add-rate { color: var(--cobalt); }
+
+.manage-people { display: flex; flex-direction: column; }
+.labour-rate-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0 12px; border-bottom: var(--rule-heavy); }
+.labour-rate-value { font-size: 20px; font-weight: 800; color: var(--ink); }
+
+/* Two-option Budget-treatment chooser (10c). */
+.treatment-chooser { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+.treatment-opt {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  border: 1px solid var(--grey-hairline); background: none; padding: 13px 15px; cursor: pointer;
+}
+.treatment-opt--on { border: 2px solid var(--cobalt); background: var(--cobalt-wash, #eef1ff); }
+.treatment-radio {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--grey-hairline);
+  flex: none; position: relative;
+}
+.treatment-opt--on .treatment-radio { border-color: var(--cobalt); }
+.treatment-opt--on .treatment-radio::after {
+  content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--cobalt);
+}
+.treatment-text { display: flex; flex-direction: column; gap: 2px; }
+.treatment-title { font-weight: 800; font-size: var(--text-lg); color: var(--ink); }
+.treatment-opt:not(.treatment-opt--on) .treatment-title { color: #55554f; }
+.treatment-sub { font-size: var(--text-sm); color: var(--grey-text); }
+.treatment-opt--on .treatment-sub { color: #4756b0; }
 
 /* ── Manual Add V2: bottom sheet ── */
 .bottom-sheet-backdrop {

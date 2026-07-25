@@ -882,7 +882,7 @@ export default function CurrentJobWorkspace({
 
         {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} markPaid={markPaid} />)}
         {section === 'money' && <MoneySection jobId={job.id} money={money} />}
-        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} markPaid={markPaid} />)}
+        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} jobId={job.id} markPaid={markPaid} />)}
 
         {section === 'materials' && (
           <>
