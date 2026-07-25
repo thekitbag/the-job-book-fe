@@ -2,6 +2,7 @@ import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryVie
 import { deriveCostSummary, deriveEachTotal, deriveGrossKnownCost, deriveLabourHoursSummary, deriveLabourSummary, deriveRefundsSummary, deriveTotalKnownCost } from '../../memoryScan'
 import { ApiError } from '../client'
 import { MOCK_JOBS } from './jobs'
+import { mockFindLabourPerson } from './labourPeople'
 import { recordMockRefund } from './money'
 import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
 
@@ -62,6 +63,13 @@ export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: 
     labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
     labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
     labourTask: edit.memoryType === 'labour' ? (edit.labourTask ?? null) : null,
+    // Omitted preserves; for labour, honour explicit person/treatment changes.
+    labourPersonId: edit.memoryType === 'labour'
+      ? (edit.labourPersonId !== undefined ? edit.labourPersonId : (existing?.labourPersonId ?? null))
+      : null,
+    labourBudgetEnabled: edit.memoryType === 'labour'
+      ? (edit.labourBudgetEnabled !== undefined ? edit.labourBudgetEnabled : (existing?.labourBudgetEnabled ?? null))
+      : null,
     // Present key → honour value/null (explicit set/clear). Omitted → preserve.
     happenedAt: 'happenedAt' in edit ? (edit.happenedAt ?? null) : (existing?.happenedAt ?? null),
     // A Fix-memory save also resolves any worth-checking flags.
@@ -224,7 +232,27 @@ export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest
   const sections = mockSectionsFor(jobId)
   const now = new Date().toISOString()
   const isLabour = req.memoryType === 'labour'
-  const hasCost = !!(req.costAmount || req.totalCostAmount)
+
+  // Labour defaulting (mirrors the backend): a linked person supplies a default
+  // rate when none was sent, and a default Budget treatment when none was sent.
+  // With no person/default, new labour is hours-only rather than silently
+  // adding Budget cost.
+  const person = isLabour && req.labourPersonId ? mockFindLabourPerson(req.labourPersonId) : undefined
+  let costAmount = req.costAmount ?? null
+  let costCurrency = req.costCurrency ?? null
+  let costQualifier = req.costQualifier ?? null
+  if (isLabour && person && !req.costAmount && !req.totalCostAmount && person.defaultHourlyRateAmount) {
+    costAmount = person.defaultHourlyRateAmount
+    costCurrency = 'GBP'
+    costQualifier = 'per_hour'
+  }
+  const labourBudgetEnabled: boolean | null = !isLabour ? null
+    : req.labourBudgetEnabled != null ? req.labourBudgetEnabled
+    : person ? person.defaultBudgetTreatment === 'counts_toward_budget'
+    : false
+  const labourPerson = isLabour ? (req.labourPerson ?? person?.name ?? null) : null
+  const hasCost = !!(costAmount || req.totalCostAmount)
+
   const item: MemoryViewItem = {
     id: `mem-manual-${++mockManualSeq}`,
     memoryType: req.memoryType,
@@ -235,15 +263,17 @@ export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest
     supplierName: req.supplierName ?? null,
     deliveryTiming: req.deliveryTiming ?? null,
     locationOrUse: req.locationOrUse ?? null,
-    costAmount: req.costAmount ?? null,
-    costCurrency: req.costCurrency ?? (hasCost ? 'GBP' : null),
-    costQualifier: req.costQualifier ?? null,
+    costAmount,
+    costCurrency: costCurrency ?? (hasCost ? 'GBP' : null),
+    costQualifier,
     // Explicit total wins; otherwise derive an `each` line total (quantity × unit
     // cost) so direct-added spend counts like the backend would.
-    totalCostAmount: req.totalCostAmount ?? deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount: req.costAmount ?? null, costQualifier: req.costQualifier ?? null }),
+    totalCostAmount: req.totalCostAmount ?? deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount, costQualifier }),
     labourHours: isLabour ? (req.labourHours ?? null) : null,
-    labourPerson: isLabour ? (req.labourPerson ?? null) : null,
+    labourPerson,
     labourTask: isLabour ? (req.labourTask ?? null) : null,
+    labourPersonId: isLabour ? (req.labourPersonId ?? null) : null,
+    labourBudgetEnabled,
     uncertaintyFlags: [],
     budgetCategoryId: canCategorise ? (req.budgetCategoryId ?? null) : null,
     happenedAt: req.happenedAt ?? null,
