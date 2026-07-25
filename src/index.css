@@ -3769,6 +3769,23 @@ code {
   cursor: pointer;
 }
 
+/* Drawer sub-state (Source / Fix memory / Remove / Choose category): a Back
+   affordance that returns to the action list, no stacked second drawer. */
+.row-sheet-substate { display: block; }
+.row-sheet-back {
+  display: inline-block; background: none; border: none; font: inherit;
+  font-weight: 700; color: var(--cobalt); cursor: pointer;
+  padding: 0 0 12px; margin: 0;
+}
+.row-sheet-back:active { opacity: 0.6; }
+
+/* A labour ledger row is one tap target opening the shared action drawer. */
+.labour-entry-tap {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; font: inherit; cursor: pointer; padding: 0;
+}
+.labour-entry-tap:active { opacity: 0.7; }
+
 /* Category picker sheet — one tap per category, no dropdown in the ledger. */
 .pick-cat-list { display: flex; flex-direction: column; }
 .pick-cat-opt {

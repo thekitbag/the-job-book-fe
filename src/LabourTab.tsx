@@ -1,8 +1,8 @@
+import { useState } from 'react'
 import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
+import ItemActionDrawer from './ItemActionDrawer'
 import LabourBudgetControl from './LabourBudgetControl'
-import MemoryEditForm from './MemoryEditForm'
-import { memoryItemToEdit } from './memoryEdit'
 import { friendlyDayLabel, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
 import type { LabourDayItem } from './types'
@@ -27,38 +27,65 @@ function LabourBar({ spend, budget, over }: { spend: string | null; budget: stri
 // Worth-checking labour stays visible but is excluded from the hour totals.
 // Driven by the backend labourHoursSummary (local fallback for older APIs).
 
+// A labour entry as a tappable ledger row: tapping opens the shared item action
+// drawer (Show source / Fix memory / Remove item as sub-states), the same
+// pattern Budget, Materials and Job log use. No inline Fix memory or edit form.
 function LabourEntry({ entry, mem }: { entry: LabourDayItem; mem: JobMemory }) {
   const { sectionItems, cardProps } = mem
-  // Join back to the full memory-view item so Fix memory edits in place.
+  // Join back to the full memory-view item so the drawer's edit/remove act on it.
   const item = sectionItems('labour').find(i => i.id === entry.memoryItemId)
   const p = item ? cardProps(item, false) : null
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
-  if (item && p?.isEditing) {
-    return (
-      <div className="labour-entry labour-entry--editing">
-        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={p.submitting} onSubmit={p.onSave} onCancel={p.onCancelEdit} />
-        {p.errorMsg && <p className="queue-item-error" role="alert">{p.errorMsg}</p>}
+  const person = entry.labourPerson?.trim()
+  const task = entry.labourTask?.trim()
+  const title = task || person || 'Labour'
+  const rate = item && item.costQualifier === 'per_hour' && item.costAmount ? `£${item.costAmount}/hour` : null
+  const meta = [task ? person : null, entry.hoursLabel, rate].filter(Boolean).join(' · ')
+
+  const Row = (
+    <div className="labour-entry-row">
+      <div className="labour-entry-main">
+        <p className="labour-entry-headline">
+          <strong className="labour-entry-person">{entry.labourPerson ?? 'Labour'}</strong>
+          {entry.hoursLabel && <span className="labour-entry-hours">{entry.hoursLabel}</span>}
+        </p>
+        {entry.labourTask && <p className="labour-entry-task">{entry.labourTask}</p>}
+        {entry.worthChecking && <p className="labour-entry-check">Worth checking — not counted in totals</p>}
       </div>
-    )
-  }
+      <div className="labour-entry-side">
+        <span className="labour-entry-cost">{entry.lineTotalLabel ?? 'No cost added'}</span>
+        {p && <span className="mem-row-tap-chev" aria-hidden="true">›</span>}
+      </div>
+    </div>
+  )
+
+  // No full item to act on (older API without the joined row) → static row.
+  if (!item || !p) return <div className="labour-entry">{Row}</div>
 
   return (
     <div className={`labour-entry${entry.worthChecking ? ' labour-entry--unresolved' : ''}`}>
-      <div className="labour-entry-row">
-        <div className="labour-entry-main">
-          <p className="labour-entry-headline">
-            <strong className="labour-entry-person">{entry.labourPerson ?? 'Labour'}</strong>
-            {entry.hoursLabel && <span className="labour-entry-hours">{entry.hoursLabel}</span>}
-          </p>
-          {entry.labourTask && <p className="labour-entry-task">{entry.labourTask}</p>}
-          {entry.worthChecking && <p className="labour-entry-check">Worth checking — not counted in totals</p>}
-        </div>
-        <div className="labour-entry-side">
-          <span className="labour-entry-cost">{entry.lineTotalLabel ?? 'No cost added'}</span>
-          {p && <button type="button" className="btn-mem-fix" onClick={p.onStartEdit}>Fix memory</button>}
-        </div>
-      </div>
-      {p?.errorMsg && <p className="queue-item-error" role="alert">{p.errorMsg}</p>}
+      <button type="button" className="labour-entry-tap" aria-label={`Open actions for ${title}`} onClick={() => setDrawerOpen(true)}>
+        {Row}
+      </button>
+      {p.errorMsg && !drawerOpen && <p className="queue-item-error" role="alert">{p.errorMsg}</p>}
+      <ItemActionDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        item={item}
+        title={title}
+        meta={meta || null}
+        costLine={entry.lineTotalLabel ? `${entry.lineTotalLabel} cost` : null}
+        categories={[]}
+        onAssignCategory={() => {}}
+        assigningCategory={false}
+        onMove={() => {}}
+        mutating={p.mutating}
+        submitting={p.submitting}
+        errorMsg={p.errorMsg}
+        onSave={p.onSave}
+        onRemove={p.onRemove}
+      />
     </div>
   )
 }
