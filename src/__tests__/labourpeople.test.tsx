@@ -57,6 +57,22 @@ describe('Manage people (10b/10c)', () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
+  it('saving a changed rate closes the edit form', async () => {
+    vi.mocked(patchLabourPerson).mockResolvedValue({ ...KURT, defaultHourlyRateAmount: '22' })
+    const user = userEvent.setup()
+    render(<ManagePeopleDrawer jobId="j1" people={[KURT]} open onClose={vi.fn()} onChanged={vi.fn()} initialPerson={KURT} />)
+    await user.click(screen.getByRole('button', { name: 'Change ›' }))
+    const form = screen.getByRole('form', { name: /set rate/i })
+    const input = within(form).getByLabelText(/rate/i)
+    await user.clear(input)
+    await user.type(input, '22')
+    await user.click(within(form).getByRole('button', { name: 'Save rate' }))
+    await waitFor(() => expect(patchLabourPerson).toHaveBeenCalledWith('j1', 'lp-kurt', { defaultHourlyRateAmount: '22', defaultHourlyRateCurrency: 'GBP' }))
+    // The edit form is gone; the rate row is shown again.
+    await waitFor(() => expect(screen.queryByRole('form', { name: /set rate/i })).toBeNull())
+    expect(screen.getByRole('button', { name: 'Change ›' })).toBeInTheDocument()
+  })
+
   it('changes a person\'s budget treatment from their settings', async () => {
     vi.mocked(patchLabourPerson).mockResolvedValue({ ...KURT, defaultBudgetTreatment: 'hours_only' })
     const user = userEvent.setup()

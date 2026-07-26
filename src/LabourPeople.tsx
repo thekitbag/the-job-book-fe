@@ -180,18 +180,21 @@ function PersonSettings({ person, saving, error, onSaveRate, onSaveTreatment, on
   person: LabourPersonWithJobStats
   saving: boolean
   error: string | null
-  onSaveRate: (rate: string | null) => void
+  onSaveRate: (rate: string | null) => Promise<boolean>
   onSaveTreatment: (t: LabourBudgetTreatment) => void
   onBack: () => void
 }) {
   const [editingRate, setEditingRate] = useState(false)
   const [rateDraft, setRateDraft] = useState(person.defaultHourlyRateAmount ?? '')
+  // Close the edit form only once the save succeeds; a failure keeps it open
+  // with the entered value and the error.
+  const saveRate = async (rate: string | null) => { if (await onSaveRate(rate)) setEditingRate(false) }
   return (
     <div className="row-sheet-substate">
       <button type="button" className="row-sheet-back" onClick={onBack}>‹ Back</button>
       <p className="row-sheet-cost">RATE</p>
       {editingRate ? (
-        <form className="pay-form" aria-label="Set rate" onSubmit={e => { e.preventDefault(); if (validRate(rateDraft)) onSaveRate(rateDraft.trim() || null) }}>
+        <form className="pay-form" aria-label="Set rate" onSubmit={e => { e.preventDefault(); if (validRate(rateDraft)) void saveRate(rateDraft.trim() || null) }}>
           <label className="queue-field">
             <span className="queue-field-label">Rate (£/hour)</span>
             <input className="queue-field-input" name="rate" inputMode="decimal" value={rateDraft} autoFocus onChange={e => setRateDraft(e.target.value)} placeholder="e.g. 20" />
@@ -199,7 +202,7 @@ function PersonSettings({ person, saving, error, onSaveRate, onSaveTreatment, on
           <div className="pay-form-actions">
             <button type="submit" className="btn-queue-save" disabled={saving || !validRate(rateDraft)}>{saving ? 'Saving…' : 'Save rate'}</button>
             {person.defaultHourlyRateAmount && (
-              <button type="button" className="pay-clear-total" disabled={saving} onClick={() => onSaveRate(null)}>Clear rate</button>
+              <button type="button" className="pay-clear-total" disabled={saving} onClick={() => void saveRate(null)}>Clear rate</button>
             )}
             <button type="button" className="btn-queue-cancel" onClick={() => setEditingRate(false)} disabled={saving}>Cancel</button>
           </div>
@@ -255,13 +258,14 @@ export function ManagePeopleDrawer({ jobId, people, open, onClose, onChanged, in
     finally { setSaving(false) }
   }
 
-  const patch = async (personId: string, req: Parameters<typeof patchLabourPerson>[2], evt: string) => {
+  const patch = async (personId: string, req: Parameters<typeof patchLabourPerson>[2], evt: string): Promise<boolean> => {
     setSaving(true); setError(null)
     try {
       await patchLabourPerson(jobId, personId, req)
       track(evt, { job_id: jobId })
       onChanged()
-    } catch { setError('Could not save — try again') }
+      return true
+    } catch { setError('Could not save — try again'); return false }
     finally { setSaving(false) }
   }
 
