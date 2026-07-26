@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
 import ItemActionDrawer from './ItemActionDrawer'
+import AddLabourDrawer from './LabourAdd'
 import { PeopleSummary, ManagePeopleDrawer, useLabourPeople } from './LabourPeople'
 import { friendlyDayLabel, formatMoney, moneyFigure, safeLabourCost } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
@@ -94,6 +94,7 @@ export default function LabourTab({ mem, jobId, markPaid }: { mem: JobMemory; jo
   const [managing, setManaging] = useState(false)
   const [initialPerson, setInitialPerson] = useState<LabourPersonWithJobStats | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   const openManage = () => { setInitialPerson(null); setManaging(true) }
   const openPerson = (person: LabourPersonWithJobStats) => { setInitialPerson(person); setManaging(true) }
@@ -136,7 +137,12 @@ export default function LabourTab({ mem, jobId, markPaid }: { mem: JobMemory; jo
         <PeopleSummary people={people.data.people} onManage={openManage} onOpenPerson={openPerson} />
       )}
 
-      <DirectAddForm kind="labour" label="Add labour" sectionLabel="Labour" onAdd={addMemoryItem} actionHidden={days.length === 0} />
+      {days.length > 0 && (
+        <div className="lens-add-head">
+          <span className="lens-add-label">Labour</span>
+          <button type="button" className="btn-lens-add-text" onClick={() => setAdding(true)}>+ Add labour</button>
+        </div>
+      )}
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -149,7 +155,7 @@ export default function LabourTab({ mem, jobId, markPaid }: { mem: JobMemory; jo
         <EmptyState
           title="No labour logged yet"
           hint="Keep track of who worked, how many hours, and which day — or say it with Record."
-          action={<DirectAddForm kind="labour" variant="button" label="Add labour" onAdd={addMemoryItem} />}
+          action={<button type="button" className="btn-add-labour-save" onClick={() => setAdding(true)}>Add labour</button>}
         />
       ) : (
         days.map(day => (
@@ -170,6 +176,15 @@ export default function LabourTab({ mem, jobId, markPaid }: { mem: JobMemory; jo
         onClose={() => setManaging(false)}
         onChanged={() => void people.reload()}
         initialPerson={initialPerson}
+      />
+
+      <AddLabourDrawer
+        jobId={jobId}
+        people={people.data?.people ?? []}
+        open={adding}
+        onClose={() => setAdding(false)}
+        onAdd={async req => { const created = await addMemoryItem(req); void people.reload(); return created }}
+        onPeopleChanged={() => void people.reload()}
       />
     </div>
   )

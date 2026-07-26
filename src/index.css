@@ -5184,6 +5184,64 @@ code {
 .treatment-sub { font-size: var(--text-sm); color: var(--grey-text); }
 .treatment-opt--on .treatment-sub { color: #4756b0; }
 
+/* ── Add labour drawer (10d/10e) ── */
+.add-labour { display: flex; flex-direction: column; }
+.who-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.who-chip {
+  border: 1px solid var(--grey-hairline); background: none; color: var(--ink);
+  font-weight: 700; font-size: var(--text-md); padding: 9px 15px; cursor: pointer;
+}
+.who-chip--on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.who-chip-you { color: var(--cobalt-on-ink); font-size: var(--text-sm); }
+.who-chip--on .who-chip-you { color: var(--cobalt-on-ink); }
+.who-chip--new { color: var(--cobalt); }
+.who-new { display: flex; gap: 8px; margin: 4px 0 0; }
+.who-new .queue-field-input { flex: 1; }
+
+.add-labour-ht { display: flex; gap: 22px; margin-top: 16px; }
+.add-labour-ht > div:first-child { flex: none; }
+.add-labour-task { flex: 1; display: flex; flex-direction: column; }
+
+.hours-stepper { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.stepper-btn {
+  width: 44px; height: 44px; flex: none; cursor: pointer;
+  border: 2px solid var(--ink); background: none; color: var(--ink);
+  font-size: 24px; font-weight: 800; line-height: 1;
+}
+.stepper-btn--plus { background: var(--ink); color: var(--paper); }
+.stepper-value { display: flex; align-items: baseline; border-bottom: 3px solid var(--ink); padding-bottom: 4px; }
+.stepper-input {
+  width: 46px; text-align: center; border: none; background: none;
+  font-size: 30px; font-weight: 800; color: var(--ink); padding: 0;
+}
+.stepper-input:focus { outline: none; }
+.stepper-unit { font-size: 18px; font-weight: 700; color: var(--grey-text); }
+
+.add-labour-budget { margin-top: 16px; padding: 14px 16px; }
+.add-labour-budget--budget { background: var(--cobalt-wash); }
+.add-labour-budget--hours { background: var(--grey-press); }
+.add-labour-budget-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.labour-budget-card-cap--grey { color: var(--grey-text); }
+.add-labour-budget .labour-tag { display: inline-block; margin-top: 8px; }
+.add-labour-estimate {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid #d6ddff;
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: var(--text-md); color: #4756b0;
+}
+.add-labour-estimate b { font-size: 19px; color: var(--cobalt); }
+.add-labour-toggle { margin-top: 10px; border: none; background: none; padding: 0; color: var(--cobalt); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
+.add-labour-toggle-inline { border: none; background: none; padding: 0; color: var(--cobalt); font-weight: 700; font-size: inherit; cursor: pointer; }
+.add-labour-hours-copy { margin: 8px 0 0; font-size: var(--text-md); color: #55554f; line-height: 1.4; }
+.rate-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.rate-row .queue-field-input { flex: 1; }
+
+.btn-add-labour-save {
+  margin-top: 16px; width: 100%; border: none; cursor: pointer;
+  background: var(--cobalt); color: var(--paper);
+  font-weight: 800; font-size: var(--text-lg); padding: 15px;
+}
+.btn-add-labour-save:disabled { opacity: 0.5; }
+
 /* ── Manual Add V2: bottom sheet ── */
 .bottom-sheet-backdrop {
   position: fixed; inset: 0; z-index: 60;
