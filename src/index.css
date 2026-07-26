@@ -30,6 +30,7 @@
   --cobalt:       #2440ff;  /* interactive ONLY — never decoration */
   --cobalt-on-ink:#9db1ff;  /* the accent when it sits on ink (cobalt is illegible there) */
   --cobalt-wash:  #eef1ff;  /* faint cobalt fill — budget-cost cards, selected option */
+  --grey-panel:   #f2f2f0;  /* recessed neutral panel — config blocks vs the white log */
   --warning-red:  #d92d20;  /* warning states ONLY (over budget, overdue) */
   --record-sub:   #9b9b97;  /* secondary text on the Record bar */
 
@@ -5141,9 +5142,16 @@ code {
 .labour-budget-card-help { margin: 10px 0 0; font-size: var(--text-sm); color: #4756b0; line-height: 1.45; }
 
 /* People summary (10a) + Manage people list (10b). */
-.labour-people { margin: 24px 0 0; }
+/* People is configuration (who + rates), not the entry log directly below it —
+   so it reads as a recessed grey panel, distinct from the white ledger of
+   labour entries. Hierarchy: cobalt budget card → grey people config → white log. */
+.labour-people { margin: 18px 0 14px; background: var(--grey-panel); padding: 12px 16px 6px; }
 .labour-people-head { display: flex; justify-content: space-between; align-items: baseline; }
 .labour-people-list, .manage-people-list { list-style: none; margin: 8px 0 0; padding: 0; border-top: var(--rule-heavy); }
+/* Inside the panel the wash already sets it apart, so the internal rule is a
+   hairline (not the heavy black rule the entry log uses) and the last row is flush. */
+.labour-people .labour-people-list { border-top: var(--rule-hair); }
+.labour-people .labour-people-list li:last-child .labour-person-row { border-bottom: none; }
 .labour-person-row {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 13px 0; border: none; border-bottom: var(--rule-hair); background: none;
