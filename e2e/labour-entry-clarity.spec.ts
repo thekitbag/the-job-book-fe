@@ -23,30 +23,27 @@ async function gotoApp(page: Page) {
 }
 
 test.describe('Labour entry point & budget clarity', () => {
-  test('Labour tab shows hours plus labour cost, budget, and remaining', async ({ page }) => {
+  test('Labour tab shows hours-first plus a budgeted-cost card that tracks budget labour', async ({ page }) => {
     await gotoApp(page)
     await goToSection(page, 'Labour')
     await page.waitForTimeout(900)
 
     const jobTotal = page.getByRole('region', { name: 'Labour hours' })
     await expect(jobTotal).toContainText('24h')
-    await expect(jobTotal).toContainText('job total')
-    const money = page.getByRole('region', { name: 'Labour cost' })
-    await expect(money.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
-    await expect(money.locator('.budget-figure', { hasText: 'Budget' }).getByText('£1500', { exact: true })).toBeVisible()
-    await expect(money.locator('.budget-figure', { hasText: 'Left' }).getByText('£620', { exact: true })).toBeVisible()
+    await expect(jobTotal).toContainText('on this job')
+    // Budget/remaining moved to the Budget tab; the Labour page shows the
+    // budget-enabled trusted labour cost in the cobalt card.
+    const card = page.getByRole('region', { name: 'Budgeted labour cost' })
+    await expect(card.getByText('£880')).toBeVisible()
 
-    // labour add lives here and rolls into Spend
-    await page.getByRole('button', { name: 'Add labour', exact: true }).click()
-    const form = page.getByRole('dialog', { name: 'Add labour' }).getByRole('form', { name: 'Add labour' })
-    await form.locator('input[name="labourPerson"]').fill('Priya')
-    await form.locator('input[name="labourHours"]').fill('2')
-    await form.locator('input[name="rate"]').fill('30')
-    await form.getByRole('button', { name: /^Save / }).click()
+    // Add rated, budget-enabled labour for Kurt (£20/h): 2h → +£40 to the card.
+    await page.getByRole('button', { name: /add labour/i }).click()
+    const sheet = page.getByRole('dialog', { name: 'Add labour' })
+    await sheet.getByRole('button', { name: 'Kurt' }).click()
+    await sheet.locator('.stepper-input').fill('2')
+    await sheet.getByRole('button', { name: 'Save labour' }).click()
     await page.waitForTimeout(900)
-    await expect(page.getByRole('region', { name: 'Labour Today' }).getByText('Priya')).toBeVisible()
-    // labour cost context updates from the refetched summary (880 + 60)
-    await expect(money.locator('.budget-figure', { hasText: 'Cost' }).getByText('£940', { exact: true })).toBeVisible()
+    await expect(card.getByText('£920')).toBeVisible()
   })
 
   test('Spend shows the budget trio, includes labour, and never offers add-to-labour', async ({ page }) => {
