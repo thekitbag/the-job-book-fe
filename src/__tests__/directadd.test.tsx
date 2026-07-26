@@ -18,6 +18,12 @@ vi.mock('../api', async (importOriginal) => {
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
+    getLabourPeople: vi.fn(() => Promise.resolve({
+      jobId: 'job-da-001',
+      people: [
+        { id: 'lp-tom', name: 'Tom', defaultHourlyRateAmount: '35', defaultHourlyRateCurrency: 'GBP', defaultBudgetTreatment: 'counts_toward_budget', createdAt: '', updatedAt: '', isSelf: false, jobHours: null, jobHoursLabel: null, jobBudgetCostAmount: null, jobBudgetCostCurrency: null, jobBudgetCostLabel: null, hasEntriesWithoutRate: false },
+      ],
+    })),
   }
 })
 vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
@@ -111,7 +117,7 @@ describe('Direct add — entry points', () => {
     await openTab('Budget')
     expect(await screen.findByRole('button', { name: 'Add cost' })).toBeInTheDocument()
     await openTab('Labour')
-    expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /add labour/i })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
     // Left over is its own Materials tab with its own add.
@@ -160,16 +166,16 @@ describe('Direct add — submit contracts', () => {
     expect(await screen.findByText('decking')).toBeInTheDocument()
   })
 
-  it('labour saves as labour with happenedAt', async () => {
+  it('labour saves as labour for the chosen person with the entry hours', async () => {
     renderWorkspace()
     await openTab('Labour')
     fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
-    const form = screen.getByRole('form', { name: 'Add labour' })
-    fireEvent.change(form.querySelector('input[name="labourHours"]')!, { target: { value: '8' } })
-    fireEvent.change(form.querySelector('input[name="labourPerson"]')!, { target: { value: 'Tom' } })
-    fireEvent.click(within(form).getByRole('button', { name: /^Save / }))
+    const sheet = screen.getByRole('dialog', { name: 'Add labour' })
+    fireEvent.click(await within(sheet).findByRole('button', { name: 'Tom' }))
+    fireEvent.change(within(sheet).getByLabelText('Hours'), { target: { value: '8' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Save labour' }))
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
-      memoryType: 'labour', labourHours: '8', labourPerson: 'Tom', happenedAt: expect.stringContaining('T12:00:00'),
+      memoryType: 'labour', labourHours: '8', labourPersonId: 'lp-tom',
     })))
   })
 
@@ -271,7 +277,7 @@ describe('Manual Add V2 — bottom sheet', () => {
     renderWorkspace()
     await openTab('Labour')
     fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
-    expect(screen.getByRole('dialog', { name: 'Add labour' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /add labour/i })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
@@ -374,10 +380,10 @@ describe('Manual Add V2 — empty states', () => {
     const panel = await screen.findByRole('tabpanel', { name: 'Labour' })
     fireEvent.click(within(panel).getByRole('button', { name: 'Add labour' }))
     const sheet = screen.getByRole('dialog', { name: 'Add labour' })
-    fireEvent.change(within(sheet).getByRole('form', { name: 'Add labour' }).querySelector('input[name="labourHours"]')!, { target: { value: '6' } })
-    fireEvent.click(within(sheet).getByRole('button', { name: /^Save / }))
+    fireEvent.change(within(sheet).getByLabelText('Hours'), { target: { value: '6' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Save labour' }))
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
-      memoryType: 'labour', labourHours: '6', happenedAt: expect.stringContaining('T12:00:00'),
+      memoryType: 'labour', labourHours: '6',
     })))
     // The new entry appears in the daily Labour view after refetch. Scoped to
     // the entry row: "6h" is also the job-total figure at the top of the lens.
@@ -413,7 +419,7 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
     await openTab('Budget')
     expect(await screen.findByRole('button', { name: 'Add cost' })).toBeInTheDocument()
     await openTab('Labour')
-    expect(await screen.findByRole('button', { name: 'Add labour' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /add labour/i })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
@@ -434,7 +440,7 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
     renderWorkspace()
     await openTab('Labour')
     fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
-    expect(screen.getByRole('dialog', { name: 'Add labour' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /add labour/i })).toBeInTheDocument()
     const active = document.activeElement
     expect(['INPUT', 'TEXTAREA', 'SELECT']).not.toContain(active?.tagName)
   })

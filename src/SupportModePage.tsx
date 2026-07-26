@@ -7,6 +7,7 @@ import {
   getSupportMemoryView,
   getSupportPhotos,
   getSupportJobMoney,
+  getSupportJobLabourPeople,
   getSupportReviewQueue,
   getSupportUserJobs,
   getSupportUsers,
@@ -20,6 +21,7 @@ import type {
   BudgetSummaryResponse,
   InspectionData,
   JobMoneyResponse,
+  LabourPersonWithJobStats,
   JobPhoto,
   MemoryViewItem,
   MemoryViewResponse,
@@ -326,6 +328,7 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
   // Money loads separately and tolerates absence: an older backend without the
   // support Money endpoint must not break the whole view-as screen.
   const [money, setMoney] = useState<JobMoneyResponse | null>(null)
+  const [labourPeople, setLabourPeople] = useState<LabourPersonWithJobStats[] | null>(null)
   const [failed, setFailed] = useState(false)
 
   const load = useCallback(() => {
@@ -351,6 +354,12 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
       .then(() => getSupportJobMoney(job.id))
       .then(setMoney)
       .catch(() => setMoney(null))
+    // Labour people load independently too; absence just hides the read-only
+    // people summary rather than breaking the Labour tab.
+    Promise.resolve()
+      .then(() => getSupportJobLabourPeople(job.id))
+      .then(r => setLabourPeople(r.people))
+      .catch(() => setLabourPeople(null))
   }, [job.id, onNoAccess])
   useEffect(() => { load() }, [load])
 
@@ -506,6 +515,22 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
 
           {tab === 'labour' && (
             <div className="mem-tabpanel" role="tabpanel" aria-label="Labour">
+              {/* Read-only people summary — no add/edit/remove controls. */}
+              {labourPeople && labourPeople.length > 0 && (
+                <section className="labour-people" aria-label="People">
+                  <p className="mem-section-label">People</p>
+                  <ul className="labour-people-list">
+                    {labourPeople.map(p => (
+                      <li key={p.id} className="labour-person-row" style={{ cursor: 'default' }}>
+                        <span className="labour-person-name">{p.name}{p.isSelf && <span className="labour-person-you"> · you</span>}</span>
+                        <span className="labour-person-figures">
+                          {[p.jobHoursLabel, p.defaultHourlyRateAmount ? `£${p.defaultHourlyRateAmount}/h` : 'No rate yet', p.defaultBudgetTreatment === 'counts_toward_budget' ? 'Counts toward budget' : 'Hours only'].filter(Boolean).join(' · ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               {(labourHours?.days ?? []).length === 0
                 ? <p className="mem-tab-empty">No labour remembered.</p>
                 : <>

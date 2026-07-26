@@ -1,5 +1,5 @@
 import type { JobMoneyResponse, MarkMoneyOutRequest, MemoryViewItem, MoneyRow } from '../../types'
-import { deriveEachTotal } from '../../memoryScan'
+import { deriveEachTotal, deriveHourlyTotal } from '../../memoryScan'
 import { ApiError } from '../client'
 import { findMockItem, mockSectionsFor } from './state'
 import { mockGetJobPayments } from './payments'
@@ -48,9 +48,12 @@ const round2 = (n: number) => String(Math.round(n * 100) / 100)
 function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GBP' } | null {
   if (item.memoryType !== 'ordered_material' && item.memoryType !== 'labour') return null
   if ((item.uncertaintyFlags ?? []).length > 0) return null
+  // Labour can only be paid when it's budget-enabled (hours-only never can).
+  if (item.memoryType === 'labour' && item.labourBudgetEnabled === false) return null
   const currency = item.costCurrency || 'GBP'
   if (currency !== 'GBP') return null
-  const total = item.totalCostAmount ?? deriveEachTotal(item)
+  // Explicit total, else a bought line's each-total, else a labour hours × rate.
+  const total = item.totalCostAmount ?? deriveEachTotal(item) ?? deriveHourlyTotal(item)
   if (!total || !(parseFloat(total) > 0)) return null
   return { amount: total, currency: 'GBP' }
 }

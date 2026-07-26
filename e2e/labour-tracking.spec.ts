@@ -37,7 +37,7 @@ test.describe('Labour tab — daily view', () => {
     // Job total: today 4+6+8 = 18h, yesterday 6h → 24h (worth-checking excluded).
     const jobTotal = page.getByRole('region', { name: 'Labour hours' })
     await expect(jobTotal).toContainText('24h')
-    await expect(jobTotal).toContainText('job total')
+    await expect(jobTotal).toContainText('on this job')
 
     const today = page.getByRole('region', { name: 'Labour Today' })
     await expect(today.getByText('18h day total')).toBeVisible()
@@ -50,32 +50,29 @@ test.describe('Labour tab — daily view', () => {
 
     const yesterday = page.getByRole('region', { name: 'Labour Yesterday' })
     await expect(yesterday.getByText('6h day total')).toBeVisible()
-    // entry without a named person renders safely, money stays secondary
-    await expect(yesterday.getByText('fitting cladding')).toBeVisible()
-    await expect(yesterday.getByText('No cost added')).toBeVisible()
+    // entry without a named person renders safely; the row states its Budget
+    // effect (hours only) rather than a money figure.
+    await expect(yesterday.getByText(/fitting cladding · hours only/i)).toBeVisible()
   })
 
-  test('direct-add labour for another day appears under that day', async ({ page }) => {
+  test('direct-add labour with a new person appears under Today', async ({ page }) => {
     await gotoApp(page)
     await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
-    await page.getByRole('button', { name: 'Add labour' }).click()
-    const form = page.getByRole('form', { name: 'Add labour' })
+    await page.getByRole('button', { name: /add labour/i }).click()
+    const sheet = page.getByRole('dialog', { name: 'Add labour' })
+    // Add a brand-new person from the drawer, then log their hours.
+    await sheet.getByRole('button', { name: '+ New' }).click()
+    await sheet.getByLabel('New person name').fill('Priya')
+    await sheet.getByRole('button', { name: 'Add', exact: true }).click()
+    await sheet.locator('.stepper-input').fill('5')
+    await sheet.locator('input[name="labourTask"]').fill('decking')
+    await sheet.getByRole('button', { name: 'Save labour' }).click()
+    await page.waitForTimeout(600)
 
-    // pick yesterday's date so the entry lands in the Yesterday group
-    const yesterday = new Date(Date.now() - 86_400_000)
-    const p = (n: number) => String(n).padStart(2, '0')
-    await form.locator('input[name="happenedAt"]').fill(`${yesterday.getFullYear()}-${p(yesterday.getMonth() + 1)}-${p(yesterday.getDate())}`)
-    await form.locator('input[name="labourPerson"]').fill('Priya')
-    await form.locator('input[name="labourHours"]').fill('5')
-    await form.locator('input[name="labourTask"]').fill('decking')
-    await form.getByRole('button', { name: /^Save / }).click()
-
-    const group = page.getByRole('region', { name: 'Labour Yesterday' })
+    const group = page.getByRole('region', { name: 'Labour Today' })
     await expect(group.getByText('Priya')).toBeVisible()
-    await expect(group.getByText('decking')).toBeVisible()
-    // yesterday's day total now includes the new 5h (6 + 5)
-    await expect(group.getByText('11h day total')).toBeVisible()
+    await expect(group.getByText(/decking/)).toBeVisible()
   })
 
   test('edit labour day/hours/task moves the entry and updates totals', async ({ page }) => {

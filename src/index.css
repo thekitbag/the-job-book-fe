@@ -29,6 +29,8 @@
   --grey-press:   #f7f7f5;  /* pressed row */
   --cobalt:       #2440ff;  /* interactive ONLY — never decoration */
   --cobalt-on-ink:#9db1ff;  /* the accent when it sits on ink (cobalt is illegible there) */
+  --cobalt-wash:  #eef1ff;  /* faint cobalt fill — budget-cost cards, selected option */
+  --grey-panel:   #f2f2f0;  /* recessed neutral panel — config blocks vs the white log */
   --warning-red:  #d92d20;  /* warning states ONLY (over budget, overdue) */
   --record-sub:   #9b9b97;  /* secondary text on the Record bar */
 
@@ -3869,6 +3871,11 @@ code {
 .queue-item-headline { margin: 0.1rem 0 0; font-size: var(--text-lg); font-weight: 800; line-height: 1.25; color: var(--ink-900); }
 .queue-item-meta { margin: 0.2rem 0 0; font-size: var(--text-md); color: var(--ink-500); }
 .queue-item-cost { margin: 0.25rem 0 0; font-size: var(--text-md); font-weight: 700; color: var(--ink-900); }
+/* Inherited labour rule (10i): the matched person + Budget effect a confirm will
+   save. Cobalt for budget cost; grey for hours-only / no-rate. */
+.queue-labour-effect { margin: 0.25rem 0 0; font-size: var(--text-md); font-weight: 600; }
+.queue-labour-effect--budget { color: var(--cobalt); }
+.queue-labour-effect--hours, .queue-labour-effect--no-rate { color: var(--grey-text); }
 .queue-item-uncertain-line { margin: 0.4rem 0 0; font-size: var(--text-sm); font-weight: 800; color: var(--amber-fg); }
 
 /* Actions: one compact row — Remember (wide) · Fix · Dismiss */
@@ -5113,6 +5120,140 @@ code {
    name's 22px — a phrase set at 22px shouts louder than the person's name. */
 .labour-entry-cost { font-size: var(--text-lg); font-weight: 700; color: var(--ink); white-space: nowrap; }
 .labour-entry-side .btn-mem-fix { min-height: 0; }
+/* Hours are the row's figure now (design 10a): person + effect left, hours big
+   on the right. Money never appears on a labour row. */
+.labour-entry-hours-big { font-size: 20px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+/* The Budget effect, one legible phrase. Budget cost is cobalt; hours-only and
+   no-rate are quiet greys so unpaid budget cost never reads as money out and
+   hours-only never looks lost. */
+.labour-entry-effect { margin: 4px 0 0; font-size: var(--text-md); font-weight: 600; }
+.labour-entry-effect--budget { color: var(--cobalt); }
+.labour-entry-effect--hours, .labour-entry-effect--no-rate { color: var(--grey-text); }
+
+/* Budgeted labour cost card (10a) — cobalt wash, secondary to the hours hero. */
+.labour-budget-card { margin: 14px 0 0; background: var(--cobalt-wash, #eef1ff); padding: 14px 16px; }
+.labour-budget-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.labour-budget-card-cap {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--text-sm); font-weight: 700; letter-spacing: 1px; color: var(--cobalt);
+}
+.labour-budget-card-amount { font-size: 26px; font-weight: 800; color: var(--cobalt); }
+.labour-help {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid #9db1ff; background: none; color: var(--cobalt);
+  font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.labour-budget-card-help { margin: 10px 0 0; font-size: var(--text-sm); color: #4756b0; line-height: 1.45; }
+
+/* People summary (10a) + Manage people list (10b). */
+/* People is configuration (who + rates), not the entry log directly below it —
+   so it reads as a recessed grey panel, distinct from the white ledger of
+   labour entries. Hierarchy: cobalt budget card → grey people config → white log. */
+.labour-people { margin: 18px 0 14px; background: var(--grey-panel); padding: 12px 16px 6px; }
+.labour-people-head { display: flex; justify-content: space-between; align-items: baseline; }
+.labour-people-list, .manage-people-list { list-style: none; margin: 8px 0 0; padding: 0; border-top: var(--rule-heavy); }
+/* Inside the panel the wash already sets it apart, so the internal rule is a
+   hairline (not the heavy black rule the entry log uses) and the last row is flush. */
+.labour-people .labour-people-list { border-top: var(--rule-hair); }
+.labour-people .labour-people-list li:last-child .labour-person-row { border-bottom: none; }
+.labour-person-row {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 13px 0; border: none; border-bottom: var(--rule-hair); background: none;
+  text-align: left; cursor: pointer; min-height: 44px;
+}
+.labour-person-name { flex: 1; font-weight: 700; font-size: var(--text-xl); color: var(--ink); }
+.labour-person-you { font-size: var(--text-md); font-weight: 700; color: var(--record-sub); }
+.labour-person-figures { font-weight: 700; font-size: var(--text-md); color: var(--grey-text); white-space: nowrap; }
+.labour-person-chev { color: var(--cobalt); font-weight: 700; font-size: 19px; }
+/* Legible per-person Budget tag. */
+.labour-tag { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; padding: 3px 8px; white-space: nowrap; }
+.labour-tag--budget { background: var(--cobalt-wash, #eef1ff); color: var(--cobalt); }
+.labour-tag--hours { border: 1px solid var(--grey-hairline); color: var(--grey-text); }
+.labour-tag--add-rate { color: var(--cobalt); }
+
+.manage-people { display: flex; flex-direction: column; }
+.labour-rate-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0 12px; border-bottom: var(--rule-heavy); }
+.labour-rate-value { font-size: 20px; font-weight: 800; color: var(--ink); }
+
+/* Two-option Budget-treatment chooser (10c). */
+.treatment-chooser { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+.treatment-opt {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  border: 1px solid var(--grey-hairline); background: none; padding: 13px 15px; cursor: pointer;
+}
+.treatment-opt--on { border: 2px solid var(--cobalt); background: var(--cobalt-wash, #eef1ff); }
+.treatment-radio {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--grey-hairline);
+  flex: none; position: relative;
+}
+.treatment-opt--on .treatment-radio { border-color: var(--cobalt); }
+.treatment-opt--on .treatment-radio::after {
+  content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--cobalt);
+}
+.treatment-text { display: flex; flex-direction: column; gap: 2px; }
+.treatment-title { font-weight: 800; font-size: var(--text-lg); color: var(--ink); }
+.treatment-opt:not(.treatment-opt--on) .treatment-title { color: #55554f; }
+.treatment-sub { font-size: var(--text-sm); color: var(--grey-text); }
+.treatment-opt--on .treatment-sub { color: #4756b0; }
+
+/* ── Add labour drawer (10d/10e) ── */
+.add-labour { display: flex; flex-direction: column; }
+.who-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.who-chip {
+  border: 1px solid var(--grey-hairline); background: none; color: var(--ink);
+  font-weight: 700; font-size: var(--text-md); padding: 9px 15px; cursor: pointer;
+}
+.who-chip--on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.who-chip-you { color: var(--cobalt-on-ink); font-size: var(--text-sm); }
+.who-chip--on .who-chip-you { color: var(--cobalt-on-ink); }
+.who-chip--new { color: var(--cobalt); }
+.who-new { display: flex; gap: 8px; margin: 4px 0 0; }
+.who-new .queue-field-input { flex: 1; }
+
+.add-labour-ht { display: flex; gap: 22px; margin-top: 16px; }
+.add-labour-ht > div:first-child { flex: none; }
+.add-labour-task { flex: 1; display: flex; flex-direction: column; }
+
+.hours-stepper { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.stepper-btn {
+  width: 44px; height: 44px; flex: none; cursor: pointer;
+  border: 2px solid var(--ink); background: none; color: var(--ink);
+  font-size: 24px; font-weight: 800; line-height: 1;
+}
+.stepper-btn--plus { background: var(--ink); color: var(--paper); }
+.stepper-value { display: flex; align-items: baseline; border-bottom: 3px solid var(--ink); padding-bottom: 4px; }
+.stepper-input {
+  width: 46px; text-align: center; border: none; background: none;
+  font-size: 30px; font-weight: 800; color: var(--ink); padding: 0;
+}
+.stepper-input:focus { outline: none; }
+.stepper-unit { font-size: 18px; font-weight: 700; color: var(--grey-text); }
+
+.add-labour-budget { margin-top: 16px; padding: 14px 16px; }
+.add-labour-budget--budget { background: var(--cobalt-wash); }
+.add-labour-budget--hours { background: var(--grey-press); }
+.add-labour-budget-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.labour-budget-card-cap--grey { color: var(--grey-text); }
+.add-labour-budget .labour-tag { display: inline-block; margin-top: 8px; }
+.add-labour-estimate {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid #d6ddff;
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: var(--text-md); color: #4756b0;
+}
+.add-labour-estimate b { font-size: 19px; color: var(--cobalt); }
+.add-labour-toggle { margin-top: 10px; border: none; background: none; padding: 0; color: var(--cobalt); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
+.add-labour-toggle-inline { border: none; background: none; padding: 0; color: var(--cobalt); font-weight: 700; font-size: inherit; cursor: pointer; }
+.add-labour-hours-copy { margin: 8px 0 0; font-size: var(--text-md); color: #55554f; line-height: 1.4; }
+.rate-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.rate-row .queue-field-input { flex: 1; }
+
+.btn-add-labour-save {
+  margin-top: 16px; width: 100%; border: none; cursor: pointer;
+  background: var(--cobalt); color: var(--paper);
+  font-weight: 800; font-size: var(--text-lg); padding: 15px;
+}
+.btn-add-labour-save:disabled { opacity: 0.5; }
 
 /* ── Manual Add V2: bottom sheet ── */
 .bottom-sheet-backdrop {

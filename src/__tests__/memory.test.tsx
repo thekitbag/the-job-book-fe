@@ -28,6 +28,7 @@ vi.mock('../api', async (importOriginal) => {
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
+    getLabourPeople: vi.fn(() => Promise.resolve({ jobId: 'job-mem-001', people: [] })),
   }
 })
 
@@ -664,16 +665,16 @@ describe('Workspace — Labour tab', () => {
     expect(within(today).getByText('4h')).toBeTruthy()
   })
 
-  it('shows person, hours, task; money stays secondary (rated total or No cost added)', async () => {
+  it('shows person and hours; the Budget effect is stated per row (budget cost vs hours only)', async () => {
     renderWorkspace()
     openTab('Labour')
     const labour = await screen.findByRole('tabpanel', { name: /labour/i })
     expect(within(labour).getByText('Tom')).toBeTruthy()
-    expect(within(labour).getByText('electrics')).toBeTruthy()
     expect(within(labour).getByText('8h')).toBeTruthy()
-    // rated labour shows its trusted line total; hours-only shows No cost added
-    expect(within(labour).getByText('£280')).toBeTruthy()
-    expect(within(labour).getAllByText('No cost added').length).toBeGreaterThan(0)
+    // Rated, budget-enabled labour states its budget cost in the row; hours-only
+    // labour says so plainly. Money never appears on the row itself.
+    expect(within(labour).getByText(/electrics · £280 budget cost/i)).toBeTruthy()
+    expect(within(labour).getAllByText(/hours only/i).length).toBeGreaterThan(0)
   })
 
   it('a labour row opens the shared action drawer — no inline Fix memory CTA', async () => {
@@ -682,7 +683,7 @@ describe('Workspace — Labour tab', () => {
     const labour = await screen.findByRole('tabpanel', { name: /labour/i })
     // Rows carry no repeated inline CTA; actions live behind the tap.
     expect(within(labour).queryByRole('button', { name: /fix memory/i })).toBeNull()
-    fireEvent.click(within(labour).getByText('electrics').closest('.labour-entry-tap')!)
+    fireEvent.click(within(labour).getByRole('button', { name: /open actions for electrics/i }))
     const dialog = within(screen.getByRole('dialog'))
     expect(dialog.getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
     expect(dialog.getByRole('button', { name: /remove item/i })).toBeInTheDocument()

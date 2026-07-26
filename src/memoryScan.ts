@@ -205,6 +205,10 @@ export function labourExclusionCopy(reason: string): string {
  */
 export function safeLabourCost(item: MemoryViewItem): { amount: number; currency: string } | null {
   if (item.memoryType !== 'labour') return null
+  // Hours-only labour never contributes Budget cost, even with a stored rate.
+  // Only an explicit `false` excludes: an absent flag (older API) keeps the
+  // pre-people behaviour so migrated totals are preserved.
+  if (item.labourBudgetEnabled === false) return null
   if ((item.uncertaintyFlags ?? []).length > 0) return null
   const currency = item.costCurrency
   if (currency !== 'GBP') return null

@@ -13,11 +13,6 @@ function figure(scope: HTMLElement, label: string, value: string) {
   const col = within(scope).getAllByText(label, { selector: 'dt' })[0].closest('.budget-figure') as HTMLElement
   return expect(within(col).getByText(value))
 }
-async function figureAsync(scope: HTMLElement, label: string, value: string) {
-  const col = (await within(scope).findAllByText(label, { selector: 'dt' }))[0].closest('.budget-figure') as HTMLElement
-  return expect(within(col).getByText(value))
-}
-
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
@@ -114,26 +109,21 @@ function openTab(name: string) {
   fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }))
 }
 
-describe('Labour tab — budget context from budgetSummary.labour', () => {
-  it('shows labour cost, labour budget, and remaining', async () => {
+describe('Labour tab — budgeted cost card (10a)', () => {
+  it('shows the budget-enabled trusted labour cost in the cobalt card', async () => {
     renderWorkspace()
     openTab('Labour')
-    const money = await screen.findByRole('region', { name: 'Labour cost' })
-    figure(money, 'Cost', '£280').toBeInTheDocument()
-    figure(money, 'Budget', '£1500').toBeInTheDocument()
-    figure(money, 'Left', '£1220').toBeInTheDocument()
+    const card = await screen.findByRole('region', { name: 'Budgeted labour cost' })
+    expect(within(card).getByText('£280')).toBeInTheDocument()
   })
 
-  it('without a labour budget, still shows cost and never implies it is excluded', async () => {
-    const bs = budgetSummary()
-    bs.labour = { ...bs.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
-    mockGetBudgetSummary.mockResolvedValue(bs)
+  it('the Labour page states cost only — budget/remaining/set-budget live in the Budget tab now', async () => {
     renderWorkspace()
     openTab('Labour')
-    const money = await screen.findByRole('region', { name: 'Labour cost' })
-    figure(money, 'Cost', '£280').toBeInTheDocument()
-    // No budget set, yet the cost is still stated — that is the claim.
-    expect(within(money).queryByText(/Budget/)).toBeNull()
+    await screen.findByRole('region', { name: 'Budgeted labour cost' })
+    // The old on-page "Labour cost" budget/remaining/set-budget section is gone.
+    expect(screen.queryByRole('region', { name: 'Labour cost' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /set labour budget/i })).toBeNull()
   })
 
   it('labour add stays available from Labour and creates memoryType labour', async () => {
@@ -141,10 +131,10 @@ describe('Labour tab — budget context from budgetSummary.labour', () => {
     mockCreate.mockResolvedValue(item({ id: 'new-lab', memoryType: 'labour', labourHours: '5' }))
     renderWorkspace()
     openTab('Labour')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
+    fireEvent.click(await screen.findByRole('button', { name: /add labour/i }))
     const sheet = screen.getByRole('dialog', { name: 'Add labour' })
-    fireEvent.change(within(sheet).getByRole('form', { name: 'Add labour' }).querySelector('input[name="labourHours"]')!, { target: { value: '5' } })
-    fireEvent.click(within(sheet).getByRole('button', { name: /^Save / }))
+    fireEvent.change(within(sheet).getByLabelText('Hours'), { target: { value: '5' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Save labour' }))
     await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(JOB.id, expect.objectContaining({ memoryType: 'labour', labourHours: '5' })))
   })
 })
@@ -300,7 +290,7 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
   const mockCreateCategory = vi.mocked(api.createBudgetCategory)
   const mockPatchCategory = vi.mocked(api.patchBudgetCategory)
 
-  it('with no Labour category, Set Labour budget creates a category named Labour on save', async () => {
+  it('with no Labour category, Set budget (Budget tab) creates a category named Labour on save', async () => {
     const noCat = budgetSummary()
     noCat.categories = [noCat.categories[1]] // timber only
     noCat.labour = { ...noCat.labour!, budgetCategory: null, budgetAmount: null, budgetCurrency: null, budgetLabel: null, remainingAmount: null, remainingLabel: null, overBudget: false }
@@ -309,29 +299,28 @@ describe('Labour budget — one concept, set/edit from Labour', () => {
     mockCreateCategory.mockResolvedValue(CAT_LABOUR)
 
     renderWorkspace()
-    openTab('Labour')
-    const money = await screen.findByRole('region', { name: 'Labour cost' })
-    fireEvent.click(within(money).getByRole('button', { name: 'Set Labour budget' }))
-    fireEvent.change(within(money).getByLabelText('Labour budget (£)'), { target: { value: '1500' } })
-    fireEvent.click(within(money).getByRole('button', { name: 'Save budget' }))
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
+    fireEvent.click(within(group).getByRole('button', { name: /actions for labour/i }))
+    fireEvent.click(within(group).getByRole('menuitem', { name: 'Set budget' }))
+    fireEvent.change(within(group).getByLabelText('Labour budget (£)'), { target: { value: '1500' } })
+    fireEvent.click(within(group).getByRole('button', { name: 'Save budget' }))
 
     await waitFor(() => expect(mockCreateCategory).toHaveBeenCalledWith(JOB.id, { name: 'Labour', budgetAmount: '1500' }))
-    // the refetched authoritative summary now shows the Labour budget
-    const budget = await figureAsync(money, 'Budget', '£1500')
-    budget.toBeInTheDocument()
-    figure(money, 'Left', '£1220').toBeInTheDocument()
   })
 
-  it('with a Labour category, Edit Labour budget patches the existing category', async () => {
+  it('with a Labour category, Edit budget (Budget tab) patches the existing category', async () => {
     mockPatchCategory.mockResolvedValue({ ...CAT_LABOUR, budgetAmount: '2000' })
     renderWorkspace()
-    openTab('Labour')
-    const money = await screen.findByRole('region', { name: 'Labour cost' })
-    fireEvent.click(within(money).getByRole('button', { name: 'Edit Labour budget' }))
-    const input = within(money).getByLabelText('Labour budget (£)') as HTMLInputElement
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
+    fireEvent.click(within(group).getByRole('button', { name: /actions for labour/i }))
+    fireEvent.click(within(group).getByRole('menuitem', { name: 'Edit budget' }))
+    // Editing replaces the Labour group with the category form (name + amount).
+    const input = screen.getByLabelText(/Budget amount/i) as HTMLInputElement
     expect(input.value).toBe('1500') // prefilled from the existing category
     fireEvent.change(input, { target: { value: '2000' } })
-    fireEvent.click(within(money).getByRole('button', { name: 'Save budget' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save category' }))
     await waitFor(() => expect(mockPatchCategory).toHaveBeenCalledWith(JOB.id, 'c-lab', { name: 'labour', budgetAmount: '2000' }))
     expect(mockCreateCategory).not.toHaveBeenCalled()
   })

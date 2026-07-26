@@ -101,6 +101,14 @@ export interface ProposedMemory {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // Review-queue labour enrichment: the exact-name-matched person's id + the
+  // budget treatment that will be persisted on confirm (correctable), plus the
+  // inherited person/treatment for display. Absent on non-labour drafts and on
+  // older backends without people enrichment.
+  labourPersonId?: string | null
+  labourBudgetEnabled?: boolean | null
+  inheritedLabourPerson?: LabourPerson | null
+  inheritedBudgetTreatment?: LabourBudgetTreatment | null
   // Effective event day (ISO DateTime; local noon for date-only). Labour drafts
   // carry the spoken/derived day; corrections may change it.
   happenedAt?: string | null
@@ -172,6 +180,9 @@ export interface ReviewQueue {
   // Active budget categories for the job (additive). Drives review-time category
   // selection; empty/absent → no category UI is shown during review.
   budgetCategories?: BudgetCategory[]
+  // Active labour people for the owner (additive) — used to resolve a corrected
+  // person name back to an id when confirming a labour draft.
+  labourPeople?: LabourPerson[]
   sections: QueueSection[]
   alreadyRemembered: AlreadyRememberedItem[]
 }
@@ -192,6 +203,10 @@ export interface QueueDecision {
   // Selected category to carry into the created memory item (ordered_material
   // only). null = remember with no category; omitted = backwards-compatible.
   budgetCategoryId?: string | null
+  // Labour drafts only: the person to link and whether the entry counts toward
+  // Budget. Omitted → backend applies the same safe defaults as direct-add.
+  labourPersonId?: string | null
+  labourBudgetEnabled?: boolean | null
 }
 
 export interface QueueDecisionResponse {
@@ -366,6 +381,12 @@ export interface MemoryViewItem {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // The lightweight labour person this entry is linked to, if any.
+  labourPersonId?: string | null
+  // Whether this labour entry can contribute to Budget when it has trusted
+  // cost. false = hours-only. Absent on older rows (treated as legacy — the
+  // pre-people behaviour is preserved so migrated Budget totals don't shift).
+  labourBudgetEnabled?: boolean | null
   // The budget category this trusted item is assigned to, if any (zero or one).
   // Present on memory-view items so Job memory can show/edit assignment inline.
   budgetCategoryId?: string | null
@@ -578,6 +599,53 @@ export interface LabourHoursSummary {
   days: LabourDaySummary[]
 }
 
+// ── Labour people (user-owned, reusable across jobs) ─────────────────────────
+
+export type LabourBudgetTreatment = 'counts_toward_budget' | 'hours_only'
+
+export interface LabourPerson {
+  id: string
+  name: string
+  defaultHourlyRateAmount: string | null
+  defaultHourlyRateCurrency: 'GBP' | null
+  defaultBudgetTreatment: LabourBudgetTreatment
+  createdAt: string
+  updatedAt: string
+}
+
+// A person plus this job's stats — returned by the job-scoped list so a person
+// with no entries on this job can still be selected for a new one.
+export interface LabourPersonWithJobStats extends LabourPerson {
+  // True for the account owner's own person row (shown as "· you").
+  isSelf?: boolean
+  jobHours: string | null
+  jobHoursLabel: string | null
+  jobBudgetCostAmount: string | null
+  jobBudgetCostCurrency: 'GBP' | null
+  jobBudgetCostLabel: string | null
+  hasEntriesWithoutRate: boolean
+}
+
+export interface LabourPeopleResponse {
+  jobId: string
+  people: LabourPersonWithJobStats[]
+}
+
+export interface CreateLabourPersonRequest {
+  name: string
+  defaultHourlyRateAmount?: string | null
+  defaultHourlyRateCurrency?: 'GBP' | null
+  defaultBudgetTreatment: LabourBudgetTreatment
+}
+
+// PATCH — omitted fields preserve; null rate clears the default rate/currency.
+export interface PatchLabourPersonRequest {
+  name?: string
+  defaultHourlyRateAmount?: string | null
+  defaultHourlyRateCurrency?: 'GBP' | null
+  defaultBudgetTreatment?: LabourBudgetTreatment
+}
+
 // ── Budget categories & known spend by category ─────────────────────────────
 // Backend-authoritative. The frontend never recomputes category known spend as
 // confirmed truth — it renders the budget-summary response.
@@ -742,6 +810,12 @@ export interface CreateMemoryItemRequest {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // Link a new labour entry to a labour person; when provided and rate/treatment
+  // are omitted, the backend applies that person's defaults.
+  labourPersonId?: string | null
+  // Whether the entry counts toward Budget when trusted. Omitted → the person's
+  // default, or hours-only when no person/default is available.
+  labourBudgetEnabled?: boolean | null
   budgetCategoryId?: string | null
 }
 
@@ -767,6 +841,10 @@ export interface MemoryItemEdit {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // Re-link (or unlink, with null) the entry's labour person. Omitted preserves.
+  labourPersonId?: string | null
+  // Change future Budget inclusion for this entry. Omitted preserves.
+  labourBudgetEnabled?: boolean | null
   // Effective event day. Present sets/clears the value (local-noon ISO for a
   // date-only edit); OMIT the key to preserve the existing value.
   happenedAt?: string | null
