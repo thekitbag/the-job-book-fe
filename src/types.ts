@@ -101,6 +101,14 @@ export interface ProposedMemory {
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
+  // Review-queue labour enrichment: the exact-name-matched person's id + the
+  // budget treatment that will be persisted on confirm (correctable), plus the
+  // inherited person/treatment for display. Absent on non-labour drafts and on
+  // older backends without people enrichment.
+  labourPersonId?: string | null
+  labourBudgetEnabled?: boolean | null
+  inheritedLabourPerson?: LabourPerson | null
+  inheritedBudgetTreatment?: LabourBudgetTreatment | null
   // Effective event day (ISO DateTime; local noon for date-only). Labour drafts
   // carry the spoken/derived day; corrections may change it.
   happenedAt?: string | null
@@ -172,6 +180,9 @@ export interface ReviewQueue {
   // Active budget categories for the job (additive). Drives review-time category
   // selection; empty/absent → no category UI is shown during review.
   budgetCategories?: BudgetCategory[]
+  // Active labour people for the owner (additive) — used to resolve a corrected
+  // person name back to an id when confirming a labour draft.
+  labourPeople?: LabourPerson[]
   sections: QueueSection[]
   alreadyRemembered: AlreadyRememberedItem[]
 }
@@ -192,6 +203,10 @@ export interface QueueDecision {
   // Selected category to carry into the created memory item (ordered_material
   // only). null = remember with no category; omitted = backwards-compatible.
   budgetCategoryId?: string | null
+  // Labour drafts only: the person to link and whether the entry counts toward
+  // Budget. Omitted → backend applies the same safe defaults as direct-add.
+  labourPersonId?: string | null
+  labourBudgetEnabled?: boolean | null
 }
 
 export interface QueueDecisionResponse {

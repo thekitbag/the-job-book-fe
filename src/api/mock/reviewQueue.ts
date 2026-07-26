@@ -1,6 +1,9 @@
-import type { AlreadyRememberedItem, MemoryType, MemoryViewItem, QueueDecision, QueueDecisionResponse, QueueItem, ReviewQueue } from '../../types'
+import type { AlreadyRememberedItem, LabourPerson, MemoryType, MemoryViewItem, QueueDecision, QueueDecisionResponse, QueueItem, ReviewQueue } from '../../types'
 import { suggestBudgetCategory } from '../../memoryScan'
+import { mockGetLabourPeople } from './labourPeople'
 import { mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
+
+const normalizeName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 
 // Effective labour day for today's drafts: local noon, so the date-only value
 // cannot drift a day across timezones.
@@ -248,17 +251,38 @@ const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
 
 export function mockGetReviewQueue(jobId: string): ReviewQueue {
   const budgetCategories = mockBudgetCategoriesFor(jobId).filter(c => !c.isArchived)
-  // Compute a response-time category suggestion for bought/ordered + labour drafts.
+  // Active labour people, projected to the plain LabourPerson shape the review
+  // queue carries; used to enrich labour drafts by exact name match.
+  const labourPeople: LabourPerson[] = mockGetLabourPeople(jobId).people.map(p => ({
+    id: p.id, name: p.name,
+    defaultHourlyRateAmount: p.defaultHourlyRateAmount, defaultHourlyRateCurrency: p.defaultHourlyRateCurrency,
+    defaultBudgetTreatment: p.defaultBudgetTreatment, createdAt: p.createdAt, updatedAt: p.updatedAt,
+  }))
+  // Compute a response-time category suggestion for bought/ordered + labour
+  // drafts, and enrich labour drafts with an exact-name-matched person's
+  // defaults (inherited rate/treatment + the person id + budget flag to persist).
   const enrich = (item: QueueItem): QueueItem => {
     const t = item.proposedMemory.memoryType
     if (t !== 'ordered_material' && t !== 'labour') return item
     const suggestion = suggestBudgetCategory(item.proposedMemory, budgetCategories)
+    const inherited = t === 'labour' && item.proposedMemory.labourPerson
+      ? labourPeople.find(p => normalizeName(p.name) === normalizeName(item.proposedMemory.labourPerson!)) ?? null
+      : null
+    const labourEnrichment = t === 'labour'
+      ? {
+          labourPersonId: inherited?.id ?? null,
+          labourBudgetEnabled: inherited ? inherited.defaultBudgetTreatment === 'counts_toward_budget' : false,
+          inheritedLabourPerson: inherited,
+          inheritedBudgetTreatment: inherited?.defaultBudgetTreatment ?? null,
+        }
+      : {}
     return {
       ...item,
       proposedMemory: {
         ...item.proposedMemory,
         budgetCategoryId: suggestion?.budgetCategoryId ?? null,
         budgetCategorySuggestion: suggestion,
+        ...labourEnrichment,
       },
     }
   }
@@ -266,6 +290,7 @@ export function mockGetReviewQueue(jobId: string): ReviewQueue {
     jobId,
     generatedAt: new Date().toISOString(),
     budgetCategories,
+    labourPeople,
     sections: [
       { key: 'ordered_materials', label: 'Ordered materials', items: [enrich(MOCK_QUEUE_ITEMS[0]), enrich(MOCK_QUEUE_ITEMS[3])] },
       { key: 'labour', label: 'Labour', items: [enrich(MOCK_QUEUE_ITEMS[4]), enrich(MOCK_QUEUE_ITEMS[5])] },
@@ -312,6 +337,10 @@ export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision):
       labourHours: isLabour ? (source.labourHours ?? null) : null,
       labourPerson: isLabour ? (source.labourPerson ?? null) : null,
       labourTask: isLabour ? (source.labourTask ?? null) : null,
+      // Persist the chosen person + Budget treatment (from the decision, else the
+      // enriched source). Hours-only when nothing says otherwise.
+      labourPersonId: isLabour ? (decision.labourPersonId !== undefined ? decision.labourPersonId : (source.labourPersonId ?? null)) : null,
+      labourBudgetEnabled: isLabour ? (decision.labourBudgetEnabled !== undefined ? decision.labourBudgetEnabled : (source.labourBudgetEnabled ?? false)) : null,
       happenedAt: source.happenedAt ?? null,
       uncertaintyFlags: keepFlags,
       budgetCategoryId: category,

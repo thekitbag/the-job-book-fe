@@ -106,13 +106,14 @@ describe('Add labour (10d/10e)', () => {
 
   it('no person/default stays hours-only rather than adding Budget cost', async () => {
     const user = userEvent.setup()
-    const onAdd = vi.fn((_req: CreateMemoryItemRequest) => Promise.resolve({} as never))
+    const onAdd = vi.fn(() => Promise.resolve({} as never))
     // Sam counts-toward-budget but has no rate → no estimated cost, calm no-rate.
     render(<AddLabourDrawer jobId="j1" people={[SAM]} open onClose={vi.fn()} onAdd={onAdd} onPeopleChanged={vi.fn()} />)
     expect(screen.getByText(/no rate yet — hours saved, no budget cost/i)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save labour' }))
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'labour', labourPersonId: 'lp-sam' })))
     // No rate override sent (no cost fields) — Budget cost only lands if a rate exists.
-    expect(onAdd.mock.calls[0][0]).not.toHaveProperty('costAmount')
+    const req = (onAdd.mock.calls[0] as CreateMemoryItemRequest[])[0]
+    expect(req).not.toHaveProperty('costAmount')
   })
 })

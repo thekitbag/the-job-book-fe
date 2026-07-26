@@ -3871,6 +3871,11 @@ code {
 .queue-item-headline { margin: 0.1rem 0 0; font-size: var(--text-lg); font-weight: 800; line-height: 1.25; color: var(--ink-900); }
 .queue-item-meta { margin: 0.2rem 0 0; font-size: var(--text-md); color: var(--ink-500); }
 .queue-item-cost { margin: 0.25rem 0 0; font-size: var(--text-md); font-weight: 700; color: var(--ink-900); }
+/* Inherited labour rule (10i): the matched person + Budget effect a confirm will
+   save. Cobalt for budget cost; grey for hours-only / no-rate. */
+.queue-labour-effect { margin: 0.25rem 0 0; font-size: var(--text-md); font-weight: 600; }
+.queue-labour-effect--budget { color: var(--cobalt); }
+.queue-labour-effect--hours, .queue-labour-effect--no-rate { color: var(--grey-text); }
 .queue-item-uncertain-line { margin: 0.4rem 0 0; font-size: var(--text-sm); font-weight: 800; color: var(--amber-fg); }
 
 /* Actions: one compact row — Remember (wide) · Fix · Dismiss */

@@ -77,6 +77,25 @@ function reviewCost(pm: ProposedMemory): string {
   const total = formatTotalLabel(pm.totalCostAmount ?? derived, pm.costCurrency || 'GBP')
   return [cost, total ? `${total} total` : null].filter(Boolean).join(' · ')
 }
+// The inherited Budget effect for a labour draft (design 10i): which person was
+// matched and what it will do to Budget on confirm — budget cost / hours only /
+// no rate yet. Returns null on a non-labour draft or an older backend without
+// people enrichment, so nothing speculative is shown.
+// The person already shows in the card meta, so the effect line states just the
+// Budget outcome (cobalt budget cost / grey hours-only / grey no-rate).
+const POS_NUM = /^\d+(\.\d+)?$/
+function reviewLabourEffect(pm: ProposedMemory): { text: string; kind: 'budget' | 'hours' | 'no-rate' } | null {
+  if (pm.memoryType !== 'labour' || pm.labourBudgetEnabled === undefined) return null
+  const rate = pm.inheritedLabourPerson?.defaultHourlyRateAmount ?? null
+  if (pm.labourBudgetEnabled) {
+    if (rate && POS_NUM.test(pm.labourHours ?? '')) {
+      const cost = parseFloat(pm.labourHours!) * parseFloat(rate)
+      return { text: `${formatMoney(cost, 'GBP')} budget cost`, kind: 'budget' }
+    }
+    return { text: 'no rate yet', kind: 'no-rate' }
+  }
+  return { text: 'hours only', kind: 'hours' }
+}
 
 // Plain builder labels for the category focus chips, keyed by section key.
 const SECTION_CHIP_LABELS: Record<string, string> = {
@@ -281,6 +300,20 @@ function EditForm({
             <span className="queue-field-label">Task / work area</span>
             <input className="queue-field-input" name="labourTask" value={form.labourTask ?? ''} onChange={e => setStr('labourTask', e.target.value)} placeholder="e.g. electrics" />
           </label>
+          {/* Budget treatment (10i): the user's correction wins over the
+              inherited default. Hours-only never adds Budget cost. */}
+          <label className="queue-field">
+            <span className="queue-field-label">Budget treatment</span>
+            <select
+              className="queue-field-input"
+              aria-label="Budget treatment"
+              value={form.labourBudgetEnabled ? 'counts' : 'hours'}
+              onChange={e => setForm(f => ({ ...f, labourBudgetEnabled: e.target.value === 'counts' }))}
+            >
+              <option value="counts">Counts toward budget</option>
+              <option value="hours">Hours only</option>
+            </select>
+          </label>
         </>
       ) : (
         <>
@@ -397,6 +430,7 @@ function QueueItemCard({
   const headline = reviewHeadline(item.proposedMemory)
   const meta = reviewMeta(item.proposedMemory)
   const cost = reviewCost(item.proposedMemory)
+  const labourEffect = reviewLabourEffect(item.proposedMemory)
 
   return (
     <div
@@ -416,6 +450,11 @@ function QueueItemCard({
           <p className="queue-item-headline">{headline}</p>
           {meta && <p className="queue-item-meta">{meta}</p>}
           {cost && <p className="queue-item-cost">{cost}</p>}
+          {/* Inherited labour rule (10i): who was matched and the Budget effect
+              that will be saved on confirm — correctable via Fix. */}
+          {labourEffect && (
+            <p className={`queue-labour-effect queue-labour-effect--${labourEffect.kind}`}>{labourEffect.text}</p>
+          )}
           {uncertain && <p className="queue-item-uncertain-line">Worth checking — cost or quantity may need confirming</p>}
         </>
       )}
@@ -743,10 +782,23 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     try {
       // Category applies only to bought/ordered memory, and only when the job has
       // categories at all — otherwise omit it entirely (backwards-compatible).
+      const sourcePm = corrected ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory
       const finalType = corrected?.memoryType ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory.memoryType
       const category = action === 'dismiss' || !(finalType === 'ordered_material' || finalType === 'labour') || activeCategories.length === 0
         ? undefined
         : (budgetCategoryId ?? null)
+      // Persist the labour person + Budget treatment shown on the card (or the
+      // corrected values). Non-labour / dismiss → omitted (undefined dropped by
+      // JSON), so the backend's existing behaviour is unchanged.
+      const isLabourDecision = finalType === 'labour' && action !== 'dismiss'
+      // On a correction, re-resolve the person id from the (possibly edited)
+      // name against the queue's people — a renamed person must not keep a stale
+      // id; an unmatched name links to no person (backend may re-match/default).
+      const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+      const labourPersonId = !isLabourDecision ? undefined
+        : action === 'correct'
+          ? ((queue.labourPeople ?? []).find(p => norm(p.name) === norm(corrected?.labourPerson ?? ''))?.id ?? null)
+          : (sourcePm?.labourPersonId ?? null)
       const result = await submitQueueDecision(job.id, {
         queueItemId: itemId,
         action,
@@ -757,6 +809,8 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         // Confirming/correcting a Worth-checking draft settles its uncertainty.
         uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
         budgetCategoryId: category,
+        labourPersonId,
+        labourBudgetEnabled: isLabourDecision ? (sourcePm?.labourBudgetEnabled ?? null) : undefined,
       })
       track('review_decision_submitted', {
         job_id: job.id,

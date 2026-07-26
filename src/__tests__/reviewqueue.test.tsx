@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import ReviewQueueScreen from '../ReviewQueueScreen'
 import * as api from '../api'
-import type { BudgetCategory, Job, QueueItem, ReviewQueue } from '../types'
+import type { BudgetCategory, Job, LabourPerson, QueueItem, ReviewQueue } from '../types'
 
 const mockGetReviewQueue = vi.mocked(api.getReviewQueue)
 const mockSubmitQueueDecision = vi.mocked(api.submitQueueDecision)
@@ -1428,5 +1428,71 @@ describe('ReviewQueueScreen — labour day correction', () => {
     expect(decision.corrected!.labourPerson).toBe('Tom')
     expect(decision.corrected!.labourHours).toBe('8')
     expect(decision.corrected!.labourTask).toBe('electrics')
+  })
+})
+
+// ── Voice-review inherited defaults (10i) ────────────────────────────────────
+
+const KURT_PERSON = { id: 'lp-kurt', name: 'Kurt', defaultHourlyRateAmount: '20', defaultHourlyRateCurrency: 'GBP' as const, defaultBudgetTreatment: 'counts_toward_budget' as const, createdAt: '', updatedAt: '' }
+const MIKE_PERSON = { id: 'lp-mike', name: 'Mike', defaultHourlyRateAmount: '25', defaultHourlyRateCurrency: 'GBP' as const, defaultBudgetTreatment: 'hours_only' as const, createdAt: '', updatedAt: '' }
+
+function inheritedLabourQueue(): ReviewQueue {
+  const base = (id: string, person: LabourPerson, hours: string, budget: boolean): QueueItem => ({
+    id, kind: 'single', status: 'draft', reviewLabel: '', summary: `${person.name} ${hours}h`,
+    proposedMemory: {
+      memoryType: 'labour', summary: `${person.name} ${hours}h`,
+      materialName: null, quantity: null, unit: null, supplierName: null, deliveryTiming: null, locationOrUse: null,
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      labourHours: hours, labourPerson: person.name, labourTask: 'fencing',
+      labourPersonId: person.id, labourBudgetEnabled: budget,
+      inheritedLabourPerson: person, inheritedBudgetTreatment: person.defaultBudgetTreatment,
+    },
+    confidenceLabel: 'high', uncertaintyFlags: [], sourceCandidateFactIds: [], sourceContext: [],
+  })
+  return {
+    jobId: MOCK_JOB.id, generatedAt: '2026-06-07T12:00:00Z',
+    labourPeople: [KURT_PERSON, MIKE_PERSON],
+    sections: [{ key: 'labour', label: 'Labour', items: [base('qi-kurt', KURT_PERSON, '6', true), base('qi-mike', MIKE_PERSON, '4', false)] }],
+    alreadyRemembered: [],
+  }
+}
+
+describe('ReviewQueueScreen — inherited labour defaults (10i)', () => {
+  beforeEach(() => {
+    mockGetReviewQueue.mockResolvedValue(inheritedLabourQueue())
+    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-kurt', action: 'confirm', status: 'confirmed', memoryItemId: 'mem-x', sourceCandidateFactIds: [] })
+  })
+
+  it('shows each draft\'s inherited person and Budget effect', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const kurt = await screen.findByTestId('queue-item-qi-kurt')
+    expect(within(kurt).getByText('£120 budget cost')).toBeTruthy()   // 6h × £20
+    expect(within(kurt).getByText('Kurt')).toBeTruthy()               // person shows in the meta
+    const mike = screen.getByTestId('queue-item-qi-mike')
+    expect(within(mike).getByText('hours only')).toBeTruthy()
+    expect(within(mike).getByText('Mike')).toBeTruthy()
+  })
+
+  it('confirming persists the inherited person id and budget flag', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const kurt = await screen.findByTestId('queue-item-qi-kurt')
+    fireEvent.click(within(kurt).getByRole('button', { name: /remember this/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.labourPersonId).toBe('lp-kurt')
+    expect(decision.labourBudgetEnabled).toBe(true)
+  })
+
+  it('correcting to Hours only sends labourBudgetEnabled false, person resolved from name', async () => {
+    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
+    const kurt = await screen.findByTestId('queue-item-qi-kurt')
+    fireEvent.click(within(kurt).getByRole('button', { name: /fix details/i }))
+    fireEvent.change(within(kurt).getByLabelText('Budget treatment'), { target: { value: 'hours' } })
+    fireEvent.click(within(kurt).getByRole('button', { name: /save correction/i }))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.action).toBe('correct')
+    expect(decision.labourBudgetEnabled).toBe(false)
+    expect(decision.labourPersonId).toBe('lp-kurt')
   })
 })
