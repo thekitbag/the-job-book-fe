@@ -49,7 +49,7 @@ test.describe('Budget setup before spend', () => {
     await expect(page.getByRole('button', { name: /add budget category/i })).toBeVisible()
   })
 
-  test('adding a category before any spend shows an empty category card, and Add to <category> still works', async ({ page }) => {
+  test('adding a category before any spend shows an empty category card without a generic cost action', async ({ page }) => {
     await addAndEnterNewJob(page, 'Loft Conversion 2')
     await goToSection(page, 'Budget')
     await page.waitForTimeout(700)
@@ -66,10 +66,7 @@ test.describe('Budget setup before spend', () => {
     await expect(card).toContainText('None yet')
     await expect(card.locator('.budget-figure', { hasText: 'Budget' }).getByText('£500', { exact: true })).toBeVisible()
 
-    const addTo = card.getByRole('button', { name: /add to materials/i })
-    await expect(addTo).toBeVisible()
-    await addTo.click()
-    await expect(page.getByRole('heading', { name: /add cost/i })).toBeVisible()
+    await expect(card.getByRole('button', { name: /add/i })).toHaveCount(0)
   })
 
   test('Record stays visible throughout the empty-Spend budget setup flow', async ({ page }) => {

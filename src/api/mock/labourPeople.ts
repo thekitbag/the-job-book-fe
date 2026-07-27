@@ -9,10 +9,7 @@ import { safeLabourCost } from '../../memoryScan'
 import { ApiError } from '../client'
 import { mockSectionsFor } from './state'
 
-// Stateful mock for labour people. The mock has a single implicit owner, so the
-// people list is module-global and reused across jobs — matching the product
-// rule that worker defaults are user-owned, not per-job. Job stats are computed
-// per requested job from its labour memory items.
+// Stateful mock for job-local labour people and rates.
 
 const POS = /^\d+(\.\d+)?$/
 const round2 = (n: number) => String(Math.round(n * 100) / 100)
@@ -21,19 +18,15 @@ let nextId = 1
 
 function seedPeople(): LabourPerson[] {
   const now = '2026-06-13T11:00:00.000Z'
-  const p = (id: string, name: string, rate: string | null, treatment: LabourPerson['defaultBudgetTreatment']): LabourPerson => ({
+  const p = (id: string, name: string, rate: string | null): LabourPerson => ({
     id, name,
     defaultHourlyRateAmount: rate,
     defaultHourlyRateCurrency: rate ? 'GBP' : null,
-    defaultBudgetTreatment: treatment,
     createdAt: now, updatedAt: now,
   })
   return [
-    p('lp-mike', 'Mike', '25', 'hours_only'),
-    p('lp-kurt', 'Kurt', '20', 'counts_toward_budget'),
-    p('lp-tom', 'Tom', '35', 'counts_toward_budget'),
-    p('lp-sam', 'Sam', null, 'counts_toward_budget'),
-    p('lp-apprentice', 'Apprentice', null, 'hours_only'),
+    p('lp-mike', 'Mike', '25'), p('lp-kurt', 'Kurt', '20'), p('lp-tom', 'Tom', '35'),
+    p('lp-sam', 'Sam', null), p('lp-apprentice', 'Apprentice', '0'),
   ]
 }
 
@@ -41,9 +34,10 @@ function seedPeople(): LabourPerson[] {
 // hours-only, per the design.
 const SELF_PERSON_ID = 'lp-mike'
 
-let people: LabourPerson[] | null = null
-function all(): LabourPerson[] {
-  if (!people) people = seedPeople()
+const peopleByJob = new Map<string, LabourPerson[]>()
+function all(jobId: string): LabourPerson[] {
+  let people = peopleByJob.get(jobId)
+  if (!people) { people = seedPeople(); peopleByJob.set(jobId, people) }
   return people
 }
 
@@ -68,15 +62,15 @@ function withJobStats(person: LabourPerson, jobId: string): LabourPersonWithJobS
     isSelf: person.id === SELF_PERSON_ID,
     jobHours: hasHours ? round2(hours) : null,
     jobHoursLabel: hasHours ? `${round2(hours)}h` : null,
-    jobBudgetCostAmount: hasCost ? round2(cost) : null,
-    jobBudgetCostCurrency: hasCost ? 'GBP' : null,
-    jobBudgetCostLabel: hasCost ? `£${round2(cost)}` : null,
+    jobLabourCostAmount: hasCost ? round2(cost) : null,
+    jobLabourCostCurrency: hasCost ? 'GBP' : null,
+    jobLabourCostLabel: hasCost ? `£${round2(cost)}` : null,
     hasEntriesWithoutRate: withoutRate,
   }
 }
 
 export function mockGetLabourPeople(jobId: string): LabourPeopleResponse {
-  const list = all().map(p => withJobStats(p, jobId))
+  const list = all(jobId).map(p => withJobStats(p, jobId))
   // People with entries on this job first (by hours desc), then the rest by name.
   list.sort((a, b) => {
     const ah = a.jobHours !== null ? 1 : 0
@@ -89,21 +83,21 @@ export function mockGetLabourPeople(jobId: string): LabourPeopleResponse {
 }
 
 function assertRate(amount: string | null | undefined) {
-  if (amount != null && amount !== '' && (!POS.test(amount) || parseFloat(amount) <= 0)) {
-    const err = new ApiError('Rate must be a positive amount', 400) as ApiError & { code?: string }
+  if (amount != null && amount !== '' && (!POS.test(amount) || parseFloat(amount) < 0)) {
+    const err = new ApiError('Rate must be zero or a positive amount', 400) as ApiError & { code?: string }
     err.code = 'INVALID_FIELD'
     throw err
   }
 }
 
-export function mockCreateLabourPerson(_jobId: string, req: CreateLabourPersonRequest): LabourPerson {
+export function mockCreateLabourPerson(jobId: string, req: CreateLabourPersonRequest): LabourPerson {
   const name = (req.name ?? '').trim()
   if (!name) {
     const err = new ApiError('Name is required', 400) as ApiError & { code?: string }
     err.code = 'INVALID_FIELD'
     throw err
   }
-  if (all().some(p => normalize(p.name) === normalize(name))) {
+  if (all(jobId).some(p => normalize(p.name) === normalize(name))) {
     const err = new ApiError('That person already exists', 400) as ApiError & { code?: string }
     err.code = 'LABOUR_PERSON_ALREADY_EXISTS'
     throw err
@@ -116,15 +110,14 @@ export function mockCreateLabourPerson(_jobId: string, req: CreateLabourPersonRe
     name,
     defaultHourlyRateAmount: hasRate ? req.defaultHourlyRateAmount! : null,
     defaultHourlyRateCurrency: hasRate ? 'GBP' : null,
-    defaultBudgetTreatment: req.defaultBudgetTreatment,
     createdAt: now, updatedAt: now,
   }
-  all().push(person)
+  all(jobId).push(person)
   return { ...person }
 }
 
-export function mockPatchLabourPerson(_jobId: string, personId: string, req: PatchLabourPersonRequest): LabourPerson {
-  const person = all().find(p => p.id === personId)
+export function mockPatchLabourPerson(jobId: string, personId: string, req: PatchLabourPersonRequest): LabourPerson {
+  const person = all(jobId).find(p => p.id === personId)
   if (!person) {
     const err = new ApiError('Person not found', 404) as ApiError & { code?: string }
     err.code = 'LABOUR_PERSON_NOT_FOUND'
@@ -137,7 +130,7 @@ export function mockPatchLabourPerson(_jobId: string, personId: string, req: Pat
       err.code = 'INVALID_FIELD'
       throw err
     }
-    if (all().some(p => p.id !== personId && normalize(p.name) === normalize(name))) {
+    if (all(jobId).some(p => p.id !== personId && normalize(p.name) === normalize(name))) {
       const err = new ApiError('That person already exists', 400) as ApiError & { code?: string }
       err.code = 'LABOUR_PERSON_ALREADY_EXISTS'
       throw err
@@ -150,18 +143,17 @@ export function mockPatchLabourPerson(_jobId: string, personId: string, req: Pat
     person.defaultHourlyRateAmount = hasRate ? req.defaultHourlyRateAmount : null
     person.defaultHourlyRateCurrency = hasRate ? 'GBP' : null
   }
-  if (req.defaultBudgetTreatment !== undefined) person.defaultBudgetTreatment = req.defaultBudgetTreatment
   person.updatedAt = new Date().toISOString()
   return { ...person }
 }
 
 // Look up a person by id (used by the labour create/patch mock to apply defaults).
-export function mockFindLabourPerson(personId: string): LabourPerson | undefined {
-  return all().find(p => p.id === personId)
+export function mockFindLabourPerson(jobId: string, personId: string): LabourPerson | undefined {
+  return all(jobId).find(p => p.id === personId)
 }
 
 /** Test-only: reset labour people to the seeded set. */
 export function _resetMockLabourPeopleForTesting(): void {
-  people = null
+  peopleByJob.clear()
   nextId = 1
 }

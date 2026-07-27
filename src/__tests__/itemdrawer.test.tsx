@@ -122,6 +122,7 @@ describe('ItemActionDrawer — Mark as paid', () => {
     isPaid: () => false,
     canMarkPaid: () => true,
     onMarkPaid: vi.fn(),
+    onUndoPaid: vi.fn(),
     pendingItemId: null,
     ...over,
   })

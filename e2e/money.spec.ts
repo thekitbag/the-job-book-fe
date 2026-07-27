@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-// 390×844, VITE_USE_MOCK_API=true. The seed job has a £4200 customer total and
-// one £1500 deposit (money in). Money out starts empty. Marking a Budget cost
+// 390×844, VITE_USE_MOCK_API=true. The seed job has a £4,200 customer total and
+// one £1,500 deposit (money in). Money out starts empty. Marking a Budget cost
 // paid records money out and must never change Budget.
 
 async function gotoApp(page: import('@playwright/test').Page) {
@@ -24,7 +24,7 @@ test.describe('Money — in and out', () => {
     await page.waitForTimeout(700)
     await expect(page.getByRole('button', { name: 'Open Payments' })).toHaveCount(0)
     const card = page.getByRole('button', { name: 'Open Money' })
-    await expect(card.locator('.ws-home-card-value')).toHaveText('£1500 received')
+    await expect(card.locator('.ws-home-card-value')).toHaveText('£1,500 received')
   })
 
   test('the workspace shows money in, money out, still owed, filters and history', async ({ page }) => {
@@ -32,9 +32,9 @@ test.describe('Money — in and out', () => {
     const panel = page.getByRole('tabpanel', { name: 'Money' })
     const hero = panel.getByRole('region', { name: 'Money summary' })
     await expect(hero.getByText('Money in')).toBeVisible()
-    await expect(hero.getByText('£1500')).toBeVisible()
+    await expect(hero.getByText('£1,500')).toBeVisible()
     await expect(hero.getByText('Money out')).toBeVisible()
-    await expect(panel.getByText(/£2700 still owed/)).toBeVisible()
+    await expect(panel.getByText(/£2,700 still owed/)).toBeVisible()
     await expect(panel.getByRole('tab', { name: 'All' })).toBeVisible()
     await expect(panel.getByRole('tab', { name: 'Money in' })).toBeVisible()
     await expect(panel.getByRole('tab', { name: 'Money out' })).toBeVisible()
@@ -54,14 +54,14 @@ test.describe('Money — in and out', () => {
     await form.getByRole('button', { name: 'Save payment' }).click()
     await page.waitForTimeout(700)
     const panel = page.getByRole('tabpanel', { name: 'Money' })
-    await expect(panel.getByText('£2500')).toBeVisible()  // money in
-    await expect(panel.getByText(/£1700 still owed/)).toBeVisible()
+    await expect(panel.getByText('£2,500')).toBeVisible()  // money in
+    await expect(panel.getByText(/£1,700 still owed/)).toBeVisible()
     await expect(panel.getByText('Stage payment · Ref: INV-014')).toBeVisible()
   })
 
   test('marking a Budget cost paid records money out and leaves Budget unchanged', async ({ page }) => {
     await gotoApp(page)
-    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2270')
+    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2,270')
     const budgetBefore = await page.getByRole('button', { name: 'Open Budget' }).textContent()
 
     // Open Budget and the trusted 'hardcore' cost item (£40), then mark it paid.
@@ -103,7 +103,7 @@ test.describe('Money — in and out', () => {
     await sheet.getByRole('textbox').fill('5000')
     await sheet.getByRole('button', { name: 'Save total' }).click()
     await page.waitForTimeout(700)
-    await expect(page.getByRole('tabpanel', { name: 'Money' }).getByText(/£3500 still owed/)).toBeVisible()
+    await expect(page.getByRole('tabpanel', { name: 'Money' }).getByText(/£3,500 still owed/)).toBeVisible()
   })
 
   test('editing a customer payment updates the history', async ({ page }) => {

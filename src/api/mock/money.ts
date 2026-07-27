@@ -46,10 +46,8 @@ const round2 = (n: number) => String(Math.round(n * 100) / 100)
 // none (missing/ambiguous price, non-GBP, worth-checking). Mirrors the backend
 // "only trusted Budget cost items can be paid" rule.
 function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GBP' } | null {
-  if (item.memoryType !== 'ordered_material' && item.memoryType !== 'labour') return null
+  if (item.memoryType !== 'ordered_material' && item.memoryType !== 'labour' && item.memoryType !== 'budget_cost') return null
   if ((item.uncertaintyFlags ?? []).length > 0) return null
-  // Labour can only be paid when it's budget-enabled (hours-only never can).
-  if (item.memoryType === 'labour' && item.labourBudgetEnabled === false) return null
   const currency = item.costCurrency || 'GBP'
   if (currency !== 'GBP') return null
   // Explicit total, else a bought line's each-total, else a labour hours × rate.
@@ -60,6 +58,7 @@ function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GB
 
 function itemLabel(item: MemoryViewItem): string {
   if (item.memoryType === 'labour') return item.labourTask?.trim() || item.labourPerson?.trim() || 'Labour'
+  if (item.memoryType === 'budget_cost') return item.labourTask?.trim() || item.labourPerson?.trim() || item.materialName?.trim() || item.summary
   return item.materialName?.trim() || item.summary
 }
 
@@ -192,6 +191,11 @@ export function mockMarkMoneyOut(jobId: string, req: MarkMoneyOutRequest): JobMo
     updatedAt: now,
   })
   return mockGetJobMoney(jobId)
+}
+
+// Used by create-labour-with-paid-now after its source row is persisted.
+export function recordMockPaid(jobId: string, item: MemoryViewItem): void {
+  mockMarkMoneyOut(jobId, { sourceMemoryItemId: item.id })
 }
 
 export function mockDeleteMoneyEvent(jobId: string, moneyEventId: string): void {

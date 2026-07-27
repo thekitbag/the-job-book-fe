@@ -20,11 +20,12 @@ const MOCK_FOUNDER_USER: AuthUser = { id: 'user-mock-founder', email: MOCK_FOUND
 export const MOCK_DAVE_EMAIL = 'dave@thejobbook.test'
 const MOCK_DAVE_USER: AuthUser = { id: 'user-mock-dave', email: MOCK_DAVE_EMAIL, name: 'Dave', role: 'PILOT' }
 const MOCK_RESET_TOKEN = 'mock-reset-token'
-const mockAccounts = new Map<string, { password: string; user: AuthUser }>([
+const seedAccounts = () => new Map<string, { password: string; user: AuthUser }>([
   [MOCK_MIKE_EMAIL, { password: 'demo', user: MOCK_MIKE_USER }],
   [MOCK_FOUNDER_EMAIL, { password: 'demo', user: MOCK_FOUNDER_USER }],
   [MOCK_DAVE_EMAIL, { password: 'demo', user: MOCK_DAVE_USER }],
 ])
+const mockAccounts = seedAccounts()
 // The mock session persists across full page loads via sessionStorage (a real
 // backend session is a cookie and survives navigation — e.g. following the
 // internal /internal/support link). A fresh browser context still starts
@@ -43,6 +44,13 @@ function persistMockSession(session: AuthUser | null): void {
   try { sessionStorage.setItem(MOCK_SESSION_KEY, session ? JSON.stringify(session) : 'null') } catch { /* non-browser env */ }
 }
 let mockSession: AuthUser | null = loadMockSession()
+
+export function _resetMockAuthForTesting(): void {
+  mockAccounts.clear()
+  for (const [email, account] of seedAccounts()) mockAccounts.set(email, account)
+  mockSession = MOCK_MIKE_USER
+  persistMockSession(mockSession)
+}
 
 // The seeded users the mock support endpoints list (role visible, no secrets).
 export const MOCK_SUPPORT_DIRECTORY: AuthUser[] = [MOCK_MIKE_USER, MOCK_DAVE_USER, MOCK_FOUNDER_USER]

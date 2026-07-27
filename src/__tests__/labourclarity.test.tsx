@@ -109,45 +109,47 @@ function openTab(name: string) {
   fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }))
 }
 
-describe('Labour tab — budgeted cost card (10a)', () => {
-  it('shows the budget-enabled trusted labour cost in the cobalt card', async () => {
+describe('Labour tab — hours-first and cost-aware', () => {
+  it('shows hours primary with secondary cost context', async () => {
     renderWorkspace()
     openTab('Labour')
-    const card = await screen.findByRole('region', { name: 'Budgeted labour cost' })
-    expect(within(card).getByText('£280')).toBeInTheDocument()
+    const labour = await screen.findByRole('tabpanel', { name: /labour/i })
+    // Hours are primary; an entry may also show its rate and payable cost.
+    expect(within(labour).getByText('Tom')).toBeInTheDocument()
+    expect(within(labour).getAllByText('8h').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('region', { name: 'Budgeted labour cost' })).toBeNull()
+    expect(within(labour).getByText('8h logged')).toBeInTheDocument()
+    expect(within(labour).getByText(/£35\/hour.*£280 to pay/i)).toBeInTheDocument()
   })
 
-  it('the Labour page states cost only — budget/remaining/set-budget live in the Budget tab now', async () => {
+  it('the labour cost still shows once in Budget (legacy trusted labour cost)', async () => {
     renderWorkspace()
-    openTab('Labour')
-    await screen.findByRole('region', { name: 'Budgeted labour cost' })
-    // The old on-page "Labour cost" budget/remaining/set-budget section is gone.
-    expect(screen.queryByRole('region', { name: 'Labour cost' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /set labour budget/i })).toBeNull()
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
+    figure(group, 'Cost', '£280')
   })
 
-  it('labour add stays available from Labour and creates memoryType labour', async () => {
+  it('Add labour stays in Labour and can create cost-aware labour', async () => {
     const mockCreate = vi.mocked(api.createMemoryItem)
     mockCreate.mockResolvedValue(item({ id: 'new-lab', memoryType: 'labour', labourHours: '5' }))
     renderWorkspace()
     openTab('Labour')
     fireEvent.click(await screen.findByRole('button', { name: /add labour/i }))
     const sheet = screen.getByRole('dialog', { name: 'Add labour' })
+    fireEvent.change(within(sheet).getByLabelText('Task'), { target: { value: 'Roofing' } })
     fireEvent.change(within(sheet).getByLabelText('Hours'), { target: { value: '5' } })
+    fireEvent.change(within(sheet).getByLabelText('Rate'), { target: { value: '20' } })
     fireEvent.click(within(sheet).getByRole('button', { name: 'Save labour' }))
-    await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(JOB.id, expect.objectContaining({ memoryType: 'labour', labourHours: '5' })))
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(JOB.id, expect.objectContaining({ memoryType: 'labour', labourHours: '5', costAmount: '20', costQualifier: 'per_hour' })))
   })
 })
 
-describe('Spend — labour entry point discouraged, historical spend safe', () => {
-  it('generic Add spend does not offer the labour category', async () => {
+describe('Budget — rolls up source cost only', () => {
+  it('has no generic Add cost action', async () => {
     renderWorkspace()
     openTab('Budget')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add cost' })
-    const options = Array.from(within(sheet).getByLabelText('Budget category').querySelectorAll('option')).map(o => o.textContent)
-    expect(options).toContain('timber')
-    expect(options).not.toContain('labour')
+    await screen.findByRole('region', { name: /^labour$/i })
+    expect(screen.queryByRole('button', { name: /add cost/i })).toBeNull()
   })
 
   it('the Labour group has no add action and guides to the Labour tab', async () => {
@@ -216,12 +218,12 @@ describe('Spend — labour entry point discouraged, historical spend safe', () =
     renderWorkspace()
     openTab('Budget')
     const timber = await screen.findByRole('region', { name: /budget category timber/i })
-    figure(timber, 'Budget', '£4000').toBeInTheDocument()
-    figure(timber, 'Remaining', '£4000').toBeInTheDocument()
+    figure(timber, 'Budget', '£4,000').toBeInTheDocument()
+    figure(timber, 'Remaining', '£4,000').toBeInTheDocument()
     const labour = screen.getByRole('region', { name: /^labour$/i })
     figure(labour, 'Cost', '£280').toBeInTheDocument()
-    figure(labour, 'Budget', '£1500').toBeInTheDocument()
-    figure(labour, 'Remaining', '£1220').toBeInTheDocument()
+    figure(labour, 'Budget', '£1,500').toBeInTheDocument()
+    figure(labour, 'Remaining', '£1,220').toBeInTheDocument()
   })
 })
 

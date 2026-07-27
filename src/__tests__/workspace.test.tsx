@@ -510,8 +510,8 @@ describe('CurrentJobWorkspace — home card context', () => {
     })
     renderWorkspace()
     const card = screen.getByRole('button', { name: 'Open Budget' })
-    await waitFor(() => expect(card).toHaveTextContent(/£2270/))
-    expect(card).toHaveTextContent(/£5000/)
+    await waitFor(() => expect(card).toHaveTextContent(/£2,270/))
+    expect(card).toHaveTextContent(/£5,000/)
   })
 
   it('the Labour card shows the job-total labour hours, not just today', async () => {

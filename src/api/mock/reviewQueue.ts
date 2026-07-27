@@ -208,6 +208,55 @@ const MOCK_QUEUE_ITEMS: QueueItem[] = [
       { candidateFactId: 'mock-fact-007', noteId: 'mock-note-005', transcriptId: 'mock-trans-005', capturedAt: new Date().toISOString(), transcriptText: 'Mike 4 hours, Kurt 6.' },
     ],
   },
+  // One voice note ("Tom did eight hours on electrics and paid Kurt £120 for
+  // fitting cladding.") → TWO independent outcomes: a Labour hours draft for Tom
+  // and a Budget cost draft for Kurt. Both link to the same source note and can
+  // be kept / fixed / binned independently — hours never drag the cost with them.
+  {
+    id: 'queue-item-mock-007',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'What I picked up today',
+    timeLabel: 'Today',
+    summary: 'Tom did 8 hours on electrics',
+    proposedMemory: {
+      memoryType: 'labour' as MemoryType,
+      summary: 'Tom did 8 hours on electrics',
+      materialName: null, quantity: null, unit: null, supplierName: null,
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
+      happenedAt: todayLocalNoonISO(),
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-008'],
+    sourceContext: [
+      { candidateFactId: 'mock-fact-008', noteId: 'mock-note-006', transcriptId: 'mock-trans-006', capturedAt: new Date().toISOString(), transcriptText: 'Tom did eight hours on electrics and paid Kurt £120 for fitting cladding.' },
+    ],
+  },
+  {
+    id: 'queue-item-mock-008',
+    kind: 'single',
+    status: 'draft',
+    reviewLabel: 'What I picked up today',
+    timeLabel: 'Today',
+    summary: 'Paid Kurt £120 for fitting cladding',
+    proposedMemory: {
+      memoryType: 'budget_cost' as MemoryType,
+      summary: 'Paid Kurt £120 for fitting cladding',
+      materialName: 'fitting cladding', quantity: null, unit: null, supplierName: 'Kurt',
+      deliveryTiming: null, locationOrUse: null,
+      costAmount: '120', costCurrency: 'GBP', costQualifier: 'total', totalCostAmount: '120',
+      labourPerson: 'Kurt', labourTask: 'fitting cladding',
+    },
+    confidenceLabel: 'high',
+    uncertaintyFlags: [],
+    sourceCandidateFactIds: ['mock-fact-009'],
+    sourceContext: [
+      { candidateFactId: 'mock-fact-009', noteId: 'mock-note-006', transcriptId: 'mock-trans-006', capturedAt: new Date().toISOString(), transcriptText: 'Tom did eight hours on electrics and paid Kurt £120 for fitting cladding.' },
+    ],
+  },
 ]
 
 const MOCK_REMEMBERED: AlreadyRememberedItem[] = [
@@ -293,7 +342,8 @@ export function mockGetReviewQueue(jobId: string): ReviewQueue {
     labourPeople,
     sections: [
       { key: 'ordered_materials', label: 'Ordered materials', items: [enrich(MOCK_QUEUE_ITEMS[0]), enrich(MOCK_QUEUE_ITEMS[3])] },
-      { key: 'labour', label: 'Labour', items: [enrich(MOCK_QUEUE_ITEMS[4]), enrich(MOCK_QUEUE_ITEMS[5])] },
+      { key: 'budget_costs', label: 'Budget costs', items: [enrich(MOCK_QUEUE_ITEMS[7])] },
+      { key: 'labour', label: 'Labour', items: [enrich(MOCK_QUEUE_ITEMS[4]), enrich(MOCK_QUEUE_ITEMS[5]), enrich(MOCK_QUEUE_ITEMS[6])] },
       { key: 'used_materials', label: 'Used materials', items: [MOCK_QUEUE_ITEMS[1]] },
       { key: 'leftovers', label: 'Leftovers', items: [] },
       { key: 'watch_outs', label: 'Watch outs', items: [MOCK_QUEUE_ITEMS[2]] },
@@ -316,7 +366,8 @@ export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision):
   if (source) {
     const now = new Date().toISOString()
     const isLabour = source.memoryType === 'labour'
-    const canCategorise = source.memoryType === 'ordered_material' || isLabour
+    const canCategorise = source.memoryType === 'ordered_material' || isLabour || source.memoryType === 'budget_cost'
+    const keepsPersonTask = isLabour || source.memoryType === 'budget_cost'
     const category = canCategorise ? (decision.budgetCategoryId ?? decision.corrected?.budgetCategoryId ?? null) : null
     const queueItem = MOCK_QUEUE_ITEMS.find(i => i.id === decision.queueItemId)
     const keepFlags = decision.uncertaintyResolution === 'still_unsure' ? (queueItem?.uncertaintyFlags ?? []) : []
@@ -334,9 +385,11 @@ export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision):
       costCurrency: source.costCurrency,
       costQualifier: source.costQualifier,
       totalCostAmount: source.totalCostAmount,
+      // A budget_cost may describe a labour cost, so it keeps person/task (never
+      // hours — those live in Labour).
       labourHours: isLabour ? (source.labourHours ?? null) : null,
-      labourPerson: isLabour ? (source.labourPerson ?? null) : null,
-      labourTask: isLabour ? (source.labourTask ?? null) : null,
+      labourPerson: keepsPersonTask ? (source.labourPerson ?? null) : null,
+      labourTask: keepsPersonTask ? (source.labourTask ?? null) : null,
       // Persist the chosen person + Budget treatment (from the decision, else the
       // enriched source). Hours-only when nothing says otherwise.
       labourPersonId: isLabour ? (decision.labourPersonId !== undefined ? decision.labourPersonId : (source.labourPersonId ?? null)) : null,

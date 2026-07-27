@@ -6,6 +6,13 @@ export default defineConfig({
     baseURL: 'https://localhost:5174',
     ignoreHTTPSErrors: true,
     viewport: { width: 390, height: 844 },
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: 'https://localhost:5174',
+        localStorage: [{ name: 'job-book-e2e-seed', value: 'default' }],
+      }],
+    },
     // Keep failure evidence in CI (trace viewable via `npx playwright show-trace`).
     trace: process.env.CI ? 'retain-on-failure' : 'off',
   },
