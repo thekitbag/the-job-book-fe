@@ -50,24 +50,25 @@ test.describe('Labour tab — daily view', () => {
 
     const yesterday = page.getByRole('region', { name: 'Labour Yesterday' })
     await expect(yesterday.getByText('6h day total')).toBeVisible()
-    // entry without a named person renders safely; the row states its Budget
-    // effect (hours only) rather than a money figure.
-    await expect(yesterday.getByText(/fitting cladding · hours only/i)).toBeVisible()
+    // Entry without a named person renders safely with its task and hours; no
+    // money or Budget treatment (Labour is hours-only).
+    await expect(yesterday.getByText('fitting cladding')).toBeVisible()
+    await expect(yesterday.getByText(/hours only/i)).toHaveCount(0)
   })
 
   test('direct-add labour with a new person appears under Today', async ({ page }) => {
     await gotoApp(page)
     await goToSection(page, 'Labour')
     await page.waitForTimeout(600)
-    await page.getByRole('button', { name: /add labour/i }).click()
-    const sheet = page.getByRole('dialog', { name: 'Add labour' })
+    await page.getByRole('button', { name: /add hours/i }).click()
+    const sheet = page.getByRole('dialog', { name: 'Add hours' })
     // Add a brand-new person from the drawer, then log their hours.
     await sheet.getByRole('button', { name: '+ New' }).click()
     await sheet.getByLabel('New person name').fill('Priya')
     await sheet.getByRole('button', { name: 'Add', exact: true }).click()
     await sheet.locator('.stepper-input').fill('5')
     await sheet.locator('input[name="labourTask"]').fill('decking')
-    await sheet.getByRole('button', { name: 'Save labour' }).click()
+    await sheet.getByRole('button', { name: 'Save hours' }).click()
     await page.waitForTimeout(600)
 
     const group = page.getByRole('region', { name: 'Labour Today' })
@@ -133,7 +134,7 @@ test.describe('Spend tab — Labour group', () => {
     await page.waitForTimeout(900)
 
     // Labour group: £280 (rated, categorised) + £600 (total, NO category) = £880,
-    // against the seeded £1500 labour category budget.
+    // against the seeded £1,500 labour category budget.
     const group = page.getByRole('region', { name: /^labour$/i })
     await expect(group.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
     await expect(group.locator('.budget-figure', { hasText: 'Remaining' }).getByText('£620', { exact: true })).toBeVisible()

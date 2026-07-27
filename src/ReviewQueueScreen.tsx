@@ -23,7 +23,8 @@ const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: strin
   { value: 'used_material', label: 'Used material', shortLabel: 'Used' },
   { value: 'ordered_material', label: 'Ordered material', shortLabel: 'Ordered' },
   { value: 'leftover_material', label: 'Leftover material', shortLabel: 'Leftover' },
-  { value: 'labour', label: 'Labour', shortLabel: 'Labour' },
+  { value: 'budget_cost', label: 'Budget cost', shortLabel: 'Cost' },
+  { value: 'labour', label: 'Labour (hours)', shortLabel: 'Labour' },
   { value: 'supplier_delivery_note', label: 'Supplier / delivery note', shortLabel: 'Supplier' },
   { value: 'customer_change', label: 'Customer change', shortLabel: 'Customer' },
   { value: 'watch_out', label: 'Watch out', shortLabel: 'Watch out' },
@@ -40,14 +41,17 @@ const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
 
 const MATERIAL_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material'])
 // Types that lead with a structured type label + detail rows (not a prose summary).
-const STRUCTURED_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material', 'labour'])
-const CATEGORY_TYPES = new Set<MemoryType>(['ordered_material', 'labour'])
+const STRUCTURED_TYPES = new Set<MemoryType>(['ordered_material', 'budget_cost', 'used_material', 'leftover_material', 'labour'])
+// Types that can carry a budget category. Budget owns all cost, so cost-bearing
+// types are category-bearing; labour is hours-only and never carries a category.
+const CATEGORY_TYPES = new Set<MemoryType>(['ordered_material', 'budget_cost'])
 
 const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
   ordered_material: 'Bought / ordered',
+  budget_cost: 'Budget cost',
   used_material: 'Used',
   leftover_material: 'Left over',
-  labour: 'Labour',
+  labour: 'Labour · hours',
 }
 
 // Scannable card text: a bold headline, a muted meta line, and a cost line —
@@ -71,35 +75,20 @@ function reviewMeta(pm: ProposedMemory): string {
   return [pm.supplierName, pm.deliveryTiming, pm.locationOrUse].filter(Boolean).join(' · ')
 }
 function reviewCost(pm: ProposedMemory): string {
+  // Labour is hours-only — cost never shows on a labour draft.
+  if (pm.memoryType === 'labour') return ''
   const cost = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
   // Prefer an explicit total; otherwise show the derived each × quantity total.
   const derived = pm.totalCostAmount ? null : deriveEachTotal({ quantity: pm.quantity, unit: pm.unit, costAmount: pm.costAmount, costQualifier: pm.costQualifier })
   const total = formatTotalLabel(pm.totalCostAmount ?? derived, pm.costCurrency || 'GBP')
+  // A 'total'-basis cost already IS the line total — don't state it twice.
+  if (pm.costQualifier === 'total') return total ? `${total} total` : (cost ?? '')
   return [cost, total ? `${total} total` : null].filter(Boolean).join(' · ')
 }
-// The inherited Budget effect for a labour draft (design 10i): which person was
-// matched and what it will do to Budget on confirm — budget cost / hours only /
-// no rate yet. Returns null on a non-labour draft or an older backend without
-// people enrichment, so nothing speculative is shown.
-// The person already shows in the card meta, so the effect line states just the
-// Budget outcome (cobalt budget cost / grey hours-only / grey no-rate).
-const POS_NUM = /^\d+(\.\d+)?$/
-function reviewLabourEffect(pm: ProposedMemory): { text: string; kind: 'budget' | 'hours' | 'no-rate' } | null {
-  if (pm.memoryType !== 'labour' || pm.labourBudgetEnabled === undefined) return null
-  const rate = pm.inheritedLabourPerson?.defaultHourlyRateAmount ?? null
-  if (pm.labourBudgetEnabled) {
-    if (rate && POS_NUM.test(pm.labourHours ?? '')) {
-      const cost = parseFloat(pm.labourHours!) * parseFloat(rate)
-      return { text: `${formatMoney(cost, 'GBP')} budget cost`, kind: 'budget' }
-    }
-    return { text: 'no rate yet', kind: 'no-rate' }
-  }
-  return { text: 'hours only', kind: 'hours' }
-}
-
 // Plain builder labels for the category focus chips, keyed by section key.
 const SECTION_CHIP_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered',
+  budget_costs: 'Costs',
   labour: 'Labour',
   used_materials: 'Used',
   leftovers: 'Left over',
@@ -300,20 +289,8 @@ function EditForm({
             <span className="queue-field-label">Task / work area</span>
             <input className="queue-field-input" name="labourTask" value={form.labourTask ?? ''} onChange={e => setStr('labourTask', e.target.value)} placeholder="e.g. electrics" />
           </label>
-          {/* Budget treatment (10i): the user's correction wins over the
-              inherited default. Hours-only never adds Budget cost. */}
-          <label className="queue-field">
-            <span className="queue-field-label">Budget treatment</span>
-            <select
-              className="queue-field-input"
-              aria-label="Budget treatment"
-              value={form.labourBudgetEnabled ? 'counts' : 'hours'}
-              onChange={e => setForm(f => ({ ...f, labourBudgetEnabled: e.target.value === 'counts' }))}
-            >
-              <option value="counts">Counts toward budget</option>
-              <option value="hours">Hours only</option>
-            </select>
-          </label>
+          {/* Labour is hours-only — no rate, cost, or Budget treatment. Cost
+              lives in Budget as its own draft. */}
         </>
       ) : (
         <>
@@ -343,36 +320,37 @@ function EditForm({
           </label>
         </>
       )}
-      {/* One cost figure on screen at a time: an editable rate/cost amount plus
-          a derived preview for `each`/`per_hour`, or a single editable total for
-          any other basis. Switching the qualifier swaps which one is shown
-          rather than adding a second field alongside it. */}
-      <label className="queue-field">
-        <span className="queue-field-label">
-          {eachRecalc ? (isLabour ? 'Rate per hour' : 'Unit cost') : (isTotalBasis ? 'Total cost' : 'Cost amount')}
-        </span>
-        <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
-      </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Cost qualifier</span>
-        <select className="queue-field-input" value={form.costQualifier ?? ''} onChange={e => setCostQualifier(e.target.value)}>
-          {COST_QUALIFIER_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </label>
-      {eachRecalc && (
-        derivedTotal ? (
-          <p className="cost-preview" role="status">
-            {isLabour
-              ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
-              : <>{form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>}
-          </p>
-        ) : (
-          <p className="cost-preview cost-preview--warning" role="alert">
-            Add {joinWithAnd(eachGaps)} above to calculate a total — until then this stays worth checking.
-          </p>
-        )
+      {/* Cost fields — never for labour (hours-only). One cost figure on screen
+          at a time: an editable unit cost plus a derived `each` preview, or a
+          single editable total for any other basis. */}
+      {!isLabour && (
+        <>
+          <label className="queue-field">
+            <span className="queue-field-label">
+              {eachRecalc ? 'Unit cost' : (isTotalBasis ? 'Total cost' : 'Cost amount')}
+            </span>
+            <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
+          </label>
+          <label className="queue-field">
+            <span className="queue-field-label">Cost qualifier</span>
+            <select className="queue-field-input" value={form.costQualifier ?? ''} onChange={e => setCostQualifier(e.target.value)}>
+              {COST_QUALIFIER_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          {eachRecalc && (
+            derivedTotal ? (
+              <p className="cost-preview" role="status">
+                {form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong>
+              </p>
+            ) : (
+              <p className="cost-preview cost-preview--warning" role="alert">
+                Add {joinWithAnd(eachGaps)} above to calculate a total — until then this stays worth checking.
+              </p>
+            )
+          )}
+        </>
       )}
       <label className="queue-field">
         <span className="queue-field-label">Summary (optional)</span>
@@ -430,7 +408,6 @@ function QueueItemCard({
   const headline = reviewHeadline(item.proposedMemory)
   const meta = reviewMeta(item.proposedMemory)
   const cost = reviewCost(item.proposedMemory)
-  const labourEffect = reviewLabourEffect(item.proposedMemory)
 
   return (
     <div
@@ -450,11 +427,6 @@ function QueueItemCard({
           <p className="queue-item-headline">{headline}</p>
           {meta && <p className="queue-item-meta">{meta}</p>}
           {cost && <p className="queue-item-cost">{cost}</p>}
-          {/* Inherited labour rule (10i): who was matched and the Budget effect
-              that will be saved on confirm — correctable via Fix. */}
-          {labourEffect && (
-            <p className={`queue-labour-effect queue-labour-effect--${labourEffect.kind}`}>{labourEffect.text}</p>
-          )}
           {uncertain && <p className="queue-item-uncertain-line">Worth checking — cost or quantity may need confirming</p>}
         </>
       )}
@@ -738,7 +710,6 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
   const [focusedKey, setFocusedKey] = useState<string | null>(null)
-  const [rememberingAll, setRememberingAll] = useState(false)
   // Remembered-memory ("Fix memory") edit state — separate from draft review state
   const [editingMemId, setEditingMemId] = useState<string | null>(null)
   const [memSubmittingId, setMemSubmittingId] = useState<string | null>(null)
@@ -784,7 +755,7 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
       // categories at all — otherwise omit it entirely (backwards-compatible).
       const sourcePm = corrected ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory
       const finalType = corrected?.memoryType ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory.memoryType
-      const category = action === 'dismiss' || !(finalType === 'ordered_material' || finalType === 'labour') || activeCategories.length === 0
+      const category = action === 'dismiss' || !(finalType === 'ordered_material' || finalType === 'budget_cost') || activeCategories.length === 0
         ? undefined
         : (budgetCategoryId ?? null)
       // Persist the labour person + Budget treatment shown on the card (or the
@@ -810,7 +781,9 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
         budgetCategoryId: category,
         labourPersonId,
-        labourBudgetEnabled: isLabourDecision ? (sourcePm?.labourBudgetEnabled ?? null) : undefined,
+        // Labour is hours-only: a confirmed labour draft never counts toward
+        // Budget. Cost arrives as its own budget_cost draft.
+        labourBudgetEnabled: isLabourDecision ? false : undefined,
       })
       track('review_decision_submitted', {
         job_id: job.id,
@@ -913,23 +886,6 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const showChips = sectionsWithDrafts.length > 1
   const showSectionHeadings = visibleSections.filter(s => s.items.length > 0).length > 1
 
-  // "Remember all" clears the confident drafts in one go; worth-checking drafts
-  // are left for individual attention.
-  const confidentDrafts = visibleSections.flatMap(s =>
-    s.items.filter(it => it.status === 'draft' && it.uncertaintyFlags.length === 0))
-  const showRememberAll = confidentDrafts.length > 1 && editingItemId === null
-  const handleRememberAll = async () => {
-    setRememberingAll(true)
-    try {
-      for (const it of confidentDrafts) {
-        const cat = CATEGORY_TYPES.has(it.proposedMemory.memoryType) ? (it.proposedMemory.budgetCategoryId ?? null) : null
-        await handleDecision(it.id, 'confirm', undefined, 'resolved', cat)
-      }
-    } finally {
-      setRememberingAll(false)
-    }
-  }
-
   return (
     <div className="queue-page">
       <header className="queue-header">
@@ -983,21 +939,9 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                 />
               )}
 
-              {showRememberAll && (
-                <div className="queue-batch-bar">
-                  <span>{confidentDrafts.length} ready to remember</span>
-                  <button
-                    type="button"
-                    className="btn-queue-remember-all"
-                    onClick={handleRememberAll}
-                    disabled={rememberingAll || submittingId !== null}
-                  >
-                    {rememberingAll ? 'Saving…' : `Remember all (${confidentDrafts.length})`}
-                  </button>
-                </div>
-              )}
-
-              {/* Pending draft facts come first */}
+              {/* Pending draft facts come first. There is deliberately no bulk
+                  "Remember all" — each item is checked and kept on its own
+                  (ledger-grammar-redesign: no bulk confirmation). */}
               {focusedEmpty ? (
                 <p className="queue-empty-category">Nothing waiting here</p>
               ) : (

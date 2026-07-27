@@ -85,7 +85,7 @@ test.describe('Remembered-memory edit & focus', () => {
     await signIn(page)
     await page.getByRole('button', { name: /things to check/i }).click()
     await page.waitForTimeout(700)
-    await expect(page.getByText('6 waiting')).toBeVisible()
+    await expect(page.getByText('8 waiting')).toBeVisible()
 
     // Expand remembered, fix the first remembered card
     await page.getByRole('button', { name: /show remembered items/i }).click()
@@ -99,6 +99,6 @@ test.describe('Remembered-memory edit & focus', () => {
 
     // updated in place, and no new pending queue item was created
     await expect(remembered.getByText('Travis Perkins')).toBeVisible()
-    await expect(page.getByText('6 waiting')).toBeVisible()
+    await expect(page.getByText('8 waiting')).toBeVisible()
   })
 })

@@ -10,14 +10,19 @@ export interface MarkPaidControls {
   canMarkPaid: (item: MemoryViewItem) => boolean
   // Fire the mark-paid; the workspace handles refetch + toast + errors.
   onMarkPaid: (item: MemoryViewItem) => void
-  // Source item id currently in flight, so its control can show a busy state.
+  // Undo an accidental paid mark: soft-deletes the linked Money out and leaves
+  // the Budget cost unchanged. The workspace handles refetch + toast + errors.
+  onUndoPaid: (item: MemoryViewItem) => void
+  // Source item id currently in flight, so its control can show a busy state
+  // (covers both mark-paid and undo-paid).
   pendingItemId: string | null
 }
 
-// Only bought/ordered materials and labour carry a Budget cost that can be paid
-// out in v1. Everything else (used/leftover/returned, notes, photos) never can.
+// Bought/ordered materials, legacy labour cost, and general budget_cost items
+// carry a Budget cost that can be paid out. Everything else (used/leftover/
+// returned, notes, photos, hours-only labour) never can.
 export function markPaidEligibleType(item: MemoryViewItem): boolean {
-  return item.memoryType === 'ordered_material' || item.memoryType === 'labour'
+  return item.memoryType === 'ordered_material' || item.memoryType === 'labour' || item.memoryType === 'budget_cost'
 }
 
 // A trusted, safe GBP line total the item would be paid at, or null when it has

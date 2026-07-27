@@ -400,13 +400,41 @@ export default function CurrentJobWorkspace({
       const amount = row ? row.amount : null
       toast({
         title: 'Marked paid',
-        body: amount ? `Added £${amount} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
+        body: amount ? `Added ${formatMoney(parseFloat(amount), 'GBP')} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
       })
     } catch (err: unknown) {
       const already = err instanceof ApiError && err.status === 400
       toast({
         title: already ? 'Already marked paid' : 'Could not mark paid',
         body: already ? 'This cost is already recorded in Money out.' : 'Nothing changed — try again.',
+        tone: 'plain',
+      })
+    } finally {
+      setMarkingPaidId(null)
+    }
+  }, [markingPaidId, money, mem, toast, job.id])
+
+  // Undo an accidental paid mark: soft-delete the linked Money out and leave
+  // the Budget cost exactly as it was. The toast names both effects. On failure
+  // the paid marker stays put and a retryable toast is shown.
+  const handleUndoPaid = useCallback(async (item: MemoryViewItem) => {
+    if (markingPaidId) return
+    const row = money.paidRowBySource.get(item.id)
+    if (!row) return
+    setMarkingPaidId(item.id)
+    try {
+      await money.removeEvent(row.id)
+      track('money_undo_paid', { job_id: job.id, memory_type: item.memoryType })
+      // Budget must be unchanged — refetch it so no stale figure implies otherwise.
+      void mem.reloadBudget()
+      toast({
+        title: 'Marked unpaid',
+        body: `Removed ${formatMoney(parseFloat(row.amount), 'GBP')} from Money out. Budget cost unchanged.`,
+      })
+    } catch {
+      toast({
+        title: 'Could not undo paid',
+        body: 'Nothing changed — try again.',
         tone: 'plain',
       })
     } finally {
@@ -424,8 +452,9 @@ export default function CurrentJobWorkspace({
       mem.includedIds.has(item.id) &&
       !money.paidRowBySource.has(item.id),
     onMarkPaid: (item) => { void handleMarkPaid(item) },
+    onUndoPaid: (item) => { void handleUndoPaid(item) },
     pendingItemId: markingPaidId,
-  }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, markingPaidId])
+  }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, handleUndoPaid, markingPaidId])
 
   const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
   const saveTitle = async () => {
@@ -602,7 +631,7 @@ export default function CurrentJobWorkspace({
         memoryItemId: r.id,
         type: 'payment' as const,
         typeLabel: 'Payment',
-        headline: r.note ? `£${r.amount} received — ${r.note}` : `£${r.amount} received`,
+        headline: r.note ? `${formatMoney(parseFloat(r.amount), 'GBP')} received — ${r.note}` : `${formatMoney(parseFloat(r.amount), 'GBP')} received`,
         costLabel: null,
         effectiveAt: r.occurredAt,
       }))
@@ -1008,9 +1037,12 @@ export default function CurrentJobWorkspace({
                 <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
               </svg>
             </span>
+            {/* The persistent Record bar names its destination job on every
+                screen (not "Tap · say it · done", which narrated the control) so
+                a recording can never quietly land on the wrong job. */}
             <span className="ws-record-text">
               <span className="ws-record-title">Record</span>
-              <span className="ws-record-sub">Tap · say it · done</span>
+              <span className="ws-record-sub">to {job.title}</span>
             </span>
           </button>
         ) : (

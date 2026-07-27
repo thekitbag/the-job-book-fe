@@ -1,146 +1,11 @@
 import { useRef, useState } from 'react'
 import MemoryCard from './MemoryCard'
-import MemoryEditForm from './MemoryEditForm'
-import DirectAddForm from './DirectAddForm'
 import EmptyState from './EmptyState'
 import LabourBudgetControl from './LabourBudgetControl'
-import { memoryItemToEdit } from './memoryEdit'
-import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount, moneyFigure } from './memoryScan'
+import { formatMoney, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
 import type { MarkPaidControls } from './markPaid'
-import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
-
-const POS_DECIMAL = /^\d+(\.\d+)?$/
-
-// Compact, purpose-built price entry for a no-price bought item. Defaults to an
-// explicit total (so the typed figure becomes totalCostAmount + GBP and enters
-// known spend); offers a per-item basis only when quantity + unit are known.
-function PriceForm({ item, submitting, error, onSave, onCancel }: {
-  item: MemoryViewItem
-  submitting: boolean
-  error: string | null
-  onSave: (price: string, basis: 'total' | 'each') => void
-  onCancel: () => void
-}) {
-  const [price, setPrice] = useState('')
-  const [basis, setBasis] = useState<'total' | 'each'>('total')
-  const eachAvailable = canDeriveUnitCost(item)
-  const priceOk = POS_DECIMAL.test(price.trim()) && parseFloat(price) > 0
-  const derived = basis === 'each' && eachAvailable && priceOk
-    ? String(Math.round(parseFloat(item.quantity!) * parseFloat(price) * 100) / 100)
-    : null
-  return (
-    <form className="price-form queue-edit-form" aria-label="Add price" onSubmit={e => { e.preventDefault(); if (priceOk) onSave(price.trim(), basis) }}>
-      <label className="queue-field">
-        <span className="queue-field-label">Price (£)</span>
-        <input className="queue-field-input" name="price" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 120" autoFocus />
-      </label>
-      {eachAvailable && (
-        <label className="queue-field">
-          <span className="queue-field-label">This price is</span>
-          <select className="queue-field-input" name="priceBasis" aria-label="Price basis" value={basis} onChange={e => setBasis(e.target.value as 'total' | 'each')}>
-            <option value="total">the total</option>
-            <option value="each">per {item.unit}</option>
-          </select>
-        </label>
-      )}
-      {derived && (
-        <p className="cost-preview">{item.quantity} × {formatMoney(Number(price), 'GBP')} each = <strong>{formatMoney(Number(derived), 'GBP')} total</strong></p>
-      )}
-      <div className="queue-edit-actions">
-        <button type="submit" className="btn-queue-save" disabled={submitting || !priceOk}>{submitting ? 'Saving…' : 'Save price'}</button>
-        <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>Cancel</button>
-      </div>
-      {error && <p className="queue-item-error" role="alert">{error}</p>}
-    </form>
-  )
-}
-
-// One row in the "Not counted yet" area. Two treatments share one place:
-//  - cost-basis: has a price but an unclear basis → ask each vs total.
-//  - no-price:   no amount to classify → add a price (defaults to a total).
-function NotCountedItem({
-  item,
-  mode,
-  editing,
-  submitting,
-  errorMsg,
-  categories,
-  onTotal,
-  onEach,
-  onAddPrice,
-  onStartEdit,
-  onCancelEdit,
-  onSave,
-}: {
-  item: MemoryViewItem
-  mode: 'cost-basis' | 'no-price'
-  editing: boolean
-  submitting: boolean
-  errorMsg: string | null
-  categories: BudgetCategory[]
-  onTotal: () => void
-  onEach: () => void
-  onAddPrice: (price: string, basis: 'total' | 'each') => void
-  onStartEdit: () => void
-  onCancelEdit: () => void
-  onSave: (edit: import('./types').MemoryItemEdit) => void
-}) {
-  const [addingPrice, setAddingPrice] = useState(false)
-
-  if (editing) {
-    return (
-      <div className="cost-check-item cost-check-item--editing">
-        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
-        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
-      </div>
-    )
-  }
-  const identity = [item.quantity, item.materialName, item.unit].filter(Boolean).join(' ') || item.materialName || item.summary
-
-  if (mode === 'no-price') {
-    if (addingPrice) {
-      return (
-        <div className="cost-check-item cost-check-item--editing">
-          <p className="cost-check-headline">{identity}</p>
-          <PriceForm item={item} submitting={submitting} error={errorMsg} onSave={onAddPrice} onCancel={() => setAddingPrice(false)} />
-        </div>
-      )
-    }
-    return (
-      <div className="cost-check-item">
-        <p className="cost-check-headline">{identity}</p>
-        <p className="cost-check-q">No price yet</p>
-        <div className="cost-check-actions">
-          <button type="button" className="btn-cost-total" disabled={submitting} onClick={() => setAddingPrice(true)}>Add price</button>
-          <button type="button" className="btn-cost-fix" disabled={submitting} onClick={onStartEdit}>Fix memory</button>
-        </div>
-        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
-      </div>
-    )
-  }
-
-  const amount = formatTotalLabel(item.costAmount, item.costCurrency || 'GBP') ?? ''
-  const showEach = canDeriveUnitCost(item)
-  return (
-    <div className="cost-check-item">
-      <p className="cost-check-headline">{identity}{amount ? ` — ${amount}` : ''}</p>
-      <p className="cost-check-q">Is {amount} each or {amount} total?</p>
-      <div className="cost-check-actions">
-        <button type="button" className="btn-cost-total" disabled={submitting} onClick={onTotal}>
-          {submitting ? 'Saving…' : `Confirm ${amount} total`}
-        </button>
-        {showEach && (
-          <button type="button" className="btn-cost-each" disabled={submitting} onClick={onEach}>
-            Set as {amount} each
-          </button>
-        )}
-        <button type="button" className="btn-cost-fix" disabled={submitting} onClick={onStartEdit}>Fix memory</button>
-      </div>
-      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
-    </div>
-  )
-}
+import type { BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
 
 // Spent-against-budget bar for a category block. Rendered only with a real
 // budget to measure against — a bar with no denominator would be decoration,
@@ -245,9 +110,8 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
 
 export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?: MarkPaidControls }) {
   const {
-    totalKnownCost, refunds, budgetSummary, refreshError, refetch, addMemoryItem,
+    totalKnownCost, refunds, budgetSummary, refreshError, refetch,
     sectionItems, includedIds, exclusionReason, cardProps,
-    notCountedItems, resolveCostBasis, addPrice,
     budgetCategories, expandedCats, toggleCat, labourSpendGroup, handleSetLabourBudget,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
@@ -259,18 +123,18 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
   // budget category exists yet — this tracks the amount-only "Set budget"
   // form when there's no category to key an edit off of.
   const [settingLabourBudget, setSettingLabourBudget] = useState(false)
-  // The needs-a-price items are collapsed behind their one summary row; this
-  // is the fix-up flow opening in place rather than on a separate screen.
-  const [showNotCounted, setShowNotCounted] = useState(false)
   // Target for the hero's remaining figure — the breakdown it opens.
   const byCategoryRef = useRef<HTMLElement>(null)
 
   const orderedItems = sectionItems('ordered_materials')
   const labourItems = sectionItems('labour')
+  // General Budget costs (labour cost, plant, hire, subcontractor, …). Budget
+  // owns all cost, so these render alongside bought materials.
+  const budgetCostItems = sectionItems('budget_costs')
   const hasRefunds = (refunds?.rows.length ?? 0) > 0
   // A job whose only money fact is a refund still has spend to show — the hero
   // has to render, or the refund would reduce a total Mike can't see.
-  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0 || hasRefunds
+  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCostItems.length > 0 || budgetCategories.length > 0 || hasRefunds
 
   // Trusted labour money lives in the Labour group (backend budgetSummary.labour
   // or the derived fallback). Its row ids drive de-duplication: a labour spend
@@ -283,7 +147,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
   // (not re-derived from ordered_materials alone) — join back to the full
   // memory-view item for the MemoryCard. Labour rows shown under Labour are
   // excluded here (de-dup by memoryItemId).
-  const allItemsById = new Map([...orderedItems, ...labourItems].map(i => [i.id, i] as const))
+  const allItemsById = new Map([...orderedItems, ...labourItems, ...budgetCostItems].map(i => [i.id, i] as const))
   const uncatItems = (budgetSummary?.uncategorized.rows ?? [])
     .filter(r => !labourRowIds.has(r.memoryItemId))
     .map(r => allItemsById.get(r.memoryItemId))
@@ -299,10 +163,8 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
     .filter(r => !labourRowIds.has(r.memoryItemId))
     .reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
 
-  // Labour is managed from Labour: generic spend adds never offer a category
-  // named "labour" as an ordinary spend target (existing assignments and Fix
-  // memory are untouched — this only shapes the ADD paths).
-  const spendAddCategories = budgetCategories.filter(c => c.name.trim().toLowerCase() !== 'labour')
+  // Budget owns all cost, including labour cost: Add cost can target any active
+  // category, the Labour category included.
 
   // Historical rule: don't hide, don't double-count. Ordinary (non-labour)
   // spend already assigned to the Labour category stays visible for fixing —
@@ -318,7 +180,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
     // The Labour budget category is presented by the Labour group instead of a
     // second, duplicate category card.
     if (showLabourGroup && labourSpendGroup?.budgetCategory?.id === c.id) return null
-    const notes = [...orderedItems, ...labourItems].filter(i => i.budgetCategoryId === c.id && !labourRowIds.has(i.id))
+    const notes = [...orderedItems, ...labourItems, ...budgetCostItems].filter(i => i.budgetCategoryId === c.id && !labourRowIds.has(i.id))
     const open = !!expandedCats[c.id]
     if (editingBudgetId === c.id) {
       return (
@@ -377,16 +239,6 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
               <span className="notes-toggle-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
             </button>
           )}
-          <DirectAddForm
-            kind="spend"
-            variant="button"
-            buttonLabel={`Add to ${c.name}`}
-            label="Add cost"
-            title={`Add cost — ${c.name}`}
-            initialCategoryId={c.id}
-            categories={spendAddCategories}
-            onAdd={addMemoryItem}
-          />
         </div>
         {notes.length > 0 && open && <div className="cat-notes">{notes.map(item => (
           <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
@@ -405,50 +257,6 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
         />
       )}
 
-      {/* One actionable row, not a paragraph: the count is the message and
-          "Add prices" is the way out. The items themselves stay behind it. */}
-      {notCountedItems.length > 0 && (
-        <section className="cost-check" aria-label="Not counted yet">
-          <div className="cost-check-row">
-            <span className="cost-check-row-text">
-              <span className="cost-check-row-title">
-                {notCountedItems.length === 1 ? '1 item needs a price' : `${notCountedItems.length} items need a price`}
-              </span>
-              <span className="cost-check-row-sub">Not counted yet</span>
-            </span>
-            <button
-              type="button"
-              className="cost-check-row-action"
-              aria-expanded={showNotCounted}
-              onClick={() => setShowNotCounted(o => !o)}
-            >
-              {showNotCounted ? 'Hide' : 'Add prices'} ›
-            </button>
-          </div>
-          {showNotCounted && notCountedItems.map(item => {
-            const p = cardProps(item, budgetCategories.length > 0)
-            const costBasis = exclusionReason.get(item.id) === 'cost_worth_checking' && hasCostLikeAmount(item)
-            return (
-              <NotCountedItem
-                key={item.id}
-                item={item}
-                mode={costBasis ? 'cost-basis' : 'no-price'}
-                editing={p.isEditing}
-                submitting={p.submitting}
-                errorMsg={p.errorMsg}
-                categories={budgetCategories}
-                onTotal={() => resolveCostBasis(item.id, 'total')}
-                onEach={() => resolveCostBasis(item.id, 'each')}
-                onAddPrice={(price, basis) => addPrice(item.id, price, basis)}
-                onStartEdit={p.onStartEdit}
-                onCancelEdit={p.onCancelEdit}
-                onSave={p.onSave}
-              />
-            )
-          })}
-        </section>
-      )}
-
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
           <span>Couldn’t refresh — this may be out of date.</span>
@@ -459,8 +267,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
       {!hasSpendContent && (
         <EmptyState
           title="No costs yet"
-          hint="Add what you’ve bought or committed for this job, or say it with Record and it’ll be picked up for you."
-          action={<DirectAddForm kind="spend" variant="button" label="Add cost" categories={spendAddCategories} onAdd={addMemoryItem} />}
+          hint="Costs appear here from Labour and Bought items, or from Record."
         />
       )}
 
@@ -468,14 +275,6 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
           rule" (handoff, Spend). The add action lives on this row rather than
           floating above the first category with nothing beneath it. */}
       <section aria-label="Budget categories" ref={byCategoryRef}>
-        <DirectAddForm
-          kind="spend"
-          label="Add cost"
-          sectionLabel="By category"
-          categories={spendAddCategories}
-          onAdd={addMemoryItem}
-          actionHidden={!hasSpendContent}
-        />
       {/* Budget setup (Labour group + category cards) must not depend on
           spend existing first — a job with nothing spent yet still needs a
           way to create its first budget category. */}

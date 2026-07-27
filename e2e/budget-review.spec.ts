@@ -70,9 +70,9 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     await goToSection(page, 'Budget')
     await page.waitForTimeout(900)
 
-    // single job-level Known spend (bought £1390 + labour £880 = £2270)
-    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2270/)).toBeVisible()
-    await expect(page.getByRole('region', { name: /budget category cladding/i }).locator('.budget-figure', { hasText: 'Cost' }).getByText('£1200', { exact: true })).toBeVisible()
+    // single job-level Known spend (bought £1,390 + labour £880 = £2,270)
+    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2,270/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /budget category cladding/i }).locator('.budget-figure', { hasText: 'Cost' }).getByText('£1,200', { exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: /uncategorised cost/i }).getByText('hardcore')).toBeVisible()
   })
 

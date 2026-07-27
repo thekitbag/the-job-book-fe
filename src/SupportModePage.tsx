@@ -524,7 +524,7 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                       <li key={p.id} className="labour-person-row" style={{ cursor: 'default' }}>
                         <span className="labour-person-name">{p.name}{p.isSelf && <span className="labour-person-you"> · you</span>}</span>
                         <span className="labour-person-figures">
-                          {[p.jobHoursLabel, p.defaultHourlyRateAmount ? `£${p.defaultHourlyRateAmount}/h` : 'No rate yet', p.defaultBudgetTreatment === 'counts_toward_budget' ? 'Counts toward budget' : 'Hours only'].filter(Boolean).join(' · ')}
+                          {[p.jobHoursLabel, p.defaultHourlyRateAmount === null ? 'No rate' : `£${p.defaultHourlyRateAmount}/h`].filter(Boolean).join(' · ')}
                         </span>
                       </li>
                     ))}

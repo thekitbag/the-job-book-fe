@@ -15,6 +15,7 @@ import { track } from './analytics'
 import type { MemoryCardProps } from './MemoryCard'
 import { memoryItemToEdit } from './memoryEdit'
 import {
+  budgetCostContribution,
   deriveCostSummary,
   deriveGrossKnownCost,
   deriveLabourHoursSummary,
@@ -423,9 +424,19 @@ export function useJobMemory(job: Job) {
     [data],
   )
 
+  // Trusted general Budget costs — their contributing ids count as "in Budget"
+  // so a budget_cost row can be marked paid like any other trusted cost.
+  const budgetCostIds = useMemo(
+    () => (data ? budgetCostContribution(data.sections).ids : []),
+    [data],
+  )
   const includedIds = useMemo(
-    () => new Set([...(ordered?.rows ?? []).flatMap(r => r.memoryItemIds), ...(labourSummary?.rows ?? []).map(r => r.memoryItemId)]),
-    [ordered, labourSummary],
+    () => new Set([
+      ...(ordered?.rows ?? []).flatMap(r => r.memoryItemIds),
+      ...(labourSummary?.rows ?? []).map(r => r.memoryItemId),
+      ...budgetCostIds,
+    ]),
+    [ordered, labourSummary, budgetCostIds],
   )
   const exclusionReason = useMemo(
     () => new Map<string, string>([

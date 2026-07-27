@@ -82,7 +82,7 @@ function money(over: Partial<JobMoneyResponse> = {}): JobMoneyResponse {
 
 const IN_AND_OUT = money({
   customerTotalAmount: '4200', customerTotalCurrency: 'GBP', customerTotalLabel: '£4200',
-  moneyInAmount: '1500', moneyInCurrency: 'GBP', moneyInLabel: '£1500 received',
+  moneyInAmount: '1500', moneyInCurrency: 'GBP', moneyInLabel: '£1,500 received',
   moneyOutAmount: '336', moneyOutCurrency: 'GBP', moneyOutLabel: '£336 paid out',
   stillOwedAmount: '2700', stillOwedCurrency: 'GBP', stillOwedLabel: '£2700 still owed',
   rows: [
@@ -122,7 +122,7 @@ describe('Money — job home card', () => {
   it('shows plain in/out totals: received and paid out', async () => {
     renderWorkspace()
     const card = screen.getByRole('button', { name: 'Open Money' })
-    await waitFor(() => expect(within(card).getByText('£1500 received')).toBeInTheDocument())
+    await waitFor(() => expect(within(card).getByText('£1,500 received')).toBeInTheDocument())
     expect(within(card).getByText('£336 paid out')).toBeInTheDocument()
   })
 
@@ -143,7 +143,7 @@ describe('Money — section', () => {
     expect(screen.getByRole('heading', { name: 'Money' })).toBeInTheDocument()
     const hero = screen.getByRole('region', { name: 'Money summary' })
     expect(within(hero).getByText('Money in')).toBeInTheDocument()
-    expect(within(hero).getByText('£1500')).toBeInTheDocument()
+    expect(within(hero).getByText('£1,500')).toBeInTheDocument()
     expect(within(hero).getByText('Money out')).toBeInTheDocument()
     expect(within(hero).getByText('£336')).toBeInTheDocument()
     const tabs = screen.getByRole('tablist', { name: 'Money views' })
@@ -221,10 +221,10 @@ describe('Money — section', () => {
     const user = userEvent.setup()
     renderWorkspace()
     await openMoney(user)
-    await user.click(screen.getByRole('button', { name: /remove marker/i }))
+    await user.click(screen.getByRole('button', { name: /undo paid/i }))
     await user.click(screen.getByRole('button', { name: /^remove$/i }))
     await waitFor(() => expect(deleteMoneyEvent).toHaveBeenCalledWith(JOB.id, 'me-1'))
-    expect(await screen.findByText(/budget cost is unchanged/i)).toBeInTheDocument()
+    expect(await screen.findByText(/budget cost unchanged/i)).toBeInTheDocument()
   })
 })
 
@@ -298,6 +298,21 @@ describe('Money — mark paid from Budget', () => {
     expect(d.getByText(/paid — recorded in money out/i)).toBeInTheDocument()
     expect(d.queryByRole('button', { name: /mark as paid/i })).toBeNull()
   })
+
+  it('Undo paid from the Budget drawer soft-deletes the Money out and leaves Budget unchanged, with a toast', async () => {
+    vi.mocked(getJobMoney).mockResolvedValue(money({ moneyOutAmount: '336', rows: [OUT_ROW] }))
+    vi.mocked(deleteMoneyEvent).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderWorkspace()
+    const budgetCallsBefore = vi.mocked(getBudgetSummary).mock.calls.length
+    const d = await openBudgetItem(user)
+    await user.click(d.getByRole('button', { name: /undo paid/i }))
+    // Undo targets the linked Money out event by id — never the Budget item.
+    await waitFor(() => expect(deleteMoneyEvent).toHaveBeenCalledWith(JOB.id, 'me-9'))
+    expect(await screen.findByText(/removed £336 from money out\. budget cost unchanged\./i)).toBeInTheDocument()
+    // Budget refetched to confirm it did not change.
+    await waitFor(() => expect(vi.mocked(getBudgetSummary).mock.calls.length).toBeGreaterThan(budgetCallsBefore))
+  })
 })
 
 // ── Latest activity ───────────────────────────────────────────────────────────
@@ -306,7 +321,7 @@ describe('Money — latest activity', () => {
   it('shows a customer payment row that opens the Money workspace', async () => {
     const user = userEvent.setup()
     renderWorkspace()
-    const row = await screen.findByRole('button', { name: /payment: £1500 received — deposit/i })
+    const row = await screen.findByRole('button', { name: /payment: £1,500 received — deposit/i })
     await user.click(row)
     expect(screen.getByRole('heading', { name: 'Money' })).toBeInTheDocument()
   })
