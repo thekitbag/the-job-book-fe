@@ -8,7 +8,7 @@ import { memoryItemToEdit } from './memoryEdit'
 import { canDeriveUnitCost, formatMoney, formatTotalLabel, hasCostLikeAmount, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
 import type { MarkPaidControls } from './markPaid'
-import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySummary, BudgetSummaryResponse, CreateMemoryItemRequest, MemoryViewItem, TotalKnownCost } from './types'
 
 const POS_DECIMAL = /^\d+(\.\d+)?$/
 
@@ -243,9 +243,9 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
   )
 }
 
-export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?: MarkPaidControls }) {
+export default function SpendTab({ mem, markPaid, onAddCost }: { mem: JobMemory; markPaid?: MarkPaidControls; onAddCost: (req: CreateMemoryItemRequest) => Promise<MemoryViewItem> }) {
   const {
-    totalKnownCost, refunds, budgetSummary, refreshError, refetch, addMemoryItem,
+    totalKnownCost, refunds, budgetSummary, refreshError, refetch,
     sectionItems, includedIds, exclusionReason, cardProps,
     notCountedItems, resolveCostBasis, addPrice,
     budgetCategories, expandedCats, toggleCat, labourSpendGroup, handleSetLabourBudget,
@@ -267,10 +267,13 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
 
   const orderedItems = sectionItems('ordered_materials')
   const labourItems = sectionItems('labour')
+  // General Budget costs (labour cost, plant, hire, subcontractor, …). Budget
+  // owns all cost, so these render alongside bought materials.
+  const budgetCostItems = sectionItems('budget_costs')
   const hasRefunds = (refunds?.rows.length ?? 0) > 0
   // A job whose only money fact is a refund still has spend to show — the hero
   // has to render, or the refund would reduce a total Mike can't see.
-  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCategories.length > 0 || hasRefunds
+  const hasSpendContent = orderedItems.length > 0 || labourItems.length > 0 || budgetCostItems.length > 0 || budgetCategories.length > 0 || hasRefunds
 
   // Trusted labour money lives in the Labour group (backend budgetSummary.labour
   // or the derived fallback). Its row ids drive de-duplication: a labour spend
@@ -283,7 +286,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
   // (not re-derived from ordered_materials alone) — join back to the full
   // memory-view item for the MemoryCard. Labour rows shown under Labour are
   // excluded here (de-dup by memoryItemId).
-  const allItemsById = new Map([...orderedItems, ...labourItems].map(i => [i.id, i] as const))
+  const allItemsById = new Map([...orderedItems, ...labourItems, ...budgetCostItems].map(i => [i.id, i] as const))
   const uncatItems = (budgetSummary?.uncategorized.rows ?? [])
     .filter(r => !labourRowIds.has(r.memoryItemId))
     .map(r => allItemsById.get(r.memoryItemId))
@@ -299,10 +302,9 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
     .filter(r => !labourRowIds.has(r.memoryItemId))
     .reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
 
-  // Labour is managed from Labour: generic spend adds never offer a category
-  // named "labour" as an ordinary spend target (existing assignments and Fix
-  // memory are untouched — this only shapes the ADD paths).
-  const spendAddCategories = budgetCategories.filter(c => c.name.trim().toLowerCase() !== 'labour')
+  // Budget owns all cost, including labour cost: Add cost can target any active
+  // category, the Labour category included.
+  const costAddCategories = budgetCategories
 
   // Historical rule: don't hide, don't double-count. Ordinary (non-labour)
   // spend already assigned to the Labour category stays visible for fixing —
@@ -318,7 +320,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
     // The Labour budget category is presented by the Labour group instead of a
     // second, duplicate category card.
     if (showLabourGroup && labourSpendGroup?.budgetCategory?.id === c.id) return null
-    const notes = [...orderedItems, ...labourItems].filter(i => i.budgetCategoryId === c.id && !labourRowIds.has(i.id))
+    const notes = [...orderedItems, ...labourItems, ...budgetCostItems].filter(i => i.budgetCategoryId === c.id && !labourRowIds.has(i.id))
     const open = !!expandedCats[c.id]
     if (editingBudgetId === c.id) {
       return (
@@ -378,14 +380,14 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
             </button>
           )}
           <DirectAddForm
-            kind="spend"
+            kind="cost"
             variant="button"
             buttonLabel={`Add to ${c.name}`}
             label="Add cost"
             title={`Add cost — ${c.name}`}
             initialCategoryId={c.id}
-            categories={spendAddCategories}
-            onAdd={addMemoryItem}
+            categories={costAddCategories}
+            onAdd={onAddCost}
           />
         </div>
         {notes.length > 0 && open && <div className="cat-notes">{notes.map(item => (
@@ -460,7 +462,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
         <EmptyState
           title="No costs yet"
           hint="Add what you’ve bought or committed for this job, or say it with Record and it’ll be picked up for you."
-          action={<DirectAddForm kind="spend" variant="button" label="Add cost" categories={spendAddCategories} onAdd={addMemoryItem} />}
+          action={<DirectAddForm kind="cost" variant="button" label="Add cost" categories={costAddCategories} onAdd={onAddCost} />}
         />
       )}
 
@@ -469,11 +471,11 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
           floating above the first category with nothing beneath it. */}
       <section aria-label="Budget categories" ref={byCategoryRef}>
         <DirectAddForm
-          kind="spend"
+          kind="cost"
           label="Add cost"
           sectionLabel="By category"
-          categories={spendAddCategories}
-          onAdd={addMemoryItem}
+          categories={costAddCategories}
+          onAdd={onAddCost}
           actionHidden={!hasSpendContent}
         />
       {/* Budget setup (Labour group + category cards) must not depend on

@@ -2,118 +2,105 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PeopleSummary, ManagePeopleDrawer } from '../LabourPeople'
-import AddLabourDrawer from '../LabourAdd'
-import { createLabourPerson, patchLabourPerson } from '../api'
+import AddHoursDrawer from '../LabourAdd'
+import { createLabourPerson } from '../api'
 import type { CreateMemoryItemRequest, LabourPersonWithJobStats } from '../types'
+
+// Labour is hours-only (labour-hours-budget-costs-paid-undo spec): people carry
+// no rate or Budget treatment, and adding hours never creates Budget cost.
 
 vi.mock('../api', () => ({
   createLabourPerson: vi.fn(),
-  patchLabourPerson: vi.fn(),
 }))
 vi.mock('../analytics', () => ({ track: vi.fn() }))
 
 function person(over: Partial<LabourPersonWithJobStats> = {}): LabourPersonWithJobStats {
   return {
     id: 'lp-kurt', name: 'Kurt',
-    defaultHourlyRateAmount: '20', defaultHourlyRateCurrency: 'GBP', defaultBudgetTreatment: 'counts_toward_budget',
+    defaultHourlyRateAmount: null, defaultHourlyRateCurrency: null, defaultBudgetTreatment: 'hours_only',
     createdAt: '', updatedAt: '', isSelf: false,
-    jobHours: '15.5', jobHoursLabel: '15.5h', jobBudgetCostAmount: '310', jobBudgetCostCurrency: 'GBP', jobBudgetCostLabel: '£310', hasEntriesWithoutRate: false,
+    jobHours: '15.5', jobHoursLabel: '15.5h', jobBudgetCostAmount: null, jobBudgetCostCurrency: null, jobBudgetCostLabel: null, hasEntriesWithoutRate: false,
     ...over,
   }
 }
 
-const MIKE = person({ id: 'lp-mike', name: 'Mike', isSelf: true, defaultBudgetTreatment: 'hours_only', defaultHourlyRateAmount: '25', jobHours: '20', jobHoursLabel: '20h' })
+const MIKE = person({ id: 'lp-mike', name: 'Mike', isSelf: true, jobHours: '20', jobHoursLabel: '20h' })
 const KURT = person()
-const SAM = person({ id: 'lp-sam', name: 'Sam', defaultHourlyRateAmount: null, defaultHourlyRateCurrency: null, jobHours: '6.5', jobHoursLabel: '6.5h' })
+const SAM = person({ id: 'lp-sam', name: 'Sam', jobHours: '6.5', jobHoursLabel: '6.5h' })
 
-describe('People summary (10a)', () => {
-  it('reads each person\'s Budget treatment as a legible tag', () => {
-    render(<PeopleSummary people={[MIKE, KURT, SAM]} onManage={vi.fn()} onOpenPerson={vi.fn()} />)
-    // Mike · you · Hours only
+describe('People summary (hours-only)', () => {
+  it('shows names and hours only — no rate or Budget treatment', () => {
+    render(<PeopleSummary people={[MIKE, KURT, SAM]} onManage={vi.fn()} />)
     expect(screen.getByText('Mike')).toBeInTheDocument()
     expect(screen.getByText('· you')).toBeInTheDocument()
-    expect(screen.getByText('Hours only')).toBeInTheDocument()
-    // Kurt · Budget
-    expect(screen.getByText('Budget')).toBeInTheDocument()
-    // Sam · no rate → Add rate prompt
-    expect(screen.getByText('Add rate ›')).toBeInTheDocument()
+    expect(screen.getByText('20h')).toBeInTheDocument()
+    expect(screen.getByText('15.5h')).toBeInTheDocument()
+    // No rate/treatment language anywhere.
+    expect(screen.queryByText(/Budget/i)).toBeNull()
+    expect(screen.queryByText(/Hours only/i)).toBeNull()
+    expect(screen.queryByText(/rate/i)).toBeNull()
+    expect(screen.queryByText(/£/)).toBeNull()
   })
 })
 
-describe('Manage people (10b/10c)', () => {
+describe('Manage people (hours-only)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('adds a person via the drawer', async () => {
+  it('adds a person by name — no rate or treatment fields', async () => {
     vi.mocked(createLabourPerson).mockResolvedValue({ ...KURT, id: 'lp-new', name: 'Dave' })
     const user = userEvent.setup()
     const onChanged = vi.fn()
     render(<ManagePeopleDrawer jobId="j1" people={[KURT]} open onClose={vi.fn()} onChanged={onChanged} />)
     await user.click(screen.getByRole('button', { name: /add a person/i }))
     const form = screen.getByRole('form', { name: /add a person/i })
+    // Only a name field — no rate, no treatment chooser.
+    expect(within(form).queryByLabelText(/rate/i)).toBeNull()
+    expect(screen.queryByRole('radio')).toBeNull()
     await user.type(within(form).getByLabelText(/name/i), 'Dave')
-    await user.type(within(form).getByLabelText(/default rate/i), '18')
-    await user.click(within(form).getByRole('button', { name: 'Add person' }))
-    await waitFor(() => expect(createLabourPerson).toHaveBeenCalledWith('j1', expect.objectContaining({ name: 'Dave', defaultHourlyRateAmount: '18', defaultBudgetTreatment: 'hours_only' })))
+    await user.click(within(form).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(createLabourPerson).toHaveBeenCalledWith('j1', expect.objectContaining({ name: 'Dave', defaultBudgetTreatment: 'hours_only' })))
     expect(onChanged).toHaveBeenCalled()
   })
 
-  it('saving a changed rate closes the edit form', async () => {
-    vi.mocked(patchLabourPerson).mockResolvedValue({ ...KURT, defaultHourlyRateAmount: '22' })
-    const user = userEvent.setup()
-    render(<ManagePeopleDrawer jobId="j1" people={[KURT]} open onClose={vi.fn()} onChanged={vi.fn()} initialPerson={KURT} />)
-    await user.click(screen.getByRole('button', { name: 'Change ›' }))
-    const form = screen.getByRole('form', { name: /set rate/i })
-    const input = within(form).getByLabelText(/rate/i)
-    await user.clear(input)
-    await user.type(input, '22')
-    await user.click(within(form).getByRole('button', { name: 'Save rate' }))
-    await waitFor(() => expect(patchLabourPerson).toHaveBeenCalledWith('j1', 'lp-kurt', { defaultHourlyRateAmount: '22', defaultHourlyRateCurrency: 'GBP' }))
-    // The edit form is gone; the rate row is shown again.
-    await waitFor(() => expect(screen.queryByRole('form', { name: /set rate/i })).toBeNull())
-    expect(screen.getByRole('button', { name: 'Change ›' })).toBeInTheDocument()
-  })
-
-  it('changes a person\'s budget treatment from their settings', async () => {
-    vi.mocked(patchLabourPerson).mockResolvedValue({ ...KURT, defaultBudgetTreatment: 'hours_only' })
-    const user = userEvent.setup()
-    render(<ManagePeopleDrawer jobId="j1" people={[KURT]} open onClose={vi.fn()} onChanged={vi.fn()} initialPerson={KURT} />)
-    // Opens straight on Kurt's settings; pick Hours only.
-    await user.click(screen.getByRole('radio', { name: /hours only/i }))
-    await waitFor(() => expect(patchLabourPerson).toHaveBeenCalledWith('j1', 'lp-kurt', { defaultBudgetTreatment: 'hours_only' }))
+  it('lists people with their hours and no rate/treatment', () => {
+    render(<ManagePeopleDrawer jobId="j1" people={[MIKE, KURT]} open onClose={vi.fn()} onChanged={vi.fn()} />)
+    expect(screen.getByText('Mike')).toBeInTheDocument()
+    expect(screen.getByText('Kurt')).toBeInTheDocument()
+    expect(screen.queryByText(/counts toward budget/i)).toBeNull()
+    expect(screen.queryByText(/no rate yet/i)).toBeNull()
   })
 })
 
-describe('Add labour (10d/10e)', () => {
+describe('Add hours (hours-only)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('inherits the chosen person\'s rate and treatment and previews the estimated cost', async () => {
+  it('saves hours-only labour for the chosen person — no cost, no Budget treatment', async () => {
     const user = userEvent.setup()
     const onAdd = vi.fn(() => Promise.resolve({} as never))
-    render(<AddLabourDrawer jobId="j1" people={[MIKE, KURT, SAM]} open onClose={vi.fn()} onAdd={onAdd} onPeopleChanged={vi.fn()} />)
-    // Mike (default first) is hours-only → says so plainly.
-    await user.click(screen.getByRole('button', { name: /^Mike/ }))
-    expect(screen.getByText(/will not change the job budget/i)).toBeInTheDocument()
-    // Switch to Kurt: counts toward budget, £20/h → 8h × £20 = £160 estimated.
+    render(<AddHoursDrawer jobId="j1" people={[MIKE, KURT, SAM]} open onClose={vi.fn()} onAdd={onAdd} onPeopleChanged={vi.fn()} />)
+    // No rate/treatment/estimate anywhere in the drawer.
+    expect(screen.queryByText(/counts toward budget/i)).toBeNull()
+    expect(screen.queryByText(/estimated/i)).toBeNull()
+    expect(screen.queryByText(/rate/i)).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Kurt' }))
-    expect(screen.getByText('Counts toward budget')).toBeInTheDocument()
-    expect(screen.getByText(/Kurt's rate £20\/h/)).toBeInTheDocument()
-    expect(screen.getByText('£160')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save labour' }))
+    await user.click(screen.getByRole('button', { name: 'Save hours' }))
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
-      memoryType: 'labour', labourHours: '8', labourPersonId: 'lp-kurt', labourBudgetEnabled: true,
+      memoryType: 'labour', labourHours: '8', labourPersonId: 'lp-kurt', labourBudgetEnabled: false,
     })))
-  })
-
-  it('no person/default stays hours-only rather than adding Budget cost', async () => {
-    const user = userEvent.setup()
-    const onAdd = vi.fn(() => Promise.resolve({} as never))
-    // Sam counts-toward-budget but has no rate → no estimated cost, calm no-rate.
-    render(<AddLabourDrawer jobId="j1" people={[SAM]} open onClose={vi.fn()} onAdd={onAdd} onPeopleChanged={vi.fn()} />)
-    expect(screen.getByText(/no rate yet — hours saved, no budget cost/i)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save labour' }))
-    await waitFor(() => expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'labour', labourPersonId: 'lp-sam' })))
-    // No rate override sent (no cost fields) — Budget cost only lands if a rate exists.
+    // Never sends cost fields — Labour records time, not money.
     const req = (onAdd.mock.calls[0] as CreateMemoryItemRequest[])[0]
     expect(req).not.toHaveProperty('costAmount')
+    expect(req).not.toHaveProperty('totalCostAmount')
+  })
+
+  it('adds a new person inline (name only) then keeps them selected', async () => {
+    vi.mocked(createLabourPerson).mockResolvedValue({ ...KURT, id: 'lp-new', name: 'Dave' })
+    const user = userEvent.setup()
+    const onAdd = vi.fn(() => Promise.resolve({} as never))
+    render(<AddHoursDrawer jobId="j1" people={[SAM]} open onClose={vi.fn()} onAdd={onAdd} onPeopleChanged={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /new/i }))
+    await user.type(screen.getByLabelText(/new person name/i), 'Dave')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(createLabourPerson).toHaveBeenCalledWith('j1', expect.objectContaining({ name: 'Dave', defaultBudgetTreatment: 'hours_only' })))
   })
 })

@@ -131,6 +131,18 @@ export default function ItemActionDrawer({
                 {markPaid.pendingItemId === item.id ? 'Marking paid…' : 'Mark as paid'} <span aria-hidden="true">›</span>
               </button>
             )}
+            {/* Undo paid removes the linked Money out and leaves the Budget cost
+                unchanged — a Money-only correction owned by the Budget item. */}
+            {markPaid && markPaid.isPaid(item) && (
+              <button
+                type="button"
+                className="row-sheet-opt"
+                disabled={markPaid.pendingItemId === item.id}
+                onClick={() => { markPaid.onUndoPaid(item); onClose() }}
+              >
+                {markPaid.pendingItemId === item.id ? 'Undoing…' : 'Undo paid'} <span aria-hidden="true">›</span>
+              </button>
+            )}
             {canPickCategory && (
               <button type="button" className="row-sheet-opt" disabled={assigningCategory} onClick={() => setSub('category')}>
                 Choose category <span aria-hidden="true">›</span>

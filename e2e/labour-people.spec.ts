@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test'
 
-// 390×844, VITE_USE_MOCK_API=true. Seed people: Mike (·you, hours only, £25/h),
-// Kurt (£20/h, counts toward budget), Tom (£35/h, budget), Sam (no rate),
-// Apprentice (hours only). Budget labour cost preserved at £880 (Tom £280 +
-// roof £600). Hours total 24h.
+// 390×844, VITE_USE_MOCK_API=true. Labour is hours-only
+// (labour-hours-budget-costs-paid-undo spec): people carry no rate or Budget
+// treatment, and adding hours never creates Budget cost. Legacy trusted labour
+// cost (Tom £280 + roof £600 = £880) still shows in Budget, not on Labour.
+// Hours total 24h.
 
 async function openLabour(page: import('@playwright/test').Page) {
   await page.goto('/')
@@ -14,64 +15,55 @@ async function openLabour(page: import('@playwright/test').Page) {
   await page.waitForTimeout(500)
 }
 
-test.describe('Labour — people, rates & budget rules', () => {
-  test('hours-first page with budgeted-cost card and people summary tags', async ({ page }) => {
+test.describe('Labour — hours-only', () => {
+  test('hours-first page with a people summary and no money', async ({ page }) => {
     await openLabour(page)
     const panel = page.getByRole('tabpanel', { name: 'Labour' })
     await expect(panel.getByText('24h')).toBeVisible()               // hours hero
-    const card = panel.getByRole('region', { name: 'Budgeted labour cost' })
-    await expect(card.getByText('£880')).toBeVisible()               // budget-enabled trusted labour
-    // People summary tags read at a glance.
+    // No budgeted-cost card, and no money anywhere on the page.
+    await expect(panel.getByRole('region', { name: 'Budgeted labour cost' })).toHaveCount(0)
+    await expect(panel.getByText('£', { exact: false })).toHaveCount(0)
+    // People summary shows names and hours only — no rate/treatment tags.
     const people = panel.getByRole('region', { name: 'People' })
     await expect(people.getByText('Mike')).toBeVisible()
-    await expect(people.getByText('Hours only').first()).toBeVisible()
+    await expect(people.getByText(/counts toward budget/i)).toHaveCount(0)
   })
 
-  test('a labour row states its Budget effect, not a money figure', async ({ page }) => {
+  test('a labour row shows person, task and hours — never money', async ({ page }) => {
     await openLabour(page)
     const panel = page.getByRole('tabpanel', { name: 'Labour' })
-    // Tom's rated, budget-enabled electrics entry states its budget cost.
-    await expect(panel.getByText(/electrics · £280 budget cost/i)).toBeVisible()
-    // Mike's entry is hours-only.
-    await expect(panel.getByText(/hours only/i).first()).toBeVisible()
+    const row = panel.locator('.labour-entry', { hasText: 'electrics' })
+    await expect(row.getByText('Tom')).toBeVisible()
+    await expect(row.getByText('electrics')).toBeVisible()
+    await expect(row.getByText('8h')).toBeVisible()
+    await expect(panel.getByText(/budget cost/i)).toHaveCount(0)
   })
 
-  test('add labour for a budget person previews the estimated cost and saves', async ({ page }) => {
+  test('Add hours saves hours-only labour and raises the hours total', async ({ page }) => {
     await openLabour(page)
-    await page.getByRole('button', { name: /add labour/i }).click()
-    const sheet = page.getByRole('dialog', { name: 'Add labour' })
+    await page.getByRole('button', { name: /add hours/i }).click()
+    const sheet = page.getByRole('dialog', { name: 'Add hours' })
     await sheet.getByRole('button', { name: 'Kurt' }).click()
-    // Kurt: £20/h, counts toward budget. Default 8h → £160 estimated.
-    await expect(sheet.getByText('Counts toward budget')).toBeVisible()
-    await expect(sheet.getByText('£160')).toBeVisible()
-    await sheet.getByRole('button', { name: 'Save labour' }).click()
-    await page.waitForTimeout(600)
-    // New Kurt entry appears with its budget cost effect.
-    await expect(page.getByRole('tabpanel', { name: 'Labour' }).getByText(/£160 budget cost/i)).toBeVisible()
-  })
-
-  test('add hours-only labour increases hours but not the budgeted cost', async ({ page }) => {
-    await openLabour(page)
-    await page.getByRole('button', { name: /add labour/i }).click()
-    const sheet = page.getByRole('dialog', { name: 'Add labour' })
-    await sheet.getByRole('button', { name: /^Mike/ }).click()   // Mike = hours only
-    await expect(sheet.getByText(/will not change the job budget/i)).toBeVisible()
-    await sheet.getByRole('button', { name: 'Save labour' }).click()
-    await page.waitForTimeout(600)
+    // No rate, treatment, or estimated cost anywhere in the drawer.
+    await expect(sheet.getByText(/counts toward budget/i)).toHaveCount(0)
+    await expect(sheet.getByText(/estimated/i)).toHaveCount(0)
+    // Default 8h for Kurt → 24h + 8h = 32h.
+    await sheet.getByRole('button', { name: 'Save hours' }).click()
+    await page.waitForTimeout(700)
     const panel = page.getByRole('tabpanel', { name: 'Labour' })
-    // Hours rose (24h → 32h), budgeted cost card unchanged at £880.
     await expect(panel.getByText('32h')).toBeVisible()
-    await expect(panel.getByRole('region', { name: 'Budgeted labour cost' }).getByText('£880')).toBeVisible()
+    // Still no money on the Labour page.
+    await expect(panel.getByText('£', { exact: false })).toHaveCount(0)
   })
 
-  test('add a person from Manage', async ({ page }) => {
+  test('add a person from Manage (name only)', async ({ page }) => {
     await openLabour(page)
     await page.getByRole('button', { name: 'Manage ›' }).click()
     const sheet = page.getByRole('dialog', { name: 'People' })
     await sheet.getByRole('button', { name: /add a person/i }).click()
     const form = page.getByRole('form', { name: /add a person/i })
     await form.getByLabel(/name/i).fill('Dave')
-    await form.getByRole('button', { name: 'Add person' }).click()
+    await form.getByRole('button', { name: 'Add', exact: true }).click()
     await page.waitForTimeout(400)
     await expect(page.getByText('Dave')).toBeVisible()
   })

@@ -335,7 +335,8 @@ describe('ReviewQueueScreen', () => {
     const options = Array.from(typeSelect.querySelectorAll('option')).map(o => o.value)
     expect(options).not.toContain('unclear')
     expect(options).toContain('labour')
-    expect(options.length).toBe(7)
+    expect(options).toContain('budget_cost')
+    expect(options.length).toBe(8)
   })
 
   it('shows item-level error on decision failure with retry possible', async () => {
@@ -1331,68 +1332,43 @@ describe('ReviewQueueScreen — labour', () => {
     mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-labour-hours', action: 'confirm', status: 'confirmed', memoryItemId: 'mem-x', sourceCandidateFactIds: [] })
   })
 
-  it('renders a Labour section with hours, person, task, and rate', async () => {
+  it('renders a Labour section with hours, person and task — and no cost (hours-only)', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const hours = await screen.findByTestId('queue-item-qi-labour-hours')
-    expect(within(hours).getByText('Labour')).toBeTruthy()
+    expect(within(hours).getByText('Labour · hours')).toBeTruthy()
     expect(within(hours).getByText('6 hours · fitting cladding')).toBeTruthy()
     const rated = screen.getByTestId('queue-item-qi-labour-rated')
     expect(within(rated).getByText('8 hours · electrics')).toBeTruthy()
     expect(within(rated).getByText('Tom')).toBeTruthy()
-    expect(within(rated).getByText(/£35\/hour · £280 total/)).toBeTruthy()
+    // Labour is hours-only — no rate/cost shows on a labour draft.
+    expect(within(rated).queryByText(/\/hour/)).toBeNull()
+    expect(within(rated).queryByText(/£/)).toBeNull()
   })
 
   it('can confirm hours-only labour without a cost', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const hours = await screen.findByTestId('queue-item-qi-labour-hours')
     fireEvent.click(within(hours).getByRole('button', { name: /remember this/i }))
-    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({ queueItemId: 'qi-labour-hours', action: 'confirm' })))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({ queueItemId: 'qi-labour-hours', action: 'confirm', labourBudgetEnabled: false })))
   })
 
-  it('shows the suggested category and confirms it for rated labour', async () => {
+  it('confirms a labour draft as hours-only (never counts toward Budget)', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const rated = await screen.findByTestId('queue-item-qi-labour-rated')
-    expect(within(rated).getByText('Suggested: labour')).toBeTruthy()
     fireEvent.click(within(rated).getByRole('button', { name: /remember this/i }))
-    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalledWith(MOCK_JOB.id, expect.objectContaining({ budgetCategoryId: 'c-lab' })))
+    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
+    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
+    expect(decision.labourBudgetEnabled).toBe(false)
   })
 
-  it('offers Per hour in the correction cost qualifier', async () => {
+  it('the labour Fix form has no cost, rate or Budget-treatment fields', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const rated = await screen.findByTestId('queue-item-qi-labour-rated')
     fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
     expect(within(rated).getByLabelText('Hours')).toBeTruthy()
-    const quals = Array.from(within(rated).getAllByRole('combobox')).flatMap(s => Array.from(s.querySelectorAll('option')).map(o => o.value))
-    expect(quals).toContain('per_hour')
-  })
-
-  it('blocks save with a warning for a per_hour line missing hours', async () => {
-    mockGetReviewQueue.mockResolvedValue({
-      ...labourQueue(),
-      sections: [{ key: 'labour', label: 'Labour', items: [{
-        ...ITEM_LABOUR_RATED,
-        proposedMemory: { ...ITEM_LABOUR_RATED.proposedMemory, labourHours: null },
-      }] }],
-    })
-    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
-    fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
-    expect(within(rated).getByRole('alert').textContent).toMatch(/Add hours/)
-    expect(within(rated).getByRole('button', { name: /save correction/i })).toBeDisabled()
-  })
-
-  it('shows a derived hours × rate preview for a per_hour line and omits the explicit total on save', async () => {
-    mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-labour-rated', action: 'correct', status: 'corrected', memoryItemId: 'mem-y', sourceCandidateFactIds: [] })
-    render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
-    const rated = await screen.findByTestId('queue-item-qi-labour-rated')
-    fireEvent.click(within(rated).getByRole('button', { name: /fix details/i }))
-    expect(within(rated).getByText('Rate per hour')).toBeTruthy()
-    expect(within(rated).queryByText('Total cost')).toBeNull()
-    expect(within(rated).getByRole('status').textContent).toBe('8 hours × £35/hour = £280 total')
-    fireEvent.click(within(rated).getByRole('button', { name: /save correction/i }))
-    await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
-    const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
-    expect(decision.corrected).not.toHaveProperty('totalCostAmount')
+    expect(within(rated).queryByLabelText(/budget treatment/i)).toBeNull()
+    expect(within(rated).queryByText('Cost qualifier')).toBeNull()
+    expect(within(rated).queryByText(/rate per hour/i)).toBeNull()
   })
 })
 
@@ -1463,31 +1439,35 @@ describe('ReviewQueueScreen — inherited labour defaults (10i)', () => {
     mockSubmitQueueDecision.mockResolvedValue({ queueItemId: 'qi-kurt', action: 'confirm', status: 'confirmed', memoryItemId: 'mem-x', sourceCandidateFactIds: [] })
   })
 
-  it('shows each draft\'s inherited person and Budget effect', async () => {
+  it('shows each draft\'s person and hours only — no Budget effect (hours-only)', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const kurt = await screen.findByTestId('queue-item-qi-kurt')
-    expect(within(kurt).getByText('£120 budget cost')).toBeTruthy()   // 6h × £20
     expect(within(kurt).getByText('Kurt')).toBeTruthy()               // person shows in the meta
+    expect(within(kurt).queryByText(/budget cost/i)).toBeNull()
     const mike = screen.getByTestId('queue-item-qi-mike')
-    expect(within(mike).getByText('hours only')).toBeTruthy()
     expect(within(mike).getByText('Mike')).toBeTruthy()
+    expect(within(mike).queryByText(/hours only/i)).toBeNull()
+    // No money anywhere on a labour draft.
+    expect(within(kurt).queryByText(/£/)).toBeNull()
   })
 
-  it('confirming persists the inherited person id and budget flag', async () => {
+  it('confirming persists the person id and always saves hours-only (never counts toward Budget)', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const kurt = await screen.findByTestId('queue-item-qi-kurt')
     fireEvent.click(within(kurt).getByRole('button', { name: /remember this/i }))
     await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
     const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]
     expect(decision.labourPersonId).toBe('lp-kurt')
-    expect(decision.labourBudgetEnabled).toBe(true)
+    expect(decision.labourBudgetEnabled).toBe(false)
   })
 
-  it('correcting to Hours only sends labourBudgetEnabled false, person resolved from name', async () => {
+  it('correcting a labour draft resolves the person from name and stays hours-only', async () => {
     render(<ReviewQueueScreen job={MOCK_JOB} onClose={vi.fn()} />)
     const kurt = await screen.findByTestId('queue-item-qi-kurt')
     fireEvent.click(within(kurt).getByRole('button', { name: /fix details/i }))
-    fireEvent.change(within(kurt).getByLabelText('Budget treatment'), { target: { value: 'hours' } })
+    // No Budget-treatment control any more — correct a hours field and save.
+    expect(within(kurt).queryByLabelText(/budget treatment/i)).toBeNull()
+    fireEvent.change(within(kurt).getByLabelText('Hours'), { target: { value: '7' } })
     fireEvent.click(within(kurt).getByRole('button', { name: /save correction/i }))
     await waitFor(() => expect(mockSubmitQueueDecision).toHaveBeenCalled())
     const decision = mockSubmitQueueDecision.mock.calls[mockSubmitQueueDecision.mock.calls.length - 1][1]

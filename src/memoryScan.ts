@@ -324,11 +324,17 @@ function excludedRow(item: MemoryViewItem, reason: SpendExclusionReason): Exclud
 
 function budgetSpendRow(item: MemoryViewItem, amount: number, currency: string): BudgetSpendRow {
   const isLabour = item.memoryType === 'labour'
-  const fallback = isLabour ? 'Labour' : 'Bought item'
+  const isBudgetCost = item.memoryType === 'budget_cost'
+  const fallback = isLabour ? 'Labour' : 'Cost'
+  // A budget_cost may describe a labour cost (person/task) or a plain cost;
+  // prefer its most specific identity, then the remembered summary.
+  const primaryLabel = isLabour ? item.labourTask
+    : isBudgetCost ? (item.labourTask || item.labourPerson || item.materialName)
+    : item.materialName
   return {
     memoryItemId: item.id,
     memoryType: item.memoryType,
-    itemLabel: (isLabour ? item.labourTask : item.materialName)?.trim() || item.summary?.trim() || fallback,
+    itemLabel: primaryLabel?.trim() || item.summary?.trim() || fallback,
     materialName: item.materialName,
     quantity: item.quantity,
     unit: item.unit,
@@ -363,11 +369,13 @@ export function deriveBudgetSummary(
   const activeIds = new Set(active.map(c => c.id))
   const ordered = sections.find(s => s.key === 'ordered_materials')?.items ?? []
   const labour = sections.find(s => s.key === 'labour')?.items ?? []
+  const budgetCosts = sections.find(s => s.key === 'budget_costs')?.items ?? []
 
   const rowsByCategory = new Map<string, BudgetSpendRow[]>()
   const uncategorizedRows: BudgetSpendRow[] = []
 
-  // Both bought/ordered and labour with a safe GBP monetary cost contribute.
+  // Bought/ordered, legacy labour cost, and general budget_cost items with a
+  // safe GBP monetary cost all contribute to Budget.
   const contributions: Array<{ item: MemoryViewItem; amount: number }> = []
   for (const item of ordered) {
     const line = safeLineTotal(item)
@@ -376,6 +384,10 @@ export function deriveBudgetSummary(
   for (const item of labour) {
     const line = safeLabourCost(item)
     if (line && line.currency === currency) contributions.push({ item, amount: line.amount })
+  }
+  for (const item of budgetCosts) {
+    const line = safeBudgetCost(item)
+    if (line) contributions.push({ item, amount: line.amount })
   }
   for (const { item, amount } of contributions) {
     const row = budgetSpendRow(item, amount, currency)
@@ -500,6 +512,32 @@ export function deriveLabourSummary(sections: MemoryViewSection[]): LabourCostSu
   }
 }
 
+// ── General Budget costs (memoryType 'budget_cost') ─────────────────────────
+// Budget owns all cost. A budget_cost is a trusted job cost that is neither a
+// physical material nor an hours entry — a labour cost, plant, hire,
+// subcontractor, or anything else. Its safe GBP line total contributes to
+// Budget exactly like a bought material's does.
+
+export function safeBudgetCost(item: MemoryViewItem): { amount: number; currency: string } | null {
+  if (item.memoryType !== 'budget_cost') return null
+  const line = safeLineTotal(item)
+  return line && line.currency === 'GBP' ? line : null
+}
+
+// Trusted budget_cost contribution across the sections: the summed amount and
+// the contributing memory-item ids (used by Budget totals and the paid-eligible
+// / included set).
+export function budgetCostContribution(sections: MemoryViewSection[]): { amount: number; ids: string[] } {
+  const items = sections.find(s => s.key === 'budget_costs')?.items ?? []
+  let amount = 0
+  const ids: string[] = []
+  for (const item of items) {
+    const line = safeBudgetCost(item)
+    if (line) { amount += line.amount; ids.push(item.id) }
+  }
+  return { amount, ids }
+}
+
 // ── Returned materials & refunds ────────────────────────────────────────────
 
 /**
@@ -567,10 +605,11 @@ export function deriveGrossKnownCost(sections: MemoryViewSection[]): GrossKnownC
   const currency = 'GBP'
   const ordered = deriveCostSummary(sections)
   const labour = deriveLabourSummary(sections)
+  const budgetCosts = budgetCostContribution(sections)
   const orderedAmt = ordered.knownSpendAmount ? parseFloat(ordered.knownSpendAmount) : 0
   const labourAmt = labour.knownSpendAmount ? parseFloat(labour.knownSpendAmount) : 0
-  const total = orderedAmt + labourAmt
-  const has = ordered.includedMemoryItemIds.length + labour.includedMemoryItemIds.length > 0
+  const total = orderedAmt + labourAmt + budgetCosts.amount
+  const has = ordered.includedMemoryItemIds.length + labour.includedMemoryItemIds.length + budgetCosts.ids.length > 0
   return {
     amount: has ? String(Math.round(total * 100) / 100) : null,
     currency: has ? currency : null,
@@ -586,12 +625,13 @@ export function deriveTotalKnownCost(sections: MemoryViewSection[]): TotalKnownC
   const currency = 'GBP'
   const ordered = deriveCostSummary(sections)
   const labour = deriveLabourSummary(sections)
+  const budgetCosts = budgetCostContribution(sections)
   const refunds = deriveRefundsSummary(sections)
   const orderedAmt = ordered.knownSpendAmount ? parseFloat(ordered.knownSpendAmount) : 0
   const labourAmt = labour.knownSpendAmount ? parseFloat(labour.knownSpendAmount) : 0
   const refundAmt = refunds.knownRefundAmount ? parseFloat(refunds.knownRefundAmount) : 0
-  const total = orderedAmt + labourAmt - refundAmt
-  const ids = [...ordered.includedMemoryItemIds, ...labour.includedMemoryItemIds]
+  const total = orderedAmt + labourAmt + budgetCosts.amount - refundAmt
+  const ids = [...ordered.includedMemoryItemIds, ...labour.includedMemoryItemIds, ...budgetCosts.ids]
   const has = ids.length > 0 || refunds.rows.length > 0
   return {
     knownSpendAmount: has ? String(Math.round(total * 100) / 100) : null,
@@ -735,16 +775,19 @@ export function deriveLabourSpendGroupFromBudget(bs: BudgetSummaryResponse): Lab
   const currency = 'GBP'
   const seen = new Set<string>()
   const rows: BudgetSpendRow[] = []
-  const allRows = [...bs.categories.flatMap(c => c.rows), ...bs.uncategorized.rows]
-  for (const row of allRows) {
-    if (row.memoryType !== 'labour' || seen.has(row.memoryItemId)) continue
-    seen.add(row.memoryItemId)
-    rows.push(row)
+  const add = (row: BudgetSpendRow) => { if (!seen.has(row.memoryItemId)) { seen.add(row.memoryItemId); rows.push(row) } }
+  const labourCat = findLabourBudgetCategory(bs)
+  // Legacy labour-type cost rows anywhere, plus general budget_cost rows the
+  // user filed under the Labour category — both are "labour cost".
+  for (const row of [...bs.categories.flatMap(c => c.rows), ...bs.uncategorized.rows]) {
+    if (row.memoryType === 'labour') add(row)
+  }
+  if (labourCat) for (const row of labourCat.rows) {
+    if (row.memoryType === 'budget_cost') add(row)
   }
   const spend = rows.reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
   const has = rows.length > 0
 
-  const labourCat = findLabourBudgetCategory(bs)
   const budget = labourCat?.category.budgetAmount && DECIMAL.test(labourCat.category.budgetAmount)
     ? parseFloat(labourCat.category.budgetAmount) : null
   const remaining = budget !== null ? budget - spend : null
@@ -812,6 +855,7 @@ export function suggestBudgetCategory(
 // memoryType → memory-view section key (used to re-home an item after a type edit)
 export const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
   ordered_material: 'ordered_materials',
+  budget_cost: 'budget_costs',
   used_material: 'used_materials',
   leftover_material: 'leftovers',
   returned_material: 'returned_materials',
@@ -823,12 +867,13 @@ export const MEMORY_TYPE_TO_SECTION_KEY: Record<string, string> = {
 }
 
 export const SECTION_ORDER = [
-  'ordered_materials', 'labour', 'used_materials', 'leftovers', 'returned_materials',
+  'ordered_materials', 'budget_costs', 'labour', 'used_materials', 'leftovers', 'returned_materials',
   'general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs',
 ]
 
 export const SECTION_FULL_LABELS: Record<string, string> = {
   ordered_materials: 'Ordered materials',
+  budget_costs: 'Budget costs',
   labour: 'Labour',
   used_materials: 'Used materials',
   leftovers: 'Leftovers',

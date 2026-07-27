@@ -616,6 +616,37 @@ describe('deriveTotalKnownCost', () => {
   })
 })
 
+describe('budget_cost — Budget owns general cost', () => {
+  const budgetCost = (o: Partial<MemoryViewItem>) => item({ memoryType: 'budget_cost', costCurrency: 'GBP', costQualifier: 'total', ...o })
+
+  it('a safe GBP budget_cost total counts toward the Budget total', () => {
+    const sections = [
+      section('ordered_materials', [orderedItem({ id: 'a', materialName: 'hardcore', quantity: '8', unit: 'bags', totalCostAmount: '40', costCurrency: 'GBP' })]),
+      section('budget_costs', [budgetCost({ id: 'bc', materialName: 'plant hire', costAmount: '120', totalCostAmount: '120' })]),
+    ]
+    expect(deriveTotalKnownCost(sections).knownSpendAmount).toBe('160') // 40 + 120
+    expect(deriveTotalKnownCost(sections).includedMemoryItemIds).toContain('bc')
+  })
+
+  it('an untrusted budget_cost (worth checking) does not count', () => {
+    const sections = [section('budget_costs', [budgetCost({ id: 'bc', costAmount: '120', totalCostAmount: '120', uncertaintyFlags: ['x'] })])]
+    expect(deriveTotalKnownCost(sections).knownSpendAmount).toBeNull()
+  })
+
+  it('deriveBudgetSummary files a budget_cost under its category and in the totals', () => {
+    const cats = [cat({ id: 'c-lab', name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP' })]
+    const s = deriveBudgetSummary('job-1', [
+      section('ordered_materials', []),
+      section('labour', []),
+      section('budget_costs', [budgetCost({ id: 'bc', labourPerson: 'Kurt', labourTask: 'cladding', costAmount: '120', totalCostAmount: '120', budgetCategoryId: 'c-lab' })]),
+    ], cats)
+    expect(s.totals.knownSpendAmount).toBe('120')
+    // A budget_cost filed under the Labour category shows in the labour group.
+    expect(s.labour!.knownSpendAmount).toBe('120')
+    expect(s.labour!.rows.some(r => r.memoryItemId === 'bc')).toBe(true)
+  })
+})
+
 describe('deriveBudgetSummary — labour', () => {
   it('includes safe labour in a category and the totals', () => {
     const cats = [cat({ id: 'c-lab', name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP' })]

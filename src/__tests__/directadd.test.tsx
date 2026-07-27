@@ -117,7 +117,7 @@ describe('Direct add — entry points', () => {
     await openTab('Budget')
     expect(await screen.findByRole('button', { name: 'Add cost' })).toBeInTheDocument()
     await openTab('Labour')
-    expect(await screen.findByRole('button', { name: /add labour/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /add hours/i })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
     // Left over is its own Materials tab with its own add.
@@ -138,7 +138,7 @@ describe('Direct add — entry points', () => {
 })
 
 describe('Direct add — submit contracts', () => {
-  it('spend saves as ordered_material with a GBP cost and refetches budget', async () => {
+  it('Budget Add cost saves a general budget_cost with a GBP total and refetches budget', async () => {
     // Uncategorised display now comes from budgetSummary.uncategorized.rows, so
     // the refetch after save must carry the new item's row (matching what the
     // real backend would return) — the static EMPTY_BUDGET default only covers
@@ -147,7 +147,7 @@ describe('Direct add — submit contracts', () => {
       ...EMPTY_BUDGET,
       uncategorized: {
         knownSpendAmount: '120', knownSpendCurrency: 'GBP', knownSpendLabel: '£120 known spend',
-        rows: [{ memoryItemId: 'mem-manual-1', memoryType: 'ordered_material', itemLabel: 'decking', materialName: 'decking', quantity: null, unit: null, lineTotalAmount: '120', lineTotalCurrency: 'GBP', lineTotalLabel: '£120 total' }],
+        rows: [{ memoryItemId: 'mem-manual-1', memoryType: 'budget_cost', itemLabel: 'decking', materialName: 'decking', quantity: null, unit: null, lineTotalAmount: '120', lineTotalCurrency: 'GBP', lineTotalLabel: '£120 total' }],
       },
     })
     renderWorkspace()
@@ -158,7 +158,7 @@ describe('Direct add — submit contracts', () => {
     fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '120' } })
     fireEvent.click(within(form).getByRole('button', { name: /^Save / }))
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
-      memoryType: 'ordered_material', materialName: 'decking', costAmount: '120', costCurrency: 'GBP', totalCostAmount: '120',
+      memoryType: 'budget_cost', materialName: 'decking', costAmount: '120', costCurrency: 'GBP', totalCostAmount: '120',
     })))
     // budget-summary refetched (initial load + after save)
     await waitFor(() => expect(mockGetBudgetSummary.mock.calls.length).toBeGreaterThanOrEqual(2))
@@ -169,11 +169,11 @@ describe('Direct add — submit contracts', () => {
   it('labour saves as labour for the chosen person with the entry hours', async () => {
     renderWorkspace()
     await openTab('Labour')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add labour' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Add hours' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add hours' })
     fireEvent.click(await within(sheet).findByRole('button', { name: 'Tom' }))
     fireEvent.change(within(sheet).getByLabelText('Hours'), { target: { value: '8' } })
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Save labour' }))
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Save hours' }))
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
       memoryType: 'labour', labourHours: '8', labourPersonId: 'lp-tom',
     })))
@@ -276,8 +276,8 @@ describe('Manual Add V2 — bottom sheet', () => {
   it('Escape closes the sheet', async () => {
     renderWorkspace()
     await openTab('Labour')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
-    expect(screen.getByRole('dialog', { name: /add labour/i })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add hours' }))
+    expect(screen.getByRole('dialog', { name: /add hours/i })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
@@ -318,12 +318,13 @@ describe('Manual Add V2 — spend category context', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Add to timber' }))
     const sheet = screen.getByRole('dialog', { name: 'Add cost — timber' })
     fireEvent.change(within(sheet).getByRole('form', { name: 'Add cost' }).querySelector('input[name="materialName"]')!, { target: { value: '4x2 CLS' } })
+    fireEvent.change(within(sheet).getByRole('form', { name: 'Add cost' }).querySelector('input[name="costAmount"]')!, { target: { value: '80' } })
     const viewCalls = mockGetMemoryView.mock.calls.length
     const budgetCalls = mockGetBudgetSummary.mock.calls.length
     fireEvent.click(within(sheet).getByRole('button', { name: /^Save / }))
 
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
-      memoryType: 'ordered_material', materialName: '4x2 CLS', budgetCategoryId: 'cat-timber',
+      memoryType: 'budget_cost', materialName: '4x2 CLS', budgetCategoryId: 'cat-timber',
     })))
     // sheet closes; authoritative memory-view + budget summary are refetched
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
@@ -351,7 +352,7 @@ describe('Manual Add V2 — empty states', () => {
 
     await openTab('Labour')
     const labourPanel = await screen.findByRole('tabpanel', { name: 'Labour' })
-    expect(within(labourPanel).getByText('No labour logged yet')).toBeInTheDocument()
+    expect(within(labourPanel).getByText('No hours logged yet')).toBeInTheDocument()
 
     await openTab('Used')
     const usedPanel = await screen.findByRole('tabpanel', { name: 'Used materials' })
@@ -378,10 +379,10 @@ describe('Manual Add V2 — empty states', () => {
     renderWorkspace()
     await openTab('Labour')
     const panel = await screen.findByRole('tabpanel', { name: 'Labour' })
-    fireEvent.click(within(panel).getByRole('button', { name: 'Add labour' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add labour' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add hours' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add hours' })
     fireEvent.change(within(sheet).getByLabelText('Hours'), { target: { value: '6' } })
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Save labour' }))
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Save hours' }))
     await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
       memoryType: 'labour', labourHours: '6',
     })))
@@ -419,7 +420,7 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
     await openTab('Budget')
     expect(await screen.findByRole('button', { name: 'Add cost' })).toBeInTheDocument()
     await openTab('Labour')
-    expect(await screen.findByRole('button', { name: /add labour/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /add hours/i })).toBeInTheDocument()
     await openTab('Used')
     expect(await screen.findByRole('button', { name: 'Add used item' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
@@ -439,8 +440,8 @@ describe('Manual Add V2 — founder feedback acceptance', () => {
   it('opening a sheet does not auto-focus a form field', async () => {
     renderWorkspace()
     await openTab('Labour')
-    fireEvent.click(await screen.findByRole('button', { name: 'Add labour' }))
-    expect(screen.getByRole('dialog', { name: /add labour/i })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add hours' }))
+    expect(screen.getByRole('dialog', { name: /add hours/i })).toBeInTheDocument()
     const active = document.activeElement
     expect(['INPUT', 'TEXTAREA', 'SELECT']).not.toContain(active?.tagName)
   })

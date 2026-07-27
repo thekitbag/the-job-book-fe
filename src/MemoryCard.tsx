@@ -10,12 +10,12 @@ import type { MarkPaidControls } from './markPaid'
 import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
 
 // Types shown with a structured type label + detail rows (not a prose summary).
-export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'used_material', 'leftover_material', 'returned_material', 'labour'])
+export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'budget_cost', 'used_material', 'leftover_material', 'returned_material', 'labour'])
 // Types that can carry a budget category (a picker is offered for these).
-export const CATEGORY_TYPES = new Set<string>(['ordered_material', 'labour'])
+export const CATEGORY_TYPES = new Set<string>(['ordered_material', 'labour', 'budget_cost'])
 // Types that count towards known spend — these carry the date cue and the
 // "no longer count in known spend" warning when removed.
-const SPEND_TYPES = new Set<string>(['ordered_material', 'labour'])
+const SPEND_TYPES = new Set<string>(['ordered_material', 'labour', 'budget_cost'])
 // Types whose date is worth showing on the card. A return is a dated event in
 // its own right ("Returned 8 Jul"), even though it is not spend.
 const DATED_TYPES = new Set<string>([...SPEND_TYPES, 'returned_material'])

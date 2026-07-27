@@ -77,10 +77,13 @@ beforeEach(() => {
 function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
+// The each × quantity auto-total is a bought-material feature; it lives in
+// Materials → Bought (Budget's Add cost is a general budget_cost with no
+// quantity/basis).
 async function openAddSpend() {
-  fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Add cost' }))
-  return screen.getByRole('form', { name: 'Add cost' })
+  fireEvent.click(screen.getByRole('button', { name: 'Open Materials' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Add bought item' }))
+  return screen.getByRole('form', { name: 'Add bought item' })
 }
 function fill(form: HTMLElement, name: string, value: string) {
   fireEvent.change(form.querySelector(`[name="${name}"]`)!, { target: { value } })

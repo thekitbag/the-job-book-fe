@@ -18,7 +18,7 @@ import { useToast } from './Toast'
 import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -414,6 +414,45 @@ export default function CurrentJobWorkspace({
     }
   }, [markingPaidId, money, mem, toast, job.id])
 
+  // Undo an accidental paid mark: soft-delete the linked Money out and leave
+  // the Budget cost exactly as it was. The toast names both effects. On failure
+  // the paid marker stays put and a retryable toast is shown.
+  const handleUndoPaid = useCallback(async (item: MemoryViewItem) => {
+    if (markingPaidId) return
+    const row = money.paidRowBySource.get(item.id)
+    if (!row) return
+    setMarkingPaidId(item.id)
+    try {
+      await money.removeEvent(row.id)
+      track('money_undo_paid', { job_id: job.id, memory_type: item.memoryType })
+      // Budget must be unchanged — refetch it so no stale figure implies otherwise.
+      void mem.reloadBudget()
+      toast({
+        title: 'Marked unpaid',
+        body: `Removed £${row.amount} from Money out. Budget cost unchanged.`,
+      })
+    } catch {
+      toast({
+        title: 'Could not undo paid',
+        body: 'Nothing changed — try again.',
+        tone: 'plain',
+      })
+    } finally {
+      setMarkingPaidId(null)
+    }
+  }, [markingPaidId, money, mem, toast, job.id])
+
+  // Add a Budget cost. When "Already paid" was ticked, the cost is created
+  // first (unpaid), then marked paid as a separate Money out — the two-call
+  // path the spec allows, with partial failure surfaced by handleMarkPaid's
+  // own toast. Budget always counts the cost; Money only moves when paid.
+  const handleAddCost = useCallback(async (req: CreateMemoryItemRequest): Promise<MemoryViewItem> => {
+    const { markPaid: pay, ...createReq } = req
+    const created = await mem.addMemoryItem(createReq)
+    if (pay) await handleMarkPaid(created)
+    return created
+  }, [mem, handleMarkPaid])
+
   // Mark-paid capability handed to the Budget/Labour drawers. Eligibility leans
   // on mem.includedIds — the authoritative "counts in Budget" set — so only a
   // trusted, safe, GBP, active cost item is ever offered, plus not-already-paid.
@@ -424,8 +463,9 @@ export default function CurrentJobWorkspace({
       mem.includedIds.has(item.id) &&
       !money.paidRowBySource.has(item.id),
     onMarkPaid: (item) => { void handleMarkPaid(item) },
+    onUndoPaid: (item) => { void handleUndoPaid(item) },
     pendingItemId: markingPaidId,
-  }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, markingPaidId])
+  }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, handleUndoPaid, markingPaidId])
 
   const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
   const saveTitle = async () => {
@@ -880,9 +920,9 @@ export default function CurrentJobWorkspace({
           </div>
         )}
 
-        {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} markPaid={markPaid} />)}
+        {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} markPaid={markPaid} onAddCost={handleAddCost} />)}
         {section === 'money' && <MoneySection jobId={job.id} money={money} />}
-        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} jobId={job.id} markPaid={markPaid} />)}
+        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} jobId={job.id} />)}
 
         {section === 'materials' && (
           <>

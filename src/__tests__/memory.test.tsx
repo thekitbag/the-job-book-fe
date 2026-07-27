@@ -665,16 +665,18 @@ describe('Workspace — Labour tab', () => {
     expect(within(today).getByText('4h')).toBeTruthy()
   })
 
-  it('shows person and hours; the Budget effect is stated per row (budget cost vs hours only)', async () => {
+  it('shows person, task and hours only — never cost, rate, or Budget treatment (Labour is hours-only)', async () => {
     renderWorkspace()
     openTab('Labour')
     const labour = await screen.findByRole('tabpanel', { name: /labour/i })
     expect(within(labour).getByText('Tom')).toBeTruthy()
     expect(within(labour).getByText('8h')).toBeTruthy()
-    // Rated, budget-enabled labour states its budget cost in the row; hours-only
-    // labour says so plainly. Money never appears on the row itself.
-    expect(within(labour).getByText(/electrics · £280 budget cost/i)).toBeTruthy()
-    expect(within(labour).getAllByText(/hours only/i).length).toBeGreaterThan(0)
+    expect(within(labour).getByText('electrics')).toBeTruthy()
+    // No money, rate, or Budget treatment anywhere on the Labour page.
+    expect(within(labour).queryByText(/budget cost/i)).toBeNull()
+    expect(within(labour).queryByText(/hours only/i)).toBeNull()
+    expect(within(labour).queryByText(/£/)).toBeNull()
+    expect(within(labour).queryByText(/\/hour/i)).toBeNull()
   })
 
   it('a labour row opens the shared action drawer — no inline Fix memory CTA', async () => {

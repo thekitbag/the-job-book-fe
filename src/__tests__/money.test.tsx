@@ -221,10 +221,10 @@ describe('Money — section', () => {
     const user = userEvent.setup()
     renderWorkspace()
     await openMoney(user)
-    await user.click(screen.getByRole('button', { name: /remove marker/i }))
+    await user.click(screen.getByRole('button', { name: /undo paid/i }))
     await user.click(screen.getByRole('button', { name: /^remove$/i }))
     await waitFor(() => expect(deleteMoneyEvent).toHaveBeenCalledWith(JOB.id, 'me-1'))
-    expect(await screen.findByText(/budget cost is unchanged/i)).toBeInTheDocument()
+    expect(await screen.findByText(/budget cost unchanged/i)).toBeInTheDocument()
   })
 })
 
@@ -297,6 +297,21 @@ describe('Money — mark paid from Budget', () => {
     const d = await openBudgetItem(user)
     expect(d.getByText(/paid — recorded in money out/i)).toBeInTheDocument()
     expect(d.queryByRole('button', { name: /mark as paid/i })).toBeNull()
+  })
+
+  it('Undo paid from the Budget drawer soft-deletes the Money out and leaves Budget unchanged, with a toast', async () => {
+    vi.mocked(getJobMoney).mockResolvedValue(money({ moneyOutAmount: '336', rows: [OUT_ROW] }))
+    vi.mocked(deleteMoneyEvent).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderWorkspace()
+    const budgetCallsBefore = vi.mocked(getBudgetSummary).mock.calls.length
+    const d = await openBudgetItem(user)
+    await user.click(d.getByRole('button', { name: /undo paid/i }))
+    // Undo targets the linked Money out event by id — never the Budget item.
+    await waitFor(() => expect(deleteMoneyEvent).toHaveBeenCalledWith(JOB.id, 'me-9'))
+    expect(await screen.findByText(/removed £336 from money out\. budget cost unchanged\./i)).toBeInTheDocument()
+    // Budget refetched to confirm it did not change.
+    await waitFor(() => expect(vi.mocked(getBudgetSummary).mock.calls.length).toBeGreaterThan(budgetCallsBefore))
   })
 })
 

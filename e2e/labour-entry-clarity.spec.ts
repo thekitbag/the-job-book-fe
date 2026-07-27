@@ -23,7 +23,7 @@ async function gotoApp(page: Page) {
 }
 
 test.describe('Labour entry point & budget clarity', () => {
-  test('Labour tab shows hours-first plus a budgeted-cost card that tracks budget labour', async ({ page }) => {
+  test('Labour tab is hours-only — no cost card; adding hours raises the total, not money', async ({ page }) => {
     await gotoApp(page)
     await goToSection(page, 'Labour')
     await page.waitForTimeout(900)
@@ -31,19 +31,20 @@ test.describe('Labour entry point & budget clarity', () => {
     const jobTotal = page.getByRole('region', { name: 'Labour hours' })
     await expect(jobTotal).toContainText('24h')
     await expect(jobTotal).toContainText('on this job')
-    // Budget/remaining moved to the Budget tab; the Labour page shows the
-    // budget-enabled trusted labour cost in the cobalt card.
-    const card = page.getByRole('region', { name: 'Budgeted labour cost' })
-    await expect(card.getByText('£880')).toBeVisible()
+    // Cost lives in Budget now — the Labour page has no cost card and no money.
+    const panel = page.getByRole('tabpanel', { name: 'Labour' })
+    await expect(panel.getByRole('region', { name: 'Budgeted labour cost' })).toHaveCount(0)
+    await expect(panel.getByText('£', { exact: false })).toHaveCount(0)
 
-    // Add rated, budget-enabled labour for Kurt (£20/h): 2h → +£40 to the card.
-    await page.getByRole('button', { name: /add labour/i }).click()
-    const sheet = page.getByRole('dialog', { name: 'Add labour' })
+    // Add 2h for Kurt → 26h; still no money anywhere on the page.
+    await page.getByRole('button', { name: /add hours/i }).click()
+    const sheet = page.getByRole('dialog', { name: 'Add hours' })
     await sheet.getByRole('button', { name: 'Kurt' }).click()
     await sheet.locator('.stepper-input').fill('2')
-    await sheet.getByRole('button', { name: 'Save labour' }).click()
+    await sheet.getByRole('button', { name: 'Save hours' }).click()
     await page.waitForTimeout(900)
-    await expect(card.getByText('£920')).toBeVisible()
+    await expect(jobTotal).toContainText('26h')
+    await expect(panel.getByText('£', { exact: false })).toHaveCount(0)
   })
 
   test('Spend shows the budget trio, includes labour, and never offers add-to-labour', async ({ page }) => {
@@ -67,12 +68,12 @@ test.describe('Labour entry point & budget clarity', () => {
     await expect(group.getByRole('button', { name: /add/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Add to labour' })).toHaveCount(0)
 
-    // generic Add cost must not offer the labour category
+    // Budget owns all cost: Add cost offers every category, Labour included.
     await page.getByRole('button', { name: 'Add cost', exact: true }).click()
     const select = page.getByRole('dialog', { name: 'Add cost' }).getByLabel('Budget category')
     const options = await select.locator('option').allTextContents()
     expect(options).toContain('timber')
-    expect(options).not.toContain('labour')
+    expect(options).toContain('labour')
     await page.getByRole('dialog', { name: 'Add cost' }).getByRole('button', { name: 'Close' }).click()
 
     // historical non-labour Labour-category spend: visible once, fixable

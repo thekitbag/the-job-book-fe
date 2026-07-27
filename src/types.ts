@@ -73,7 +73,10 @@ export type CostQualifier = 'each' | 'total' | 'approx' | 'unknown' | 'per_hour'
 // dismissed. 'returned_material' is a memory type but deliberately not a
 // FactType: returns are recorded by Mike through the return action, never
 // inferred from a voice note ("I'm going to take these back" is not a refund).
-export type MemoryType = Exclude<FactType, 'unclear'> | 'returned_material'
+// 'budget_cost' is a general trusted job cost (labour cost, plant, hire,
+// subcontractor, or any non-material cost) — Budget owns all cost; Labour is
+// hours-only. See labour-hours-budget-costs-paid-undo spec.
+export type MemoryType = Exclude<FactType, 'unclear'> | 'returned_material' | 'budget_cost'
 
 // A deterministic, response-time category suggestion for a review item. Never
 // stored on the candidate fact — computed from the job's active categories.
@@ -817,6 +820,9 @@ export interface CreateMemoryItemRequest {
   // default, or hours-only when no person/default is available.
   labourBudgetEnabled?: boolean | null
   budgetCategoryId?: string | null
+  // budget_cost only: record the cost as already paid on create (adds one Money
+  // out for the trusted cost). Ignored for other memory types.
+  markPaid?: boolean
 }
 
 // Request body for PATCH /api/jobs/:jobId/memory-items/:memoryItemId

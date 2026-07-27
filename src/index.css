@@ -5146,6 +5146,15 @@ code {
 }
 .labour-budget-card-help { margin: 10px 0 0; font-size: var(--text-sm); color: #4756b0; line-height: 1.45; }
 
+/* Add cost — "Already paid" toggle (also records Money out). Checkbox left,
+   stacked title + subcopy right; never a run-on line at phone width. */
+.direct-add-paid { display: flex; align-items: flex-start; gap: 10px; margin: 6px 0 2px; cursor: pointer; }
+.direct-add-paid input { width: 20px; height: 20px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--cobalt); }
+.direct-add-paid input:disabled { opacity: 0.5; cursor: not-allowed; }
+.direct-add-paid-text { display: flex; flex-direction: column; gap: 2px; }
+.direct-add-paid-title { font-weight: 600; color: var(--ink); }
+.direct-add-paid-sub { font-size: var(--text-sm); color: var(--ink-500); line-height: 1.4; }
+
 /* People summary (10a) + Manage people list (10b). */
 /* People is configuration (who + rates), not the entry log directly below it —
    so it reads as a recessed grey panel, distinct from the white ledger of

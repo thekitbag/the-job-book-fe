@@ -4,7 +4,10 @@ import BottomSheet from './BottomSheet'
 import { deriveEachTotal, formatMoney } from './memoryScan'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryType } from './types'
 
-export type DirectAddKind = 'spend' | 'labour' | 'used' | 'leftover' | 'note'
+// 'spend' = a bought/ordered material (Materials → Bought). 'cost' = a general
+// Budget cost (labour cost, plant, hire, subcontractor, or anything else) —
+// Budget owns all cost. See labour-hours-budget-costs-paid-undo spec.
+export type DirectAddKind = 'spend' | 'cost' | 'used' | 'leftover' | 'note'
 
 const NOTE_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'general_note', label: 'Plain note' },
@@ -13,11 +16,7 @@ const NOTE_TYPE_OPTIONS: { value: MemoryType; label: string }[] = [
   { value: 'watch_out', label: 'Watch-out' },
 ]
 
-function todayISODate(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
+const POS_DECIMAL = /^\d+(\.\d+)?$/
 
 // Section-specific fields for one direct-add flow. Field state lives here so a
 // failed save preserves the entered values (the form stays mounted) and a
@@ -34,7 +33,7 @@ function DirectAddFields({
 }: {
   kind: DirectAddKind
   categories: BudgetCategory[]
-  // Category context inherited from the launching card (Spend category add).
+  // Category context inherited from the launching card (Budget category add).
   // Preselected but changeable/clearable through the normal category select.
   initialCategoryId?: string
   submitting: boolean
@@ -51,26 +50,23 @@ function DirectAddFields({
   const [supplier, setSupplier] = useState('')
   const [categoryId, setCategoryId] = useState(initialCategoryId ?? '')
   const [locationOrUse, setLocationOrUse] = useState('')
-  const [person, setPerson] = useState('')
-  const [hours, setHours] = useState('')
-  const [task, setTask] = useState('')
-  const [rate, setRate] = useState('')
-  const [happenedDate, setHappenedDate] = useState(todayISODate())
   const [noteText, setNoteText] = useState('')
   const [noteType, setNoteType] = useState<MemoryType>('general_note')
+  // Budget cost only: record the cost as already paid (adds Money out).
+  const [alreadyPaid, setAlreadyPaid] = useState(false)
 
   const isMaterialUse = kind === 'used' || kind === 'leftover'
-  // User-facing form name. 'spend' is the Budget "cost" concept (internal kind
-  // name stays 'spend'); its add action reads "Add cost".
+  // User-facing form name. 'spend' is a bought material; 'cost' is a Budget cost.
   const label =
-    kind === 'spend' ? 'Add cost' :
-    kind === 'labour' ? 'Add labour' :
+    kind === 'spend' ? 'Add bought item' :
+    kind === 'cost' ? 'Add cost' :
     kind === 'used' ? 'Add used item' :
     kind === 'leftover' ? 'Add leftover' : 'Add note'
 
+  const costOk = POS_DECIMAL.test(costAmount.trim()) && parseFloat(costAmount) > 0
   const canSave =
     kind === 'spend' ? item.trim() !== '' :
-    kind === 'labour' ? hours.trim() !== '' :
+    kind === 'cost' ? item.trim() !== '' && costOk :
     isMaterialUse ? item.trim() !== '' :
     noteText.trim() !== ''
 
@@ -100,17 +96,23 @@ function DirectAddFields({
       if (amount && costBasis === 'total') req.totalCostAmount = amount
       return req
     }
-    if (kind === 'labour') {
-      const r = rate.trim() || null
+    if (kind === 'cost') {
+      const amount = costAmount.trim()
+      // A general Budget cost: a trusted GBP total that counts in Budget. It is
+      // neither a bought material nor an hours entry.
       return {
-        memoryType: 'labour',
-        happenedAt: `${happenedDate}T12:00:00`,
-        labourPerson: person.trim() || null,
-        labourHours: hours.trim() || null,
-        labourTask: task.trim() || null,
-        costAmount: r,
-        costQualifier: r ? 'per_hour' : null,
-        costCurrency: r ? 'GBP' : null,
+        memoryType: 'budget_cost',
+        materialName: item.trim() || null,
+        supplierName: supplier.trim() || null,
+        locationOrUse: locationOrUse.trim() || null,
+        costAmount: amount,
+        costQualifier: 'total',
+        costCurrency: 'GBP',
+        totalCostAmount: amount,
+        budgetCategoryId: categoryId || null,
+        // FE-only signal consumed by the workspace add-cost wrapper (stripped
+        // before the create call, which then records Money out separately).
+        markPaid: alreadyPaid,
       }
     }
     if (isMaterialUse) {
@@ -185,29 +187,37 @@ function DirectAddFields({
         </>
       )}
 
-      {kind === 'labour' && (
+      {kind === 'cost' && (
         <>
           <label className="queue-field">
-            <span className="queue-field-label">Day</span>
-            <input className="queue-field-input" type="date" name="happenedAt" value={happenedDate} onChange={e => setHappenedDate(e.target.value)} />
+            <span className="queue-field-label">What was it for</span>
+            <input className="queue-field-input" name="materialName" value={item} onChange={e => setItem(e.target.value)} placeholder="e.g. Kurt — cladding, plant hire" />
           </label>
           <label className="queue-field">
-            <span className="queue-field-label">Person / role</span>
-            <input className="queue-field-input" name="labourPerson" value={person} onChange={e => setPerson(e.target.value)} placeholder="e.g. Tom" />
+            <span className="queue-field-label">Cost (£)</span>
+            <input className="queue-field-input" name="costAmount" value={costAmount} inputMode="decimal" onChange={e => setCostAmount(e.target.value)} placeholder="e.g. 120" />
           </label>
-          <div className="direct-add-row">
-            <label className="queue-field">
-              <span className="queue-field-label">Hours</span>
-              <input className="queue-field-input" name="labourHours" value={hours} inputMode="decimal" onChange={e => setHours(e.target.value)} placeholder="e.g. 8" />
-            </label>
-            <label className="queue-field">
-              <span className="queue-field-label">Rate £/hr (optional)</span>
-              <input className="queue-field-input" name="rate" value={rate} inputMode="decimal" onChange={e => setRate(e.target.value)} placeholder="e.g. 35" />
-            </label>
-          </div>
           <label className="queue-field">
-            <span className="queue-field-label">Task (optional)</span>
-            <input className="queue-field-input" name="labourTask" value={task} onChange={e => setTask(e.target.value)} placeholder="e.g. electrics" />
+            <span className="queue-field-label">Supplier / who (optional)</span>
+            <input className="queue-field-input" name="supplierName" value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g. Kurt, HSS Hire" />
+          </label>
+          {categories.length > 0 && (
+            <label className="queue-field">
+              <span className="queue-field-label">Budget category (optional)</span>
+              <select className="queue-field-input" name="budgetCategoryId" aria-label="Budget category" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+                <option value="">No category</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+          )}
+          {/* Already paid → records Money out too. Budget still counts the cost;
+              the two are separate (Budget = commitment, Money = movement). */}
+          <label className="direct-add-paid">
+            <input type="checkbox" name="alreadyPaid" aria-label="Already paid" checked={alreadyPaid} disabled={!costOk} onChange={e => setAlreadyPaid(e.target.checked)} />
+            <span className="direct-add-paid-text">
+              <span className="direct-add-paid-title">Already paid</span>
+              <span className="direct-add-paid-sub">Also records it in Money out</span>
+            </span>
           </label>
         </>
       )}
@@ -264,9 +274,9 @@ function DirectAddFields({
 // Self-contained direct-add widget (Manual Add V2): a trigger that opens the
 // section-specific form in an in-context bottom sheet. Two trigger shapes:
 //  - 'header' → the lens header (small-caps label + a clear text action,
-//    e.g. "Add spend" — never a bare "+", which reads as leftover chrome);
+//    e.g. "Add cost" — never a bare "+", which reads as leftover chrome);
 //  - 'button' → an inline text action ("Add to Timber" on a category card,
-//    "Add labour" in an empty state).
+//    "Add cost" in an empty state).
 // All triggers carry accessible names that say what will be added.
 // Direct add stays secondary to voice + the lens summary. Owns the sheet
 // open/close and save/submitting/error lifecycle; a failed save keeps the
@@ -285,13 +295,13 @@ export default function DirectAddForm({
   actionHidden = false,
 }: {
   kind: DirectAddKind
-  label: string       // accessible action name, e.g. "Add spend"
-  sectionLabel?: string // small-caps header text, e.g. "Spend" (header variant)
+  label: string       // accessible action name, e.g. "Add cost"
+  sectionLabel?: string // small-caps header text, e.g. "By category" (header variant)
   categories?: BudgetCategory[]
   onAdd: (req: CreateMemoryItemRequest) => Promise<unknown>
   variant?: 'header' | 'button'
   buttonLabel?: string // visible text for the 'button' variant, e.g. "Add to Timber"
-  title?: string       // sheet title; defaults to label (e.g. "Add spend — Timber")
+  title?: string       // sheet title; defaults to label (e.g. "Add cost — Timber")
   initialCategoryId?: string // category context from the launching card
   // Header variant only: render just the section label, no action — used when
   // the section is empty and its EmptyState carries the (same-named) add

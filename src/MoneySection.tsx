@@ -232,7 +232,7 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
     try {
       if (row.kind === 'cost_paid') {
         await money.removeEvent(row.id)
-        toast({ title: 'Paid marker removed', body: 'Removed the Money out entry. Budget cost is unchanged.' })
+        toast({ title: 'Marked unpaid', body: `Removed £${row.amount} from Money out. Budget cost unchanged.` })
       } else {
         await deleteJobPayment(jobId, row.id)
         track('payment_deleted', { job_id: jobId })
@@ -350,7 +350,7 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
                   {confirmingRemove?.id === row.id ? (
                     <>
                       <span className="pay-delete-copy">
-                        {row.kind === 'cost_paid' ? 'Remove this paid marker? Budget cost stays unchanged.' : 'Delete this payment?'}
+                        {row.kind === 'cost_paid' ? 'Undo paid? This removes it from Money out. Budget cost stays unchanged.' : 'Delete this payment?'}
                       </span>
                       <button type="button" className="pay-delete-confirm" disabled={saving} onClick={() => void removeRow(row)}>
                         {saving ? 'Removing…' : 'Remove'}
@@ -364,7 +364,7 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
                       )}
                       {row.removable && (
                         <button type="button" className="pay-row-action pay-row-action--danger" onClick={() => setConfirmingRemove(row)}>
-                          {row.kind === 'cost_paid' ? 'Remove marker' : 'Delete'}
+                          {row.kind === 'cost_paid' ? 'Undo paid' : 'Delete'}
                         </button>
                       )}
                     </>

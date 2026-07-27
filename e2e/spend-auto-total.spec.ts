@@ -27,13 +27,15 @@ async function gotoApp(page: Page) {
 }
 
 test.describe('Auto-total unit cost', () => {
-  test('direct-add each shows a derived total, saves it, and Fix Memory recalculates', async ({ page }) => {
+  test('bought each-line shows a derived total, saves it, and Fix Memory recalculates', async ({ page }) => {
     await gotoApp(page)
-    await goToSection(page, 'Budget')
+    // The each × quantity auto-total is a bought-material feature; it lives in
+    // Materials → Bought (Budget's Add cost is a general budget_cost).
+    await goToSection(page, 'Materials')
     await page.waitForTimeout(600)
 
-    await page.getByRole('button', { name: 'Add cost', exact: true }).click()
-    const form = page.getByRole('form', { name: 'Add cost' })
+    await page.getByRole('button', { name: 'Add bought item' }).click()
+    const form = page.getByRole('form', { name: 'Add bought item' })
     await form.locator('input[name="materialName"]').fill('OSB')
     await form.locator('input[name="quantity"]').fill('5')
     await form.locator('input[name="unit"]').fill('sheets')
@@ -43,9 +45,11 @@ test.describe('Auto-total unit cost', () => {
     // live preview before save
     await expect(form.getByText(/£100 total/)).toBeVisible()
     await form.getByRole('button', { name: /^Save / }).click()
+    await page.waitForTimeout(700)
 
     // Saved row shows the quantity context and the derived total as its price.
-    const osb = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'OSB' })
+    const panel = page.getByRole('tabpanel', { name: 'Bought materials' })
+    const osb = panel.locator('.mem-card', { hasText: 'OSB' })
     await expect(osb.locator('.mem-row-tap-meta')).toContainText('5 sheets')
     await expect(osb.locator('.mem-row-tap-price')).toHaveText('£100')
 
@@ -57,9 +61,7 @@ test.describe('Auto-total unit cost', () => {
     await edit.getByRole('button', { name: /save memory/i }).click()
     await page.waitForTimeout(700)
 
-    await expect(
-      page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'OSB' }).getByText('£120'),
-    ).toBeVisible()
+    await expect(panel.locator('.mem-card', { hasText: 'OSB' }).getByText('£120')).toBeVisible()
   })
 
   test('review queue shows the derived line total before confirmation', async ({ page }) => {

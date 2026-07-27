@@ -216,6 +216,8 @@ function deriveManualSummary(req: CreateMemoryItemRequest): string {
       const base = [req.labourPerson?.trim(), req.labourHours ? `${req.labourHours} hours` : null].filter(Boolean).join(' — ') || 'Labour'
       return req.labourTask?.trim() ? `${base} (${req.labourTask.trim()})` : base
     }
+    case 'budget_cost':
+      return req.labourTask?.trim() || req.labourPerson?.trim() || req.materialName?.trim() || 'Cost'
     default:
       return req.materialName?.trim() || 'Note'
   }
@@ -223,7 +225,7 @@ function deriveManualSummary(req: CreateMemoryItemRequest): string {
 
 export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest): MemoryViewItem {
   if (!req.memoryType) throw new ApiError('memoryType required', 400)
-  const canCategorise = req.memoryType === 'ordered_material' || req.memoryType === 'labour'
+  const canCategorise = req.memoryType === 'ordered_material' || req.memoryType === 'labour' || req.memoryType === 'budget_cost'
   if (req.budgetCategoryId) {
     if (!canCategorise) throw new ApiError('Category not allowed for this type', 400)
     const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === req.budgetCategoryId)
@@ -250,7 +252,10 @@ export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest
     : req.labourBudgetEnabled != null ? req.labourBudgetEnabled
     : person ? person.defaultBudgetTreatment === 'counts_toward_budget'
     : false
-  const labourPerson = isLabour ? (req.labourPerson ?? person?.name ?? null) : null
+  // A budget_cost may describe a labour cost, so it can carry a person/task —
+  // but never hours (those live in Labour). Everything else keeps them null.
+  const carriesLabourContext = isLabour || req.memoryType === 'budget_cost'
+  const labourPerson = carriesLabourContext ? (req.labourPerson ?? person?.name ?? null) : null
   const hasCost = !!(costAmount || req.totalCostAmount)
 
   const item: MemoryViewItem = {
@@ -271,7 +276,7 @@ export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest
     totalCostAmount: req.totalCostAmount ?? deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount, costQualifier }),
     labourHours: isLabour ? (req.labourHours ?? null) : null,
     labourPerson,
-    labourTask: isLabour ? (req.labourTask ?? null) : null,
+    labourTask: carriesLabourContext ? (req.labourTask ?? null) : null,
     labourPersonId: isLabour ? (req.labourPersonId ?? null) : null,
     labourBudgetEnabled,
     uncertaintyFlags: [],

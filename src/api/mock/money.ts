@@ -46,7 +46,7 @@ const round2 = (n: number) => String(Math.round(n * 100) / 100)
 // none (missing/ambiguous price, non-GBP, worth-checking). Mirrors the backend
 // "only trusted Budget cost items can be paid" rule.
 function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GBP' } | null {
-  if (item.memoryType !== 'ordered_material' && item.memoryType !== 'labour') return null
+  if (item.memoryType !== 'ordered_material' && item.memoryType !== 'labour' && item.memoryType !== 'budget_cost') return null
   if ((item.uncertaintyFlags ?? []).length > 0) return null
   // Labour can only be paid when it's budget-enabled (hours-only never can).
   if (item.memoryType === 'labour' && item.labourBudgetEnabled === false) return null
@@ -60,6 +60,7 @@ function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GB
 
 function itemLabel(item: MemoryViewItem): string {
   if (item.memoryType === 'labour') return item.labourTask?.trim() || item.labourPerson?.trim() || 'Labour'
+  if (item.memoryType === 'budget_cost') return item.labourTask?.trim() || item.labourPerson?.trim() || item.materialName?.trim() || item.summary
   return item.materialName?.trim() || item.summary
 }
 
