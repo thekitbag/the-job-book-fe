@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { openNotCounted, openRowActions } from './helpers'
+import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
@@ -39,15 +39,9 @@ test.describe('Cost capture & Known spend (Spend tab)', () => {
     await expect(page.getByText(/total spend/i)).toHaveCount(0)
   })
 
-  test('one "Not counted yet" area holds no-price and cost-basis items', async ({ page }) => {
+  test('Budget does not expose missing-price correction', async ({ page }) => {
     await openBought(page)
-    const nc = await openNotCounted(page)
-    // no-price item (timber) → prompt to add a price
-    await expect(nc.getByText(/timber/i).first()).toBeVisible()
-    await expect(nc.getByText(/No price yet/i).first()).toBeVisible()
-    // cost-basis-ambiguous item (insulation) → each vs total, same area
-    await expect(nc.getByText(/insulation/i)).toBeVisible()
-    await expect(nc.getByText(/each or .*total/i).first()).toBeVisible()
+    await expect(page.getByRole('region', { name: /not counted yet/i })).toHaveCount(0)
   })
 
   test('uncategorised safe cost is counted and can be filed to a category', async ({ page }) => {
@@ -72,21 +66,6 @@ test.describe('Cost capture & Known spend (Spend tab)', () => {
     await expect(drawer.getByText('£40 cost')).toBeVisible()
   })
 
-  test('adding a total price to a no-price item moves it into Known spend', async ({ page }) => {
-    await openBought(page)
-    await expect(heroRegion(page).getByText(/£2,270/)).toBeVisible()
-
-    // No-price timber → Add price → enter a total (£60)
-    const timber = (await openNotCounted(page)).locator('.cost-check-item', { hasText: 'timber' })
-    await timber.getByRole('button', { name: 'Add price' }).click()
-    const form = page.getByRole('form', { name: 'Add price' })
-    await form.locator('input[name="price"]').fill('60')
-    await form.getByRole('button', { name: /save price/i }).click()
-    await page.waitForTimeout(1000)
-
-    // Refetched total known cost: bought (1240 + £60) + labour 880 = £2,330.
-    await expect(heroRegion(page).getByText(/£2,330/)).toBeVisible()
-  })
 
   test('source context remains available on a bought row', async ({ page }) => {
     await openBought(page)
