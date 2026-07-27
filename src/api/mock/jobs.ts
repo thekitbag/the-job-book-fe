@@ -5,7 +5,7 @@ import { getMockSession, MOCK_MIKE_EMAIL } from './auth'
 
 const EDITABLE_STATUSES: EditableJobStatus[] = ['planning', 'started', 'finished', 'archived']
 
-export const MOCK_JOBS: Job[] = [
+const SEED_JOBS: Job[] = [
   {
     id: 'job-pilot-garden-room-001',
     title: 'Garden Room',
@@ -25,6 +25,11 @@ export const MOCK_JOBS: Job[] = [
     updatedAt: '2026-06-08T14:00:00Z',
   },
 ]
+export const MOCK_JOBS: Job[] = SEED_JOBS.map(job => ({ ...job }))
+
+export function _resetMockJobsForTesting(): void {
+  MOCK_JOBS.splice(0, MOCK_JOBS.length, ...SEED_JOBS.map(job => ({ ...job })))
+}
 
 // Prefers the most recently updated started job, then planning, then
 // finished — archived jobs are never a "current" pick. Mirrors GET

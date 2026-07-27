@@ -9,6 +9,18 @@ import PilotInspectionPage from './PilotInspectionPage'
 import SupportModePage from './SupportModePage'
 import { ToastProvider } from './Toast'
 import { analyticsClient, initAnalytics } from './analytics'
+import { USE_MOCK } from './api/client'
+import { resetMockApiForE2e } from './api/mock/reset'
+
+// Each Playwright test gets a fresh browser context with this localStorage
+// marker pre-seeded by playwright.config.ts. Reset mutable mock stores once for
+// that context, before App reads auth/jobs/memory. Reloads within the same test
+// preserve state through the sessionStorage guard.
+if (USE_MOCK && localStorage.getItem('job-book-e2e-seed') && !sessionStorage.getItem('job-book-e2e-reset-done')) {
+  resetMockApiForE2e()
+  localStorage.removeItem('job-book-selected-job-id')
+  sessionStorage.setItem('job-book-e2e-reset-done', '1')
+}
 
 // /internal/support is the active founder support tool (role INTERNAL only).
 // The legacy inspection-key page stays reachable as a compatibility layer but

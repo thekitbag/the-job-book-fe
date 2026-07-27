@@ -164,3 +164,8 @@ export function mockPatchJobPhoto(jobId: string, photoId: string, req: PatchJobP
   photo.updatedAt = new Date().toISOString()
   return { ...photo }
 }
+
+export function _resetMockPhotosForTesting(): void {
+  mockPhotosByJob = null
+  mockPhotoSeq = 0
+}
