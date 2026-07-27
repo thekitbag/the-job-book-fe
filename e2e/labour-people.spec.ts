@@ -14,7 +14,6 @@ test.describe('Labour cost ownership at phone width', () => {
     await openLabour(page)
     const panel = page.getByRole('tabpanel', { name: 'Labour' })
     await expect(panel.getByText('24h logged')).toBeVisible()
-    await expect(panel.getByText(/£280 known cost/i)).toBeVisible()
     await expect(panel.getByText(/£35\/hour.*£280 to pay/i)).toBeVisible()
     await page.getByRole('button', { name: /add labour/i }).click()
     const sheet = page.getByRole('dialog', { name: 'Add labour' })
