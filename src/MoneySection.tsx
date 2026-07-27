@@ -7,6 +7,7 @@ import { track } from './analytics'
 import BottomSheet from './BottomSheet'
 import { useToast } from './Toast'
 import { formatSavedStamp } from './SourceHistory'
+import { moneyFigure } from './memoryScan'
 import type { JobMoneyResponse, MoneyRow } from './types'
 
 // Money — actual movement, in and out. Displayed totals and history come from
@@ -232,7 +233,7 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
     try {
       if (row.kind === 'cost_paid') {
         await money.removeEvent(row.id)
-        toast({ title: 'Marked unpaid', body: `Removed £${row.amount} from Money out. Budget cost unchanged.` })
+        toast({ title: 'Marked unpaid', body: `Removed ${moneyFigure(row.amount)} from Money out. Budget cost unchanged.` })
       } else {
         await deleteJobPayment(jobId, row.id)
         track('payment_deleted', { job_id: jobId })
@@ -271,17 +272,17 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
         <div className="money-hero-figures">
           <div className="money-hero-fig money-hero-fig--in">
             <span className="money-hero-cap">Money in</span>
-            <span className="money-hero-amount">{hasIn ? `£${data.moneyInAmount}` : 'None yet'}</span>
+            <span className="money-hero-amount">{hasIn ? moneyFigure(data.moneyInAmount) : 'None yet'}</span>
           </div>
           <div className="money-hero-fig money-hero-fig--out">
             <span className="money-hero-cap">Money out</span>
-            <span className="money-hero-amount">{hasOut ? `£${data.moneyOutAmount}` : 'None yet'}</span>
+            <span className="money-hero-amount">{hasOut ? moneyFigure(data.moneyOutAmount) : 'None yet'}</span>
           </div>
         </div>
         {data.overpaid ? (
           <p className="mem-hero-warning" role="status">
             <span className="mem-hero-warning-dot" aria-hidden="true" />
-            £{data.overpaidAmount} more than the customer total
+            {moneyFigure(data.overpaidAmount)} more than the customer total
           </p>
         ) : (
           <button
@@ -290,7 +291,7 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
             aria-label={data.customerTotalAmount !== null ? 'Edit customer total' : 'Set customer total'}
             onClick={() => { setTotalDraft(data.customerTotalAmount ?? ''); setFormError(null); setTotalSheetOpen(true) }}
           >
-            {data.stillOwedAmount !== null ? `£${data.stillOwedAmount} still owed ›` : 'Set customer total ›'}
+            {data.stillOwedAmount !== null ? `${moneyFigure(data.stillOwedAmount)} still owed ›` : 'Set customer total ›'}
           </button>
         )}
       </section>

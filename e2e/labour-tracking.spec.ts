@@ -134,7 +134,7 @@ test.describe('Spend tab — Labour group', () => {
     await page.waitForTimeout(900)
 
     // Labour group: £280 (rated, categorised) + £600 (total, NO category) = £880,
-    // against the seeded £1500 labour category budget.
+    // against the seeded £1,500 labour category budget.
     const group = page.getByRole('region', { name: /^labour$/i })
     await expect(group.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
     await expect(group.locator('.budget-figure', { hasText: 'Remaining' }).getByText('£620', { exact: true })).toBeVisible()

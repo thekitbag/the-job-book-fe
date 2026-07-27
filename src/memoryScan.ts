@@ -4,27 +4,39 @@ import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, B
 // Centralised so the scan summary and the detail cards (and the review queue)
 // format cost/total identically and cannot drift.
 
+// Insert thousands separators into a decimal-string amount, preserving any
+// fractional part (ledger grammar — every currency figure reads the same way).
+function withThousands(amount: string): string {
+  const [int, frac] = amount.split('.')
+  const withSep = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return frac !== undefined ? `${withSep}.${frac}` : withSep
+}
+
 export function formatCostLabel(amount: string | null, currency: string | null, qualifier: string | null): string | null {
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
   const q: Record<string, string> = { each: ' each', total: ' total', approx: ' approx.', per_hour: '/hour' }
-  return `${sym}${amount}${qualifier ? (q[qualifier] ?? '') : ''}`
+  return `${sym}${withThousands(amount)}${qualifier ? (q[qualifier] ?? '') : ''}`
 }
 
 export function formatTotalLabel(amount: string | null, currency: string | null): string | null {
   if (!amount) return null
   const sym = currency === 'GBP' ? '£' : (currency ? `${currency} ` : '')
-  return `${sym}${amount}`
+  return `${sym}${withThousands(amount)}`
 }
 
 function currencySymbol(currency: string | null): string {
   return currency === 'GBP' ? '£' : (currency ? `${currency} ` : '£')
 }
 
-// Money formatter for derived sums — trims a trailing .00, keeps real decimals.
+// Money formatter for derived sums — thousands separators (ledger grammar),
+// trims a trailing .00, keeps real decimals.
 export function formatMoney(amount: number, currency: string | null): string {
   const rounded = Math.round(amount * 100) / 100
-  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2)
+  const text = rounded.toLocaleString('en-GB', {
+    minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })
   return `${currencySymbol(currency)}${text}`
 }
 
@@ -55,23 +67,23 @@ export function costDetailRows(item: {
   const { costAmount: amount, costQualifier: qualifier, totalCostAmount: total } = item
 
   if (amount && qualifier === 'each') {
-    rows.push(['Unit cost', `${sym}${amount} each`])
+    rows.push(['Unit cost', `${sym}${withThousands(amount)} each`])
   } else if (amount && qualifier === 'per_hour') {
-    rows.push(['Rate', `${sym}${amount}/hour`])
+    rows.push(['Rate', `${sym}${withThousands(amount)}/hour`])
   } else if (amount && qualifier === 'total') {
     // amount is itself the line total; fold into the Total row below if no
     // explicit total is set
-    if (!total) rows.push(['Total', `${sym}${amount}`])
+    if (!total) rows.push(['Total', `${sym}${withThousands(amount)}`])
   } else if (amount) {
     // approx / unknown / unqualified basis — show but flag, never as a total
-    rows.push(['Cost', `${sym}${amount} — worth checking`])
+    rows.push(['Cost', `${sym}${withThousands(amount)} — worth checking`])
   }
 
   if (total) {
-    rows.push(['Total', `${sym}${total}`])
+    rows.push(['Total', `${sym}${withThousands(total)}`])
   } else {
     const derived = deriveEachTotal(item)
-    if (derived) rows.push(['Total', `${sym}${derived}`])
+    if (derived) rows.push(['Total', `${sym}${withThousands(derived)}`])
   }
   return rows
 }

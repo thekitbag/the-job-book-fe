@@ -256,7 +256,7 @@ describe('deriveCostSummary (Known spend)', () => {
       orderedItem({ id: 'b', materialName: 'plasterboard', quantity: '12', unit: 'sheets', costAmount: '50', costQualifier: 'each', costCurrency: 'GBP' }),
     ]))
     expect(s.rows).toHaveLength(1)
-    expect(s.rows[0].lineTotalLabel).toBe('£1200 total')
+    expect(s.rows[0].lineTotalLabel).toBe('£1,200 total')
     expect(s.rows[0].memoryItemIds).toEqual(['a', 'b'])
     expect(s.knownSpendAmount).toBe('1200')
   })
@@ -408,10 +408,10 @@ describe('deriveBudgetSummary', () => {
     ]), cats)
     const timber = s.categories[0]
     expect(timber.knownSpendAmount).toBe('1850')
-    expect(timber.knownSpendLabel).toBe('£1850 known spend')
-    expect(timber.budgetLabel).toBe('£4000 budget')
+    expect(timber.knownSpendLabel).toBe('£1,850 known spend')
+    expect(timber.budgetLabel).toBe('£4,000 budget')
     expect(timber.remainingAmount).toBe('2150')
-    expect(timber.remainingLabel).toBe('£2150 remaining')
+    expect(timber.remainingLabel).toBe('£2,150 remaining')
     expect(timber.overBudget).toBe(false)
     expect(timber.rows.map(r => r.memoryItemId)).toEqual(['a'])
   })

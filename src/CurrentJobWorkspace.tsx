@@ -400,7 +400,7 @@ export default function CurrentJobWorkspace({
       const amount = row ? row.amount : null
       toast({
         title: 'Marked paid',
-        body: amount ? `Added £${amount} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
+        body: amount ? `Added ${formatMoney(parseFloat(amount), 'GBP')} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
       })
     } catch (err: unknown) {
       const already = err instanceof ApiError && err.status === 400
@@ -429,7 +429,7 @@ export default function CurrentJobWorkspace({
       void mem.reloadBudget()
       toast({
         title: 'Marked unpaid',
-        body: `Removed £${row.amount} from Money out. Budget cost unchanged.`,
+        body: `Removed ${formatMoney(parseFloat(row.amount), 'GBP')} from Money out. Budget cost unchanged.`,
       })
     } catch {
       toast({
@@ -642,7 +642,7 @@ export default function CurrentJobWorkspace({
         memoryItemId: r.id,
         type: 'payment' as const,
         typeLabel: 'Payment',
-        headline: r.note ? `£${r.amount} received — ${r.note}` : `£${r.amount} received`,
+        headline: r.note ? `${formatMoney(parseFloat(r.amount), 'GBP')} received — ${r.note}` : `${formatMoney(parseFloat(r.amount), 'GBP')} received`,
         costLabel: null,
         effectiveAt: r.occurredAt,
       }))
@@ -1048,9 +1048,12 @@ export default function CurrentJobWorkspace({
                 <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
               </svg>
             </span>
+            {/* The persistent Record bar names its destination job on every
+                screen (not "Tap · say it · done", which narrated the control) so
+                a recording can never quietly land on the wrong job. */}
             <span className="ws-record-text">
               <span className="ws-record-title">Record</span>
-              <span className="ws-record-sub">Tap · say it · done</span>
+              <span className="ws-record-sub">to {job.title}</span>
             </span>
           </button>
         ) : (

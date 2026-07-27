@@ -65,14 +65,14 @@ test.describe('Spend cost-basis attention', () => {
   test('Confirm as total moves the amount into known spend from the refetched summary', async ({ page }) => {
     await openSpend(page)
     const hero = page.getByRole('region', { name: /^budget$/i })
-    await expect(hero.getByText(/£2270/)).toBeVisible()
+    await expect(hero.getByText(/£2,270/)).toBeVisible()
 
     const insulation = (await openNotCounted(page)).locator('.cost-check-item', { hasText: 'insulation' })
     await insulation.getByRole('button', { name: /Confirm .*total/i }).click()
     await page.waitForTimeout(800)
 
     // known spend picks up insulation (£120) from the authoritative refetch
-    await expect(hero.getByText(/£2390/)).toBeVisible()
+    await expect(hero.getByText(/£2,390/)).toBeVisible()
     await expect(attention(page).getByText(/insulation/i)).toHaveCount(0)
   })
 })

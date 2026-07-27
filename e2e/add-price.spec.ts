@@ -46,7 +46,7 @@ test.describe('Add price to a no-price item', () => {
     await page.waitForTimeout(900)
 
     // the £80 is now counted, and that membrane row is no longer "No price yet"
-    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£80|£2350/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£80|£2,350/)).toBeVisible()
   })
 
   test('offers a per-item basis with a derived total for a quantity-known item', async ({ page }) => {

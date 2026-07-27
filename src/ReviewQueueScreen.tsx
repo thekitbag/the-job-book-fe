@@ -710,7 +710,6 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
   const [focusedKey, setFocusedKey] = useState<string | null>(null)
-  const [rememberingAll, setRememberingAll] = useState(false)
   // Remembered-memory ("Fix memory") edit state — separate from draft review state
   const [editingMemId, setEditingMemId] = useState<string | null>(null)
   const [memSubmittingId, setMemSubmittingId] = useState<string | null>(null)
@@ -887,23 +886,6 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
   const showChips = sectionsWithDrafts.length > 1
   const showSectionHeadings = visibleSections.filter(s => s.items.length > 0).length > 1
 
-  // "Remember all" clears the confident drafts in one go; worth-checking drafts
-  // are left for individual attention.
-  const confidentDrafts = visibleSections.flatMap(s =>
-    s.items.filter(it => it.status === 'draft' && it.uncertaintyFlags.length === 0))
-  const showRememberAll = confidentDrafts.length > 1 && editingItemId === null
-  const handleRememberAll = async () => {
-    setRememberingAll(true)
-    try {
-      for (const it of confidentDrafts) {
-        const cat = CATEGORY_TYPES.has(it.proposedMemory.memoryType) ? (it.proposedMemory.budgetCategoryId ?? null) : null
-        await handleDecision(it.id, 'confirm', undefined, 'resolved', cat)
-      }
-    } finally {
-      setRememberingAll(false)
-    }
-  }
-
   return (
     <div className="queue-page">
       <header className="queue-header">
@@ -957,21 +939,9 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                 />
               )}
 
-              {showRememberAll && (
-                <div className="queue-batch-bar">
-                  <span>{confidentDrafts.length} ready to remember</span>
-                  <button
-                    type="button"
-                    className="btn-queue-remember-all"
-                    onClick={handleRememberAll}
-                    disabled={rememberingAll || submittingId !== null}
-                  >
-                    {rememberingAll ? 'Saving…' : `Remember all (${confidentDrafts.length})`}
-                  </button>
-                </div>
-              )}
-
-              {/* Pending draft facts come first */}
+              {/* Pending draft facts come first. There is deliberately no bulk
+                  "Remember all" — each item is checked and kept on its own
+                  (ledger-grammar-redesign: no bulk confirmation). */}
               {focusedEmpty ? (
                 <p className="queue-empty-category">Nothing waiting here</p>
               ) : (

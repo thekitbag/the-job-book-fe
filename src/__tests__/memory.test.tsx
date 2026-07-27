@@ -88,7 +88,7 @@ function memoryView(): MemoryViewResponse {
     ],
     stillToCheck: { count: 2, items: [{ id: 'stc-1', sectionKey: 'unclear_items', summary: 'Something about extra cable', kind: 'unclear_prompt', timeLabel: 'Today' }] },
     costSummary: { orderedMaterials: {
-      knownSpendAmount: '1440', knownSpendCurrency: 'GBP', knownSpendLabel: '£1440 known spend',
+      knownSpendAmount: '1440', knownSpendCurrency: 'GBP', knownSpendLabel: '£1,440 known spend',
       includedMemoryItemIds: ['mem-clad', 'mem-cable', 'mem-hardcore'], missingCostCount: 1, uncertainCostCount: 1,
       excludedMemoryItemIds: ['mem-timber', 'mem-battens'],
       rows: [
@@ -102,7 +102,7 @@ function memoryView(): MemoryViewResponse {
       ],
     },
     // Job-level total drives the Overview known-spend + Spend hero.
-    totalKnownCost: { knownSpendAmount: '1440', knownSpendCurrency: 'GBP', knownSpendLabel: '£1440 known spend', includedMemoryItemIds: ['mem-clad', 'mem-cable', 'mem-hardcore'] },
+    totalKnownCost: { knownSpendAmount: '1440', knownSpendCurrency: 'GBP', knownSpendLabel: '£1,440 known spend', includedMemoryItemIds: ['mem-clad', 'mem-cable', 'mem-hardcore'] },
     },
   }
 }
@@ -212,8 +212,8 @@ describe('Workspace — Spend tab', () => {
     renderWorkspace()
     openTab('Budget')
     const hero = await spendHero()
-    expect(within(hero).getByText(/£1440/)).toBeTruthy()
-    expect(within(hero).getByText(/of £2000/)).toBeTruthy()
+    expect(within(hero).getByText(/£1,440/)).toBeTruthy()
+    expect(within(hero).getByText(/of £2,000/)).toBeTruthy()
     expect(within(hero).getByText(/£560 remaining/)).toBeTruthy()
   })
 
@@ -221,7 +221,7 @@ describe('Workspace — Spend tab', () => {
     renderWorkspace()
     openTab('Budget')
     const clad = await screen.findByRole('region', { name: /budget category cladding/i })
-    figure(clad, 'Cost', '£1200').toBeTruthy()
+    figure(clad, 'Cost', '£1,200').toBeTruthy()
     figure(clad, 'Remaining', '£800').toBeTruthy()
     const elec = screen.getByRole('region', { name: /budget category electrics/i })
     figure(elec, 'Budget', 'Not set').toBeTruthy()
@@ -540,13 +540,13 @@ describe('Workspace — assign / fix / verify', () => {
     renderWorkspace()
     openTab('Budget')
     const hero = await spendHero()
-    expect(within(hero).getByText(/£1440/)).toBeTruthy()
+    expect(within(hero).getByText(/£1,440/)).toBeTruthy()
     const notCounted = screen.getByRole('region', { name: /not counted yet/i })
     fireEvent.click(within(notCounted).getByRole('button', { name: /add prices/i }))
     const card = within(notCounted).getByText(/timber/).closest('.cost-check-item') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
-    await waitFor(() => expect(within(screen.getByRole('region', { name: /^budget$/i })).getByText(/£1500/)).toBeTruthy())
+    await waitFor(() => expect(within(screen.getByRole('region', { name: /^budget$/i })).getByText(/£1,500/)).toBeTruthy())
   })
 
   it('on refetch failure keeps the last spend and offers retry', async () => {
@@ -560,7 +560,7 @@ describe('Workspace — assign / fix / verify', () => {
     fireEvent.click(within(card).getByRole('button', { name: /fix memory/i }))
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     await waitFor(() => screen.getByText(/couldn’t refresh/i))
-    expect(within(screen.getByRole('region', { name: /^budget$/i })).getByText(/£1440/)).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: /^budget$/i })).getByText(/£1,440/)).toBeTruthy()
   })
 
   it('ignores a budget refresh that resolves after a job switch', async () => {
@@ -763,7 +763,7 @@ describe('Workspace — Spend Labour group', () => {
     openTab('Budget')
     const group = await screen.findByRole('region', { name: /^labour$/i })
     figure(group, 'Cost', '£280').toBeTruthy()
-    figure(group, 'Remaining', '£1220').toBeTruthy()
+    figure(group, 'Remaining', '£1,220').toBeTruthy()
     // the manual labour category card is suppressed — one Labour home, not two
     expect(screen.queryByRole('region', { name: /budget category labour/i })).toBeNull()
     // the labour row renders under Labour, not under Uncategorised

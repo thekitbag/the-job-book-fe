@@ -99,8 +99,8 @@ test.describe('Current job home', () => {
 
   test('the Spend card shows total known cost (bought + labour)', async ({ page }) => {
     await page.waitForTimeout(700)
-    // £2270 = bought + trusted labour, the job-level total known cost.
-    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2270')
+    // £2,270 = bought + trusted labour, the job-level total known cost.
+    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2,270')
   })
 
   // The nav row keeps the figure and its denominator as separate elements so

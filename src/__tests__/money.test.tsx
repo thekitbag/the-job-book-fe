@@ -82,7 +82,7 @@ function money(over: Partial<JobMoneyResponse> = {}): JobMoneyResponse {
 
 const IN_AND_OUT = money({
   customerTotalAmount: '4200', customerTotalCurrency: 'GBP', customerTotalLabel: '£4200',
-  moneyInAmount: '1500', moneyInCurrency: 'GBP', moneyInLabel: '£1500 received',
+  moneyInAmount: '1500', moneyInCurrency: 'GBP', moneyInLabel: '£1,500 received',
   moneyOutAmount: '336', moneyOutCurrency: 'GBP', moneyOutLabel: '£336 paid out',
   stillOwedAmount: '2700', stillOwedCurrency: 'GBP', stillOwedLabel: '£2700 still owed',
   rows: [
@@ -122,7 +122,7 @@ describe('Money — job home card', () => {
   it('shows plain in/out totals: received and paid out', async () => {
     renderWorkspace()
     const card = screen.getByRole('button', { name: 'Open Money' })
-    await waitFor(() => expect(within(card).getByText('£1500 received')).toBeInTheDocument())
+    await waitFor(() => expect(within(card).getByText('£1,500 received')).toBeInTheDocument())
     expect(within(card).getByText('£336 paid out')).toBeInTheDocument()
   })
 
@@ -143,7 +143,7 @@ describe('Money — section', () => {
     expect(screen.getByRole('heading', { name: 'Money' })).toBeInTheDocument()
     const hero = screen.getByRole('region', { name: 'Money summary' })
     expect(within(hero).getByText('Money in')).toBeInTheDocument()
-    expect(within(hero).getByText('£1500')).toBeInTheDocument()
+    expect(within(hero).getByText('£1,500')).toBeInTheDocument()
     expect(within(hero).getByText('Money out')).toBeInTheDocument()
     expect(within(hero).getByText('£336')).toBeInTheDocument()
     const tabs = screen.getByRole('tablist', { name: 'Money views' })
@@ -321,7 +321,7 @@ describe('Money — latest activity', () => {
   it('shows a customer payment row that opens the Money workspace', async () => {
     const user = userEvent.setup()
     renderWorkspace()
-    const row = await screen.findByRole('button', { name: /payment: £1500 received — deposit/i })
+    const row = await screen.findByRole('button', { name: /payment: £1,500 received — deposit/i })
     await user.click(row)
     expect(screen.getByRole('heading', { name: 'Money' })).toBeInTheDocument()
   })

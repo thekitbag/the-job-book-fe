@@ -12,9 +12,9 @@ async function goToSection(page: import('@playwright/test').Page, section: strin
 
 
 // 390×844, VITE_USE_MOCK_API=true — Labour entry point & budget clarity.
-// Mock seed: labour category (£1500 budget) holding rated labour (£280 of £880
+// Mock seed: labour category (£1,500 budget) holding rated labour (£280 of £880
 // total trusted labour) AND a historical non-labour row (agency invoice £150);
-// job total known spend £2270 (£1390 bought incl. the invoice + £880 labour).
+// job total known spend £2,270 (£1,390 bought incl. the invoice + £880 labour).
 
 async function gotoApp(page: Page) {
   await page.goto('/')
@@ -54,14 +54,14 @@ test.describe('Labour entry point & budget clarity', () => {
 
     // job-level trio: known spend, total budget, remaining
     const hero = page.getByRole('region', { name: /^budget$/i })
-    await expect(hero.getByText(/£2270/)).toBeVisible()
-    await expect(hero.getByText(/of £7500/)).toBeVisible()
-    await expect(hero.getByText(/£5230 remaining/)).toBeVisible()
+    await expect(hero.getByText(/£2,270/)).toBeVisible()
+    await expect(hero.getByText(/of £7,500/)).toBeVisible()
+    await expect(hero.getByText(/£5,230 remaining/)).toBeVisible()
 
     // Labour group shows its own trio and guides entry to Labour
     const group = page.getByRole('region', { name: /^labour$/i })
     await expect(group.locator('.budget-figure', { hasText: 'Cost' }).getByText('£880', { exact: true })).toBeVisible()
-    await expect(group.locator('.budget-figure', { hasText: 'Budget' }).getByText('£1500', { exact: true })).toBeVisible()
+    await expect(group.locator('.budget-figure', { hasText: 'Budget' }).getByText('£1,500', { exact: true })).toBeVisible()
     await expect(group.locator('.budget-figure', { hasText: 'Remaining' }).getByText('£620', { exact: true })).toBeVisible()
     // The standing "add labour on the Labour tab" line is gone — static prose
     // the theme cuts. No add action here is what steers entry to Labour.

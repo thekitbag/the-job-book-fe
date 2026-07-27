@@ -26,6 +26,13 @@ test.describe('Things to check — real-use volume', () => {
     await expect(page.getByText('8 waiting')).toBeVisible()
   })
 
+  test('there is no bulk keep/confirm action (each item is checked on its own)', async ({ page }) => {
+    await openQueue(page)
+    await expect(page.getByRole('button', { name: /remember all/i })).toHaveCount(0)
+    // Individual keep is still there.
+    await expect(page.getByRole('button', { name: /remember this/i }).first()).toBeVisible()
+  })
+
   test('category chips show per-category counts (no zero chips)', async ({ page }) => {
     await openQueue(page)
     await expect(page.getByRole('button', { name: 'All 8' })).toBeVisible()
