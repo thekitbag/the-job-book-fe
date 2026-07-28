@@ -851,6 +851,41 @@ describe('Workspace — Spend Labour group', () => {
     expect(within(uncat).getByText(/hardcore/)).toBeTruthy()
   })
 
+  it('fills missing Labour aggregate payment fields from authoritative Budget rows', async () => {
+    const bs = budgetWithLabourGroup()
+    bs.categories[0] = {
+      ...bs.categories[0],
+      paymentState: 'paid',
+      paidAmount: '280',
+      paidCurrency: 'GBP',
+      paidLabel: '£280 paid',
+      notPaidAmount: null,
+      notPaidCurrency: null,
+      notPaidLabel: null,
+      paymentStateReason: 'eligible_items',
+      rows: [{
+        ...LAB_RATED_ROW,
+        paymentState: 'paid',
+        paidMoneyEventId: 'money-labour-1',
+        paidAt: '2026-07-28T08:00:00.000Z',
+        eligibleForPaymentState: true,
+      }],
+    }
+    // This is the transitional integrated response shape: Labour totals are
+    // present, while the new payment fields exist only on category/row data.
+    bs.labour = { ...bs.labour!, rows: [LAB_RATED_ROW] }
+    mockGetBudgetSummary.mockResolvedValue(bs)
+
+    renderWorkspace()
+    openTab('Budget')
+    const group = await screen.findByRole('region', { name: /^labour$/i })
+    expect(within(group).getByText('Paid', { selector: '.budget-payment-state' })).toBeInTheDocument()
+
+    fireEvent.click(within(group).getByRole('button', { name: /show items/i }))
+    expect(within(group).getByText('£280', { selector: '.budget-payment-breakdown dd' })).toBeInTheDocument()
+    expect(within(group).getByText('Paid', { selector: '.mem-row-paid-tag' })).toBeInTheDocument()
+  })
+
   it('shows the Labour group with no budget when there is no labour category', async () => {
     const bs = budgetWithLabourGroup()
     bs.categories = []

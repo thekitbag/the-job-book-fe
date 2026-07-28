@@ -413,7 +413,37 @@ export function useJobMemory(job: Job) {
   // whenever the backend didn't attach one itself.
   const labourSpendGroup = useMemo<LabourSpendSummary | null>(() => {
     if (!budgetSummary) return null
-    const group = budgetSummary.labour ?? deriveLabourSpendGroupFromBudget(budgetSummary)
+    const derived = deriveLabourSpendGroupFromBudget(budgetSummary)
+    const backendGroup = budgetSummary.labour
+    // The payment-state contract was added to normal Budget categories before
+    // the special Labour aggregate. Preserve backend Labour arithmetic, but
+    // fill absent aggregate/row payment metadata from those authoritative
+    // category and uncategorised rows.
+    const fallbackRows = new Map(derived.rows.map(row => [row.memoryItemId, row]))
+    const group: LabourSpendSummary = backendGroup ? {
+      ...backendGroup,
+      paymentState: backendGroup.paymentState === undefined ? derived.paymentState : backendGroup.paymentState,
+      paidAmount: backendGroup.paidAmount === undefined ? derived.paidAmount : backendGroup.paidAmount,
+      paidCurrency: backendGroup.paidCurrency === undefined ? derived.paidCurrency : backendGroup.paidCurrency,
+      paidLabel: backendGroup.paidLabel === undefined ? derived.paidLabel : backendGroup.paidLabel,
+      notPaidAmount: backendGroup.notPaidAmount === undefined ? derived.notPaidAmount : backendGroup.notPaidAmount,
+      notPaidCurrency: backendGroup.notPaidCurrency === undefined ? derived.notPaidCurrency : backendGroup.notPaidCurrency,
+      notPaidLabel: backendGroup.notPaidLabel === undefined ? derived.notPaidLabel : backendGroup.notPaidLabel,
+      paymentStateReason: backendGroup.paymentStateReason === undefined ? derived.paymentStateReason : backendGroup.paymentStateReason,
+      rows: backendGroup.rows.map(row => {
+        const fallback = fallbackRows.get(row.memoryItemId)
+        if (!fallback) return row
+        return {
+          ...row,
+          paymentState: row.paymentState === undefined ? fallback.paymentState : row.paymentState,
+          paidMoneyEventId: row.paidMoneyEventId === undefined ? fallback.paidMoneyEventId : row.paidMoneyEventId,
+          paidAt: row.paidAt === undefined ? fallback.paidAt : row.paidAt,
+          eligibleForPaymentState: row.eligibleForPaymentState === undefined
+            ? fallback.eligibleForPaymentState
+            : row.eligibleForPaymentState,
+        }
+      }),
+    } : derived
     if (group.budgetCategory) return group
     const reconciled = findLabourBudgetCategory(budgetSummary)
     return reconciled ? { ...group, budgetCategory: reconciled.category } : group
