@@ -3,7 +3,7 @@ import { deriveCostSummary, deriveEachTotal, deriveGrossKnownCost, deriveLabourH
 import { ApiError } from '../client'
 import { MOCK_JOBS } from './jobs'
 import { mockFindLabourPerson } from './labourPeople'
-import { recordMockPaid, recordMockRefund } from './money'
+import { assertMockPaidEligible, recordMockPaid, recordMockRefund } from './money'
 import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
 
 export function mockMemoryView(jobId: string): MemoryViewResponse {
@@ -271,7 +271,10 @@ export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest
     costQualifier,
     // Explicit total wins; otherwise derive an `each` line total (quantity × unit
     // cost) so direct-added spend counts like the backend would.
-    totalCostAmount: req.totalCostAmount ?? derivedLabourTotal ?? deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount, costQualifier }),
+    totalCostAmount: req.totalCostAmount ??
+      (costQualifier === 'total' ? costAmount : null) ??
+      derivedLabourTotal ??
+      deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount, costQualifier }),
     labourHours: isLabour ? (req.labourHours ?? null) : null,
     labourPerson,
     labourTask: carriesLabourContext ? (req.labourTask ?? null) : null,
@@ -286,6 +289,11 @@ export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest
     createdAt: now,
     updatedAt: now,
     source: null,
+  }
+  // Validate the paired money movement before persisting the source so a
+  // rejected "paid now" request cannot leave a partial Budget item behind.
+  if (req.markPaid) {
+    assertMockPaidEligible(item)
   }
   upsertMockItem(sections, item)
   if (req.markPaid) {

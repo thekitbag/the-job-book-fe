@@ -10,6 +10,7 @@ vi.mock('../api', async (importOriginal) => {
     ...actual,
     getMemoryView: vi.fn(),
     getBudgetSummary: vi.fn(),
+    getJobMoney: vi.fn(),
     createMemoryItem: vi.fn(),
     updateMemoryItem: vi.fn(),
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-at-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
@@ -23,6 +24,7 @@ vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow:
 
 const mockGetMemoryView = vi.mocked(api.getMemoryView)
 const mockGetBudgetSummary = vi.mocked(api.getBudgetSummary)
+const mockGetJobMoney = vi.mocked(api.getJobMoney)
 const mockCreateMemoryItem = vi.mocked(api.createMemoryItem)
 const mockUpdateMemoryItem = vi.mocked(api.updateMemoryItem)
 
@@ -72,6 +74,14 @@ beforeEach(() => {
   mockGetBudgetSummary.mockResolvedValue(EMPTY_BUDGET)
   mockCreateMemoryItem.mockResolvedValue(OSB)
   mockUpdateMemoryItem.mockResolvedValue(OSB)
+  mockGetJobMoney.mockResolvedValue({
+    jobId: JOB.id, generatedAt: '',
+    customerTotalAmount: null, customerTotalCurrency: null, customerTotalLabel: null,
+    moneyInAmount: null, moneyInCurrency: null, moneyInLabel: null,
+    moneyOutAmount: null, moneyOutCurrency: null, moneyOutLabel: null,
+    stillOwedAmount: null, stillOwedCurrency: null, stillOwedLabel: null,
+    overpaid: false, overpaidAmount: null, overpaidLabel: null, rows: [],
+  })
 })
 
 function renderWorkspace() {
@@ -90,6 +100,40 @@ function fill(form: HTMLElement, name: string, value: string) {
 }
 
 describe('Auto-total — Direct Add Spend', () => {
+  it('offers Already paid only for a trusted positive bought total and refetches Money after save', async () => {
+    renderWorkspace()
+    const form = await openAddSpend()
+    fill(form, 'materialName', 'OSB')
+    expect(within(form).queryByLabelText('Already paid')).toBeNull()
+    fill(form, 'costAmount', '100')
+    const paid = within(form).getByLabelText('Already paid')
+    fireEvent.click(paid)
+    const moneyCallsBeforeSave = mockGetJobMoney.mock.calls.length
+
+    fireEvent.click(within(form).getByRole('button', { name: /^Save / }))
+    await waitFor(() => expect(mockCreateMemoryItem).toHaveBeenCalledWith(JOB.id, expect.objectContaining({
+      memoryType: 'ordered_material',
+      totalCostAmount: '100',
+      markPaid: true,
+    })))
+    await waitFor(() => expect(mockGetJobMoney.mock.calls.length).toBeGreaterThan(moneyCallsBeforeSave))
+  })
+
+  it('does not offer Already paid for missing, £0, or ambiguous per-item cost', async () => {
+    renderWorkspace()
+    const form = await openAddSpend()
+    fill(form, 'materialName', 'Sealant')
+    expect(within(form).queryByLabelText('Already paid')).toBeNull()
+    fill(form, 'costAmount', '0')
+    expect(within(form).queryByLabelText('Already paid')).toBeNull()
+    fill(form, 'costAmount', '15')
+    fireEvent.change(within(form).getByLabelText('Cost basis'), { target: { value: 'each' } })
+    expect(within(form).queryByLabelText('Already paid')).toBeNull()
+    fill(form, 'quantity', '3')
+    fill(form, 'unit', 'tubes')
+    expect(within(form).getByLabelText('Already paid')).toBeInTheDocument()
+  })
+
   it('previews a derived total for a clear each line and omits totalCostAmount on save', async () => {
     renderWorkspace()
     const form = await openAddSpend()

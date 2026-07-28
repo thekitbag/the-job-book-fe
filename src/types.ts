@@ -683,6 +683,12 @@ export interface BudgetSpendRow {
   lineTotalAmount: string
   lineTotalCurrency: string
   lineTotalLabel: string
+  // Authoritative paid state for this source row. Optional keeps the frontend
+  // compatible with an older backend during the coordinated rollout.
+  paymentState?: 'paid' | 'not_paid' | null
+  paidMoneyEventId?: string | null
+  paidAt?: string | null
+  eligibleForPaymentState?: boolean
 }
 
 export interface BudgetCategorySummary {
@@ -696,6 +702,14 @@ export interface BudgetCategorySummary {
   remainingAmount: string | null
   remainingLabel: string | null
   overBudget: boolean
+  paymentState?: 'paid' | 'not_paid' | 'some_paid' | null
+  paidAmount?: string | null
+  paidCurrency?: 'GBP' | null
+  paidLabel?: string | null
+  notPaidAmount?: string | null
+  notPaidCurrency?: 'GBP' | null
+  notPaidLabel?: string | null
+  paymentStateReason?: 'eligible_items' | 'missing_price_present' | 'no_eligible_items' | null
   rows: BudgetSpendRow[]
 }
 
@@ -731,6 +745,17 @@ export interface LabourSpendSummary {
   remainingAmount: string | null
   remainingLabel: string | null
   overBudget: boolean
+  // The Labour system group is rendered as a Budget category in the frontend.
+  // Backends may return these directly; the older-response fallback derives
+  // them from authoritative row payment states.
+  paymentState?: 'paid' | 'not_paid' | 'some_paid' | null
+  paidAmount?: string | null
+  paidCurrency?: 'GBP' | null
+  paidLabel?: string | null
+  notPaidAmount?: string | null
+  notPaidCurrency?: 'GBP' | null
+  notPaidLabel?: string | null
+  paymentStateReason?: 'eligible_items' | 'missing_price_present' | 'no_eligible_items' | null
   rows: BudgetSpendRow[] // memoryType === 'labour'
 }
 
@@ -823,8 +848,9 @@ export interface CreateMemoryItemRequest {
   // default, or hours-only when no person/default is available.
   labourBudgetEnabled?: boolean | null
   budgetCategoryId?: string | null
-  // budget_cost only: record the cost as already paid on create (adds one Money
-  // out for the trusted cost). Ignored for other memory types.
+  // Record an eligible trusted positive source cost as already paid on create,
+  // atomically adding one linked Money out. Currently used by bought material
+  // and labour source-entry flows.
   markPaid?: boolean
 }
 
@@ -1072,6 +1098,10 @@ export interface MoneyRow {
   sourceMemoryItemId: string | null
   sourceItemLabel: string | null
   sourceMemoryType: string | null
+  // Current Budget category context is resolved from the source at read time,
+  // so recategorising the source updates Money without another movement.
+  sourceBudgetCategoryId?: string | null
+  sourceBudgetCategoryName?: string | null
   editable: boolean
   removable: boolean
   createdAt: string

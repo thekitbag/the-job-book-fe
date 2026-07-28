@@ -226,6 +226,110 @@ describe('Workspace — Spend tab', () => {
     figure(elec, 'Budget', 'Not set').toBeTruthy()
   })
 
+  it('keeps payment amounts collapsed, then reveals the exact mixed split and row paid state', async () => {
+    const summary = budgetSummary()
+    summary.categories[0] = {
+      ...summary.categories[0],
+      paymentState: 'some_paid',
+      paidAmount: '321',
+      paidCurrency: 'GBP',
+      paidLabel: '£321 paid',
+      notPaidAmount: '879',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: '£879 not paid',
+      paymentStateReason: 'eligible_items',
+      rows: [{
+        memoryItemId: 'mem-clad',
+        memoryType: 'ordered_material',
+        itemLabel: 'plasterboard',
+        materialName: 'plasterboard',
+        quantity: '24',
+        unit: 'sheets',
+        lineTotalAmount: '1200',
+        lineTotalCurrency: 'GBP',
+        lineTotalLabel: '£1,200 total',
+        paymentState: 'paid',
+        paidMoneyEventId: 'money-1',
+        paidAt: '2026-07-28T12:00:00.000Z',
+        eligibleForPaymentState: true,
+      }],
+    }
+    mockGetBudgetSummary.mockResolvedValue(summary)
+
+    renderWorkspace()
+    openTab('Budget')
+    const clad = await screen.findByRole('region', { name: /budget category cladding/i })
+    expect(within(clad).getByText('Some paid')).toBeInTheDocument()
+    expect(within(clad).queryByText('£321')).toBeNull()
+    expect(within(clad).queryByText('£879')).toBeNull()
+
+    fireEvent.click(within(clad).getByRole('button', { name: /show items/i }))
+    const split = clad.querySelector('.budget-payment-breakdown') as HTMLElement
+    expect(within(split).getByText('£321')).toBeInTheDocument()
+    expect(within(split).getByText('£879')).toBeInTheDocument()
+    expect(within(clad).getByText('Paid', { selector: '.mem-row-paid-tag' })).toBeInTheDocument()
+  })
+
+  it('shows only the relevant expanded amount for all-paid and all-not-paid categories', async () => {
+    const summary = budgetSummary()
+    summary.categories[0] = {
+      ...summary.categories[0],
+      paymentState: 'not_paid',
+      paidAmount: null,
+      paidCurrency: null,
+      paidLabel: null,
+      notPaidAmount: '1200',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: '£1,200 not paid',
+      paymentStateReason: 'eligible_items',
+    }
+    summary.categories[1] = {
+      ...summary.categories[1],
+      paymentState: 'paid',
+      paidAmount: '200',
+      paidCurrency: 'GBP',
+      paidLabel: '£200 paid',
+      notPaidAmount: null,
+      notPaidCurrency: null,
+      notPaidLabel: null,
+      paymentStateReason: 'eligible_items',
+    }
+    mockGetBudgetSummary.mockResolvedValue(summary)
+
+    renderWorkspace()
+    openTab('Budget')
+    const clad = await screen.findByRole('region', { name: /budget category cladding/i })
+    const elec = screen.getByRole('region', { name: /budget category electrics/i })
+    fireEvent.click(within(clad).getByRole('button', { name: /show items/i }))
+    fireEvent.click(within(elec).getByRole('button', { name: /show items/i }))
+
+    expect(within(clad.querySelector('.budget-payment-breakdown') as HTMLElement).queryByText('Paid')).toBeNull()
+    expect(within(clad.querySelector('.budget-payment-breakdown') as HTMLElement).getByText('Not paid')).toBeInTheDocument()
+    expect(within(elec.querySelector('.budget-payment-breakdown') as HTMLElement).getByText('Paid')).toBeInTheDocument()
+    expect(within(elec.querySelector('.budget-payment-breakdown') as HTMLElement).queryByText('Not paid')).toBeNull()
+  })
+
+  it('does not show a reassuring Paid category state when missing-price attention takes precedence', async () => {
+    const summary = budgetSummary()
+    summary.categories[0] = {
+      ...summary.categories[0],
+      paymentState: 'paid',
+      paidAmount: '1200',
+      paidCurrency: 'GBP',
+      paidLabel: '£1,200 paid',
+      notPaidAmount: null,
+      notPaidCurrency: null,
+      notPaidLabel: null,
+      paymentStateReason: 'missing_price_present',
+    }
+    mockGetBudgetSummary.mockResolvedValue(summary)
+
+    renderWorkspace()
+    openTab('Budget')
+    const clad = await screen.findByRole('region', { name: /budget category cladding/i })
+    expect(clad.querySelector('.budget-payment-state')).toBeNull()
+  })
+
   it('expands a category to tappable entry rows, with Fix memory in the drawer', async () => {
     renderWorkspace()
     openTab('Budget')

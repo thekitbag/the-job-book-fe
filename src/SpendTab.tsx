@@ -5,7 +5,7 @@ import LabourBudgetControl from './LabourBudgetControl'
 import { formatMoney, moneyFigure } from './memoryScan'
 import type { JobMemory } from './useJobMemory'
 import type { MarkPaidControls } from './markPaid'
-import type { BudgetCategorySummary, BudgetSummaryResponse, MemoryViewItem, TotalKnownCost } from './types'
+import type { BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, LabourSpendSummary, MemoryViewItem, TotalKnownCost } from './types'
 
 // Spent-against-budget bar for a category block. Rendered only with a real
 // budget to measure against — a bar with no denominator would be decoration,
@@ -21,6 +21,56 @@ function BudgetBar({ spend, budget, over }: { spend: string | null; budget: stri
       <span style={{ width: `${pct}%` }} />
     </div>
   )
+}
+
+type PaymentSummary = Pick<
+  BudgetCategorySummary | LabourSpendSummary,
+  'paymentState' | 'paidAmount' | 'paidLabel' | 'notPaidAmount' | 'notPaidLabel' | 'paymentStateReason'
+>
+
+const PAYMENT_STATE_LABEL = {
+  paid: 'Paid',
+  not_paid: 'Not paid',
+  some_paid: 'Some paid',
+} as const
+
+function visiblePaymentState(summary: PaymentSummary) {
+  // Missing/untrusted prices take precedence over a reassuring all-clear. The
+  // backend is authoritative through paymentStateReason; the UI does not infer
+  // this from labels or from £0.
+  if (summary.paymentStateReason === 'missing_price_present') return null
+  return summary.paymentState ?? null
+}
+
+function PaymentStateText({ summary }: { summary: PaymentSummary }) {
+  const state = visiblePaymentState(summary)
+  if (!state) return null
+  return <span className={`budget-payment-state budget-payment-state--${state}`}>{PAYMENT_STATE_LABEL[state]}</span>
+}
+
+function PaymentBreakdown({ summary }: { summary: PaymentSummary }) {
+  const state = visiblePaymentState(summary)
+  if (!state) return null
+  const showPaid = (state === 'paid' || state === 'some_paid') && summary.paidAmount !== null && summary.paidAmount !== undefined
+  const showNotPaid = (state === 'not_paid' || state === 'some_paid') && summary.notPaidAmount !== null && summary.notPaidAmount !== undefined
+  if (!showPaid && !showNotPaid) return null
+  return (
+    <dl className={`budget-payment-breakdown${showPaid && showNotPaid ? ' budget-payment-breakdown--split' : ''}`}>
+      {showPaid && <div><dt>Paid</dt><dd>{moneyFigure(summary.paidAmount!) ?? summary.paidLabel}</dd></div>}
+      {showNotPaid && <div><dt>Not paid</dt><dd>{moneyFigure(summary.notPaidAmount!) ?? summary.notPaidLabel}</dd></div>}
+    </dl>
+  )
+}
+
+function paymentControlsForRow(markPaid: MarkPaidControls | undefined, row: BudgetSpendRow | undefined): MarkPaidControls | undefined {
+  if (!markPaid || !row || row.paymentState === undefined) return markPaid
+  return {
+    ...markPaid,
+    isPaid: item => item.id === row.memoryItemId ? row.paymentState === 'paid' : markPaid.isPaid(item),
+    canMarkPaid: item => item.id === row.memoryItemId
+      ? row.eligibleForPaymentState === true && row.paymentState !== 'paid' && markPaid.canMarkPaid(item)
+      : markPaid.canMarkPaid(item),
+  }
 }
 
 // Inline name + budget form, reused for adding and editing a category.
@@ -181,6 +231,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
     // second, duplicate category card.
     if (showLabourGroup && labourSpendGroup?.budgetCategory?.id === c.id) return null
     const notes = [...orderedItems, ...labourItems, ...budgetCostItems].filter(i => i.budgetCategoryId === c.id && !labourRowIds.has(i.id))
+    const paymentRows = new Map(cs.rows.map(row => [row.memoryItemId, row]))
     const open = !!expandedCats[c.id]
     if (editingBudgetId === c.id) {
       return (
@@ -227,6 +278,9 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
             <div className={`budget-figure${cs.overBudget ? ' budget-figure--over' : ''}`}><dt>{cs.overBudget ? 'Over' : 'Remaining'}</dt><dd>{moneyFigure(cs.remainingAmount?.replace('-', '') ?? null)}</dd></div>
           )}
         </div>
+        <div className="budget-payment-line">
+          <PaymentStateText summary={cs} />
+        </div>
         {notes.length === 0 && (
           <p className="cat-empty">Nothing yet</p>
         )}
@@ -240,9 +294,12 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
             </button>
           )}
         </div>
-        {notes.length > 0 && open && <div className="cat-notes">{notes.map(item => (
-          <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
-        ))}</div>}
+        {notes.length > 0 && open && <>
+          <PaymentBreakdown summary={cs} />
+          <div className="cat-notes">{notes.map(item => (
+            <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={paymentControlsForRow(markPaid, paymentRows.get(item.id))} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+          ))}</div>
+        </>}
       </section>
     )
   }
@@ -335,15 +392,22 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
                 <div className={`budget-figure${labourSpendGroup.overBudget ? ' budget-figure--over' : ''}`}><dt>{labourSpendGroup.overBudget ? 'Over' : 'Remaining'}</dt><dd>{moneyFigure(labourSpendGroup.remainingAmount?.replace('-', '') ?? null)}</dd></div>
               )}
             </div>
+            <div className="budget-payment-line">
+              <PaymentStateText summary={labourSpendGroup} />
+            </div>
             {labourGroupItems.length > 0
               ? <>
                   <button type="button" className="notes-toggle" aria-expanded={!!expandedCats[LABOUR_GROUP_KEY]} onClick={() => toggleCat(LABOUR_GROUP_KEY)}>
                     <span>{expandedCats[LABOUR_GROUP_KEY] ? 'Hide items' : `Show items (${labourGroupItems.length})`}</span>
                     <span className="notes-toggle-chev" aria-hidden="true">{expandedCats[LABOUR_GROUP_KEY] ? '▴' : '▾'}</span>
                   </button>
-                  {expandedCats[LABOUR_GROUP_KEY] && <div className="cat-notes">{labourGroupItems.map(item => (
-                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} />
-                  ))}</div>}
+                  {expandedCats[LABOUR_GROUP_KEY] && <>
+                    <PaymentBreakdown summary={labourSpendGroup} />
+                    <div className="cat-notes">{labourGroupItems.map(item => {
+                      const row = labourSpendGroup.rows.find(candidate => candidate.memoryItemId === item.id)
+                      return <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={paymentControlsForRow(markPaid, row)} />
+                    })}</div>
+                  </>}
                 </>
               : <p className="cat-empty">Nothing yet</p>}
             {/* One Labour concept: with no Labour category yet, "Set budget"

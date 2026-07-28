@@ -4,6 +4,7 @@ import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
 import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
 import type { MarkPaidControls } from './markPaid'
+import type { BudgetCategory, CreateMemoryItemRequest, MemoryViewItem } from './types'
 
 // "2 items left over" / "3 items bought" — the section kicker states how many,
 // which is the one thing a count-of-things section should say.
@@ -50,6 +51,8 @@ export default function MemorySectionTab({
   emptyText,
   footer,
   markPaid,
+  onAddMemoryItem,
+  budgetCategories = [],
 }: {
   mem: JobMemory
   sectionKeys: string[]
@@ -58,6 +61,8 @@ export default function MemorySectionTab({
   sectionAdds?: Partial<Record<string, SectionAdd>>
   // Budget cost items only (e.g. Materials → Bought): mark-as-paid capability.
   markPaid?: MarkPaidControls
+  onAddMemoryItem?: (req: CreateMemoryItemRequest) => Promise<MemoryViewItem>
+  budgetCategories?: BudgetCategory[]
   // Empty copy for a lens with no add action of its own (e.g. Returned, which
   // is only reachable from a Left over item). Falls back to generic copy.
   emptyText?: string
@@ -66,6 +71,7 @@ export default function MemorySectionTab({
   footer?: ReactNode
 }) {
   const { sectionItems, cardProps, addMemoryItem, refreshError, refetch } = mem
+  const addItem = onAddMemoryItem ?? addMemoryItem
   // A section is visible if it has items OR its own add action (so you can add
   // the first item of that type).
   const rows = sectionKeys
@@ -74,7 +80,7 @@ export default function MemorySectionTab({
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label={ariaLabel}>
-      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} onAdd={addMemoryItem} actionHidden={rows.length === 0} />}
+      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} categories={budgetCategories} onAdd={addItem} actionHidden={rows.length === 0} />}
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
@@ -88,7 +94,7 @@ export default function MemorySectionTab({
           <EmptyState
             title="No notes yet"
             hint="Keep short job notes here — changes, watch-outs, things to remember. Or say it with Record."
-            action={<DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} onAdd={addMemoryItem} />}
+            action={<DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} categories={budgetCategories} onAdd={addItem} />}
           />
         ) : (
           !footer && <p className="mem-tab-empty">{emptyText ?? 'Nothing remembered here yet.'}</p>
@@ -103,7 +109,7 @@ export default function MemorySectionTab({
           return (
             <section key={s.key} className="mem-section">
               {s.add
-                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} onAdd={addMemoryItem} actionHidden={s.items.length === 0} />
+                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} categories={budgetCategories} onAdd={addItem} actionHidden={s.items.length === 0} />
                 : <h2 className="mem-section-heading">{countLabel}</h2>}
               {s.items.length > 0
                 ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} />)
@@ -111,7 +117,7 @@ export default function MemorySectionTab({
                   ? <EmptyState
                       title={empty?.title ?? 'Nothing logged yet'}
                       hint={empty?.hint}
-                      action={<DirectAddForm kind={s.add.kind} variant="button" label={s.add.label} onAdd={addMemoryItem} />}
+                      action={<DirectAddForm kind={s.add.kind} variant="button" label={s.add.label} categories={budgetCategories} onAdd={addItem} />}
                     />
                   : <p className="mem-section-empty">None yet.</p>}
             </section>

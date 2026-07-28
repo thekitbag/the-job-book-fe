@@ -146,6 +146,23 @@ const KIND_LABEL: Record<MoneyRow['kind'], string> = {
   cost_paid: 'Paid out',
 }
 
+function moneyDayKey(occurredAt: string): string {
+  const d = new Date(occurredAt)
+  if (Number.isNaN(d.getTime())) return 'unknown'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function moneyDayLabel(occurredAt: string): string {
+  const d = new Date(occurredAt)
+  if (Number.isNaN(d.getTime())) return 'Date not known'
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(d)
+}
+
 export default function MoneySection({ jobId, money }: { jobId: string; money: MoneyState }) {
   const { data, loadState, reload } = money
   const toast = useToast()
@@ -260,6 +277,15 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
   }
 
   const rows = data.rows.filter(r => filter === 'all' || r.direction === filter)
+  // Backend rows are newest-first. Group adjacent calendar days without
+  // re-sorting or regrouping by category: Money remains a chronological log.
+  const dayGroups = rows.reduce<Array<{ key: string; label: string; rows: MoneyRow[] }>>((groups, row) => {
+    const key = moneyDayKey(row.occurredAt)
+    const previous = groups[groups.length - 1]
+    if (previous?.key === key) previous.rows.push(row)
+    else groups.push({ key, label: moneyDayLabel(row.occurredAt), rows: [row] })
+    return groups
+  }, [])
   const hasIn = data.moneyInAmount !== null
   const hasOut = data.moneyOutAmount !== null
 
@@ -326,55 +352,65 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
             : 'No money movement yet. Add a customer payment, or mark a Budget cost as paid.'}
         </p>
       ) : (
-        <ul className="money-list">
-          {rows.map(row => (
-            <li key={row.id} className={`money-row money-row--${row.direction}`}>
-              <div className="money-row-main">
-                <span className="money-row-label">
-                  {KIND_LABEL[row.kind]}
-                  {row.sourceItemLabel && <span className="money-row-source"> · {row.sourceItemLabel}</span>}
-                </span>
-                <span className={`money-row-amount money-row-amount--${row.direction}`}>{row.amountLabel}</span>
-              </div>
-              <div className="money-row-meta-line">
-                <span className="money-row-when">{formatSavedStamp(row.occurredAt)}</span>
-                {(row.note || row.reference) && (
-                  <span className="money-row-meta">
-                    {row.note}
-                    {row.note && row.reference ? ' · ' : ''}
-                    {row.reference && `Ref: ${row.reference}`}
-                  </span>
-                )}
-              </div>
-              {(row.editable || row.removable) && (
-                <div className="money-row-actions">
-                  {confirmingRemove?.id === row.id ? (
-                    <>
-                      <span className="pay-delete-copy">
-                        {row.kind === 'cost_paid' ? 'Undo paid? This removes it from Money out. Budget cost stays unchanged.' : 'Delete this payment?'}
-                      </span>
-                      <button type="button" className="pay-delete-confirm" disabled={saving} onClick={() => void removeRow(row)}>
-                        {saving ? 'Removing…' : 'Remove'}
-                      </button>
-                      <button type="button" className="btn-queue-cancel" disabled={saving} onClick={() => setConfirmingRemove(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      {row.editable && (
-                        <button type="button" className="pay-row-action" onClick={() => { setFormError(null); setEditing(row) }}>Edit</button>
+        <div className="money-list">
+          {dayGroups.map(group => (
+            <section className="money-day" aria-label={group.label} key={group.key}>
+              <h3 className="money-day-label">{group.label}</h3>
+              <ul className="money-day-rows">
+                {group.rows.map(row => {
+                  const isSourceOut = row.direction === 'out' && row.kind === 'cost_paid'
+                  const title = isSourceOut && row.sourceItemLabel ? row.sourceItemLabel : KIND_LABEL[row.kind]
+                  const categoryContext = isSourceOut ? (row.sourceBudgetCategoryName?.trim() || 'Uncategorised') : null
+                  return (
+                    <li key={row.id} className={`money-row money-row--${row.direction}`}>
+                      <div className="money-row-main">
+                        <span className="money-row-label">{title}</span>
+                        <span className={`money-row-amount money-row-amount--${row.direction}`}>{row.amountLabel}</span>
+                      </div>
+                      <div className="money-row-meta-line">
+                        {categoryContext && <span className="money-row-context">{categoryContext}</span>}
+                        <span className="money-row-when">{formatSavedStamp(row.occurredAt)}</span>
+                        {(row.note || row.reference) && (
+                          <span className="money-row-meta">
+                            {row.note}
+                            {row.note && row.reference ? ' · ' : ''}
+                            {row.reference && `Ref: ${row.reference}`}
+                          </span>
+                        )}
+                      </div>
+                      {(row.editable || row.removable) && (
+                        <div className="money-row-actions">
+                          {confirmingRemove?.id === row.id ? (
+                            <>
+                              <span className="pay-delete-copy">
+                                {row.kind === 'cost_paid' ? 'Undo paid? This removes it from Money out. Budget cost stays unchanged.' : 'Delete this payment?'}
+                              </span>
+                              <button type="button" className="pay-delete-confirm" disabled={saving} onClick={() => void removeRow(row)}>
+                                {saving ? 'Removing…' : 'Remove'}
+                              </button>
+                              <button type="button" className="btn-queue-cancel" disabled={saving} onClick={() => setConfirmingRemove(null)}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              {row.editable && (
+                                <button type="button" className="pay-row-action" onClick={() => { setFormError(null); setEditing(row) }}>Edit</button>
+                              )}
+                              {row.removable && (
+                                <button type="button" className="pay-row-action pay-row-action--danger" onClick={() => setConfirmingRemove(row)}>
+                                  {row.kind === 'cost_paid' ? 'Undo paid' : 'Delete'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       )}
-                      {row.removable && (
-                        <button type="button" className="pay-row-action pay-row-action--danger" onClick={() => setConfirmingRemove(row)}>
-                          {row.kind === 'cost_paid' ? 'Undo paid' : 'Delete'}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </li>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       {totalSheetOpen && (

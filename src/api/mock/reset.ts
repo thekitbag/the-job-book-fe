@@ -6,12 +6,12 @@ import { _resetMockMoneyForTesting } from './money'
 import { _resetMockPaymentsForTesting } from './payments'
 import { _resetMockPhotosForTesting } from './photos'
 
-export function resetMockApiForE2e(): void {
+export function resetMockApiForE2e(scenario = 'default'): void {
   _resetMockAuthForTesting()
   _resetMockJobsForTesting()
-  _resetMockMemoryForTesting()
+  _resetMockMemoryForTesting(scenario)
   _resetMockLabourPeopleForTesting()
-  _resetMockMoneyForTesting()
+  _resetMockMoneyForTesting(scenario)
   _resetMockPaymentsForTesting()
   _resetMockPhotosForTesting()
 }

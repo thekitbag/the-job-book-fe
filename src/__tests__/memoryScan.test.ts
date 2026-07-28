@@ -416,6 +416,57 @@ describe('deriveBudgetSummary', () => {
     expect(timber.rows.map(r => r.memoryItemId)).toEqual(['a'])
   })
 
+  it('derives authoritative all-paid, not-paid, and mixed amounts without changing Budget arithmetic', () => {
+    const cats = [cat({ id: 'c1', name: 'timber', budgetAmount: '500', budgetCurrency: 'GBP' })]
+    const sections = ordered([
+      safeItem({ id: 'paid', totalCostAmount: '120', budgetCategoryId: 'c1' }),
+      safeItem({ id: 'unpaid', totalCostAmount: '80', budgetCategoryId: 'c1' }),
+    ])
+    const before = deriveBudgetSummary('job-1', sections, cats)
+    const after = deriveBudgetSummary('job-1', sections, cats, new Map([
+      ['paid', { moneyEventId: 'money-1', paidAt: '2026-07-28T12:00:00.000Z' }],
+    ]))
+    const timber = after.categories[0]
+
+    expect(timber.paymentState).toBe('some_paid')
+    expect(timber.paidAmount).toBe('120')
+    expect(timber.notPaidAmount).toBe('80')
+    expect(timber.rows.map(r => [r.memoryItemId, r.paymentState])).toEqual([
+      ['paid', 'paid'],
+      ['unpaid', 'not_paid'],
+    ])
+    expect(timber.rows[0].paidMoneyEventId).toBe('money-1')
+    expect(after.totals).toEqual(before.totals)
+    expect(after.categories[0]).toMatchObject({
+      knownSpendAmount: before.categories[0].knownSpendAmount,
+      remainingAmount: before.categories[0].remainingAmount,
+      overBudget: before.categories[0].overBudget,
+    })
+  })
+
+  it('excludes trusted £0 from payment state without treating it as missing', () => {
+    const cats = [cat({ id: 'c1', name: 'labour' })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'zero', costAmount: '0', costQualifier: 'total', totalCostAmount: '0', budgetCategoryId: 'c1' }),
+    ]), cats)
+
+    expect(s.categories[0].paymentState).toBeNull()
+    expect(s.categories[0].paymentStateReason).toBe('no_eligible_items')
+    expect(s.categories[0].knownSpendAmount).toBeNull()
+  })
+
+  it('flags missing-price precedence instead of presenting a paid all-clear', () => {
+    const cats = [cat({ id: 'c1', name: 'timber' })]
+    const s = deriveBudgetSummary('job-1', ordered([
+      safeItem({ id: 'paid', totalCostAmount: '120', budgetCategoryId: 'c1' }),
+      item({ id: 'missing', memoryType: 'ordered_material', materialName: 'timber', budgetCategoryId: 'c1' }),
+    ]), cats, new Map([
+      ['paid', { moneyEventId: 'money-1', paidAt: '2026-07-28T12:00:00.000Z' }],
+    ]))
+
+    expect(s.categories[0].paymentStateReason).toBe('missing_price_present')
+  })
+
   it('puts safe spend with no category into uncategorised', () => {
     const s = deriveBudgetSummary('job-1', ordered([
       safeItem({ id: 'a', totalCostAmount: '320', budgetCategoryId: null }),

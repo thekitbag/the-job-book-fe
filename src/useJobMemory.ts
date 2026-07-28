@@ -161,7 +161,7 @@ export function useJobMemory(job: Job) {
       has_budget_category: Boolean(req.budgetCategoryId),
     })
     await refetch()
-    void loadBudget()
+    await loadBudget()
     return created
   }, [job.id, refetch, loadBudget])
 

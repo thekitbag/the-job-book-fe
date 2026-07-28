@@ -87,7 +87,7 @@ const IN_AND_OUT = money({
   stillOwedAmount: '2700', stillOwedCurrency: 'GBP', stillOwedLabel: '£2700 still owed',
   rows: [
     paymentRow(),
-    { id: 'me-1', jobId: JOB.id, direction: 'out', kind: 'cost_paid', amount: '336', currency: 'GBP', amountLabel: '-£336', occurredAt: '2026-07-07T12:00:00.000Z', note: null, reference: null, sourceMemoryItemId: 'm1', sourceItemLabel: 'Cement', sourceMemoryType: 'ordered_material', editable: false, removable: true, createdAt: '', updatedAt: '' },
+    { id: 'me-1', jobId: JOB.id, direction: 'out', kind: 'cost_paid', amount: '336', currency: 'GBP', amountLabel: '-£336', occurredAt: '2026-07-07T12:00:00.000Z', note: null, reference: null, sourceMemoryItemId: 'm1', sourceItemLabel: 'Cement', sourceMemoryType: 'ordered_material', sourceBudgetCategoryId: 'cat-materials', sourceBudgetCategoryName: 'Materials', editable: false, removable: true, createdAt: '', updatedAt: '' },
   ],
 })
 
@@ -160,7 +160,29 @@ describe('Money — section', () => {
     expect(within(list).getByText('Customer payment')).toBeInTheDocument()
     expect(within(list).getByText('+£1500')).toBeInTheDocument()
     expect(within(list).getByText(/Cement/)).toBeInTheDocument()
+    expect(within(list).getByText('Materials')).toBeInTheDocument()
     expect(within(list).getByText('-£336')).toBeInTheDocument()
+  })
+
+  it('shows Uncategorised for a source-linked Money out row without category context', async () => {
+    vi.mocked(getJobMoney).mockResolvedValue(money({
+      moneyOutAmount: '80',
+      moneyOutCurrency: 'GBP',
+      rows: [{
+        id: 'me-uncat', jobId: JOB.id, direction: 'out', kind: 'cost_paid',
+        amount: '80', currency: 'GBP', amountLabel: '-£80',
+        occurredAt: '2026-07-08T12:00:00.000Z', note: null, reference: null,
+        sourceMemoryItemId: 'm-uncat', sourceItemLabel: 'Fixings',
+        sourceMemoryType: 'ordered_material', sourceBudgetCategoryId: null,
+        sourceBudgetCategoryName: null, editable: false, removable: true,
+        createdAt: '', updatedAt: '',
+      }],
+    }))
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openMoney(user)
+    expect(screen.getByText('Fixings')).toBeInTheDocument()
+    expect(screen.getByText('Uncategorised')).toBeInTheDocument()
   })
 
   it('filters to Money in and Money out', async () => {
@@ -258,7 +280,7 @@ function budgetWithCostItem() {
   }
 }
 
-const OUT_ROW: MoneyRow = { id: 'me-9', jobId: JOB.id, direction: 'out', kind: 'cost_paid', amount: '336', currency: 'GBP', amountLabel: '-£336', occurredAt: '', note: null, reference: null, sourceMemoryItemId: 'm1', sourceItemLabel: 'Cement', sourceMemoryType: 'ordered_material', editable: false, removable: true, createdAt: '', updatedAt: '' }
+const OUT_ROW: MoneyRow = { id: 'me-9', jobId: JOB.id, direction: 'out', kind: 'cost_paid', amount: '336', currency: 'GBP', amountLabel: '-£336', occurredAt: '', note: null, reference: null, sourceMemoryItemId: 'm1', sourceItemLabel: 'Cement', sourceMemoryType: 'ordered_material', sourceBudgetCategoryId: null, sourceBudgetCategoryName: null, editable: false, removable: true, createdAt: '', updatedAt: '' }
 
 async function openBudgetItem(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Open Budget' }))
