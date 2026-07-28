@@ -11,6 +11,15 @@ vi.mock('../api', () => ({ createLabourPerson: vi.fn(), patchLabourPerson: vi.fn
 const kurt: LabourPersonWithJobStats = { id: 'kurt', name: 'Kurt', defaultHourlyRateAmount: '20', defaultHourlyRateCurrency: 'GBP', createdAt: '', updatedAt: '', jobHours: '8', jobHoursLabel: '8h', jobLabourCostAmount: '160', jobLabourCostCurrency: 'GBP', jobLabourCostLabel: '£160', hasEntriesWithoutRate: false }
 
 describe('job-local Labour people and rates', () => {
+  it('uses the standard drawer form styling for every Add labour control', () => {
+    render(<AddLabourDrawer jobId="job-a" people={[kurt]} open onClose={vi.fn()} onAdd={vi.fn()} onPeopleChanged={vi.fn()} />)
+
+    for (const label of ['Person', 'Task', 'Hours', 'Rate', 'Fixed total']) {
+      expect(screen.getByLabelText(label)).toHaveClass('queue-field-input')
+    }
+    expect(screen.getByRole('form', { name: 'Add labour' })).toHaveClass('add-labour')
+  })
+
   it('edits a job-local rate, including £0, without a Budget-treatment choice', async () => {
     vi.mocked(patchLabourPerson).mockResolvedValue({ ...kurt, defaultHourlyRateAmount: '0' })
     const user = userEvent.setup()

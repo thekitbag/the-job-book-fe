@@ -50,15 +50,52 @@ export default function AddHoursDrawer({ jobId, people, open, onClose, onAdd, on
   }
   if (!open) return null
   return <BottomSheet title="Add labour" onClose={onClose}><form className="add-labour" aria-label="Add labour" onSubmit={e => { e.preventDefault(); void save() }}>
-    <label><span className="row-sheet-cost">PERSON</span><select aria-label="Person" value={personId} onChange={e => setPersonId(e.target.value)}><option value="">No person</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-    <button type="button" className="btn-lens-add-text" onClick={() => setAddingPerson(!addingPerson)}>+ Add person</button>
-    {addingPerson && <div className="who-new"><input aria-label="New person name" value={newName} onChange={e => setNewName(e.target.value)} /><button type="button" onClick={() => void addPerson()} disabled={saving}>Add</button></div>}
-    <label><span className="row-sheet-cost">TASK</span><input aria-label="Task" value={task} onChange={e => setTask(e.target.value)} placeholder="e.g. Roofing" /></label>
-    <label><span className="row-sheet-cost">HOURS (OPTIONAL)</span><input aria-label="Hours" inputMode="decimal" value={hours} onChange={e => setHours(e.target.value)} /></label>
-    <label><span className="row-sheet-cost">RATE (£/H, OPTIONAL)</span><input aria-label="Rate" inputMode="decimal" value={rate} onChange={e => { setRate(e.target.value); setTotal('') }} /></label>
-    <label><span className="row-sheet-cost">FIXED TOTAL (£, OPTIONAL)</span><input aria-label="Fixed total" inputMode="decimal" value={total} onChange={e => setTotal(e.target.value)} /></label>
-    <p className="row-sheet-sub">{positive(hours) ? `${hours}h saved.` : 'No hours saved.'} {payable ? `£${cost} goes to Budget.` : 'No Budget cost.'} {payable ? 'You can mark it paid now.' : ''}</p>
-    {payable && <label><input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} /> Already paid — adds Money out</label>}
+    <div className="add-labour-person-row">
+      <label className="queue-field">
+        <span className="queue-field-label">Person</span>
+        <select className="queue-field-input" aria-label="Person" value={personId} onChange={e => setPersonId(e.target.value)}>
+          <option value="">No person</option>
+          {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </label>
+      <button type="button" className="btn-lens-add-text" onClick={() => setAddingPerson(!addingPerson)}>{addingPerson ? 'Cancel' : '+ Add person'}</button>
+    </div>
+    {addingPerson && <div className="who-new">
+      <input className="queue-field-input" aria-label="New person name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Name" />
+      <button type="button" className="btn-rate-save" onClick={() => void addPerson()} disabled={saving || !newName.trim()}>Add</button>
+    </div>}
+    <label className="queue-field">
+      <span className="queue-field-label">Task</span>
+      <input className="queue-field-input" aria-label="Task" value={task} onChange={e => setTask(e.target.value)} placeholder="e.g. Roofing" />
+    </label>
+    <div className="add-labour-cost-row">
+      <label className="queue-field">
+        <span className="queue-field-label">Hours (optional)</span>
+        <input className="queue-field-input" aria-label="Hours" inputMode="decimal" value={hours} onChange={e => setHours(e.target.value)} placeholder="e.g. 8" />
+      </label>
+      <label className="queue-field">
+        <span className="queue-field-label">Rate (£/h, optional)</span>
+        <input className="queue-field-input" aria-label="Rate" inputMode="decimal" value={rate} onChange={e => { setRate(e.target.value); setTotal('') }} placeholder="e.g. 25" />
+      </label>
+    </div>
+    <label className="queue-field">
+      <span className="queue-field-label">Fixed total (£, optional)</span>
+      <input className="queue-field-input" aria-label="Fixed total" inputMode="decimal" value={total} onChange={e => setTotal(e.target.value)} placeholder="Use instead of an hourly rate" />
+    </label>
+    <div className={`add-labour-budget ${payable ? 'add-labour-budget--budget' : 'add-labour-budget--hours'}`} aria-live="polite">
+      <div className="add-labour-budget-head">
+        <span className={`labour-budget-card-cap ${payable ? '' : 'labour-budget-card-cap--grey'}`}>Entry effect</span>
+        <strong>{positive(hours) ? `${hours}h` : 'No hours'}</strong>
+      </div>
+      <p className="add-labour-hours-copy">{payable ? `£${cost} goes to Budget. You can mark it paid now.` : 'No Budget cost.'}</p>
+    </div>
+    {payable && <label className="direct-add-paid">
+      <input type="checkbox" aria-label="Already paid" checked={paid} onChange={e => setPaid(e.target.checked)} />
+      <span className="direct-add-paid-text">
+        <span className="direct-add-paid-title">Already paid</span>
+        <span className="direct-add-paid-sub">Also records it in Money out</span>
+      </span>
+    </label>}
     {error && <p role="alert" className="queue-item-error">{error}</p>}
     <button className="btn-add-labour-save" disabled={saving}>{saving ? 'Saving…' : 'Save labour'}</button>
   </form></BottomSheet>

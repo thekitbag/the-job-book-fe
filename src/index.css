@@ -5221,7 +5221,16 @@ code {
 .treatment-opt--on .treatment-sub { color: #4756b0; }
 
 /* ── Add labour drawer (10d/10e) ── */
-.add-labour { display: flex; flex-direction: column; }
+.add-labour { display: flex; flex-direction: column; gap: 16px; padding: 4px 0 2px; }
+.add-labour-person-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end; gap: 18px;
+}
+.add-labour-person-row .btn-lens-add-text { margin-bottom: 1px; }
+.add-labour-cost-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
 .who-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
 .who-chip {
   border: 1px solid var(--grey-hairline); background: none; color: var(--ink);
@@ -5231,8 +5240,9 @@ code {
 .who-chip-you { color: var(--cobalt-on-ink); font-size: var(--text-sm); }
 .who-chip--on .who-chip-you { color: var(--cobalt-on-ink); }
 .who-chip--new { color: var(--cobalt); }
-.who-new { display: flex; gap: 8px; margin: 4px 0 0; }
-.who-new .queue-field-input { flex: 1; }
+.who-new { display: flex; align-items: flex-end; gap: 10px; margin: -4px 0 0; }
+.who-new .queue-field-input { flex: 1; min-width: 0; }
+.who-new .btn-rate-save { min-height: 44px; }
 
 .add-labour-ht { display: flex; gap: 22px; margin-top: 16px; }
 .add-labour-ht > div:first-child { flex: none; }
@@ -5253,7 +5263,7 @@ code {
 .stepper-input:focus { outline: none; }
 .stepper-unit { font-size: 18px; font-weight: 700; color: var(--grey-text); }
 
-.add-labour-budget { margin-top: 16px; padding: 14px 16px; }
+.add-labour-budget { margin-top: 0; padding: 14px 16px; }
 .add-labour-budget--budget { background: var(--cobalt-wash); }
 .add-labour-budget--hours { background: var(--grey-press); }
 .add-labour-budget-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -5268,6 +5278,7 @@ code {
 .add-labour-toggle { margin-top: 10px; border: none; background: none; padding: 0; color: var(--cobalt); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
 .add-labour-toggle-inline { border: none; background: none; padding: 0; color: var(--cobalt); font-weight: 700; font-size: inherit; cursor: pointer; }
 .add-labour-hours-copy { margin: 8px 0 0; font-size: var(--text-md); color: #55554f; line-height: 1.4; }
+.add-labour-budget--budget .add-labour-hours-copy { color: #4756b0; }
 .rate-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 .rate-row .queue-field-input { flex: 1; }
 
@@ -5284,7 +5295,7 @@ code {
 }
 
 .btn-add-labour-save {
-  margin-top: 16px; width: 100%; border: none; cursor: pointer;
+  margin-top: 0; width: 100%; border: none; cursor: pointer;
   background: var(--cobalt); color: var(--paper);
   font-weight: 800; font-size: var(--text-lg); padding: 15px;
 }

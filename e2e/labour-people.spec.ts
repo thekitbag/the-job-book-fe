@@ -17,6 +17,8 @@ test.describe('Labour cost ownership at phone width', () => {
     await expect(panel.getByText(/£35\/hour.*£280 to pay/i)).toBeVisible()
     await page.getByRole('button', { name: /add labour/i }).click()
     const sheet = page.getByRole('dialog', { name: 'Add labour' })
+    await expect(sheet.locator('.queue-field-input')).toHaveCount(5)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     await sheet.getByLabel('Task').fill('Clearing up')
     await sheet.getByLabel('Hours').fill('2')
     await sheet.getByLabel('Rate').fill('0')
