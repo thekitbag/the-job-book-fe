@@ -250,9 +250,13 @@ export function deriveCostSummary(sections: MemoryViewSection[]): OrderedCostSum
   for (const item of ordered) {
     const hasAnyCost = !!(item.costAmount || item.totalCostAmount)
     const line = safeLineTotal(item)
-    if (line && line.currency === currency) {
+    if (line && line.currency === currency && line.amount > 0) {
       included.push(item)
       total += line.amount
+    } else if (trustedExplicitZero(item)) {
+      // A trusted £0 is an honest no-cost fact, not Budget spend and not a
+      // missing-price correction.
+      continue
     } else if (!hasAnyCost) {
       missingCostCount++
       excludedMemoryItemIds.push(item.id)
@@ -330,7 +334,14 @@ function excludedRow(item: MemoryViewItem, reason: SpendExclusionReason): Exclud
 // real one and so the rules are unit-testable. The live UI consumes the backend
 // response — it never treats this local recompute as confirmed truth.
 
-function budgetSpendRow(item: MemoryViewItem, amount: number, currency: string): BudgetSpendRow {
+export type BudgetPaidMarker = { moneyEventId: string; paidAt: string | null }
+
+function budgetSpendRow(
+  item: MemoryViewItem,
+  amount: number,
+  currency: string,
+  paidMarker?: BudgetPaidMarker,
+): BudgetSpendRow {
   const isLabour = item.memoryType === 'labour'
   const isBudgetCost = item.memoryType === 'budget_cost'
   const fallback = isLabour ? 'Labour' : 'Cost'
@@ -352,11 +363,63 @@ function budgetSpendRow(item: MemoryViewItem, amount: number, currency: string):
     lineTotalAmount: String(Math.round(amount * 100) / 100),
     lineTotalCurrency: currency,
     lineTotalLabel: `${formatMoney(amount, currency)} total`,
+    paymentState: paidMarker ? 'paid' : 'not_paid',
+    paidMoneyEventId: paidMarker?.moneyEventId ?? null,
+    paidAt: paidMarker?.paidAt ?? null,
+    eligibleForPaymentState: amount > 0,
   }
 }
 
 function sumRows(rows: BudgetSpendRow[]): number {
   return rows.reduce((n, r) => n + parseFloat(r.lineTotalAmount), 0)
+}
+
+function roundedAmount(n: number): string {
+  return String(Math.round(n * 100) / 100)
+}
+
+function paymentFields(rows: BudgetSpendRow[], missingPricePresent: boolean) {
+  const eligible = rows.filter(r => r.eligibleForPaymentState === true && parseFloat(r.lineTotalAmount) > 0)
+  const paid = eligible.filter(r => r.paymentState === 'paid')
+  const notPaid = eligible.filter(r => r.paymentState === 'not_paid')
+  const paidTotal = sumRows(paid)
+  const notPaidTotal = sumRows(notPaid)
+  const state = eligible.length === 0 ? null
+    : paid.length === eligible.length ? 'paid' as const
+    : notPaid.length === eligible.length ? 'not_paid' as const
+    : 'some_paid' as const
+
+  return {
+    paymentState: state,
+    paidAmount: paid.length > 0 ? roundedAmount(paidTotal) : null,
+    paidCurrency: paid.length > 0 ? 'GBP' as const : null,
+    paidLabel: paid.length > 0 ? `${formatMoney(paidTotal, 'GBP')} paid` : null,
+    notPaidAmount: notPaid.length > 0 ? roundedAmount(notPaidTotal) : null,
+    notPaidCurrency: notPaid.length > 0 ? 'GBP' as const : null,
+    notPaidLabel: notPaid.length > 0 ? `${formatMoney(notPaidTotal, 'GBP')} not paid` : null,
+    paymentStateReason: missingPricePresent
+      ? 'missing_price_present' as const
+      : eligible.length > 0 ? 'eligible_items' as const : 'no_eligible_items' as const,
+  }
+}
+
+function trustedExplicitZero(item: MemoryViewItem): boolean {
+  if ((item.uncertaintyFlags ?? []).length > 0 || (item.costCurrency && item.costCurrency !== 'GBP')) return false
+  const explicit = item.totalCostAmount ?? (
+    (item.costQualifier === 'total' || item.costQualifier === 'per_hour') ? item.costAmount : null
+  )
+  return explicit !== null && DECIMAL.test(explicit) && parseFloat(explicit) === 0
+}
+
+function unresolvedPrice(item: MemoryViewItem): boolean {
+  if (trustedExplicitZero(item)) return false
+  if (item.memoryType === 'ordered_material') return safeLineTotal(item) === null
+  if (item.memoryType === 'budget_cost') return safeBudgetCost(item) === null
+  if (item.memoryType === 'labour') {
+    const hasCostClaim = item.costAmount !== null || item.totalCostAmount !== null
+    return hasCostClaim && safeLabourCost(item) === null
+  }
+  return false
 }
 
 /**
@@ -371,6 +434,7 @@ export function deriveBudgetSummary(
   jobId: string,
   sections: MemoryViewSection[],
   categories: BudgetCategory[],
+  paidBySource: ReadonlyMap<string, BudgetPaidMarker> = new Map(),
 ): BudgetSummaryResponse {
   const currency = 'GBP'
   const active = categories.filter(c => !c.isArchived)
@@ -387,18 +451,18 @@ export function deriveBudgetSummary(
   const contributions: Array<{ item: MemoryViewItem; amount: number }> = []
   for (const item of ordered) {
     const line = safeLineTotal(item)
-    if (line && line.currency === currency) contributions.push({ item, amount: line.amount })
+    if (line && line.currency === currency && line.amount > 0) contributions.push({ item, amount: line.amount })
   }
   for (const item of labour) {
     const line = safeLabourCost(item)
-    if (line && line.currency === currency) contributions.push({ item, amount: line.amount })
+    if (line && line.currency === currency && line.amount > 0) contributions.push({ item, amount: line.amount })
   }
   for (const item of budgetCosts) {
     const line = safeBudgetCost(item)
-    if (line) contributions.push({ item, amount: line.amount })
+    if (line && line.amount > 0) contributions.push({ item, amount: line.amount })
   }
   for (const { item, amount } of contributions) {
-    const row = budgetSpendRow(item, amount, currency)
+    const row = budgetSpendRow(item, amount, currency, paidBySource.get(item.id))
     const catId = item.budgetCategoryId
     if (catId && activeIds.has(catId)) {
       const list = rowsByCategory.get(catId) ?? []
@@ -413,6 +477,8 @@ export function deriveBudgetSummary(
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map(category => {
       const rows = rowsByCategory.get(category.id) ?? []
+      const missingPricePresent = [...ordered, ...labour, ...budgetCosts]
+        .some(item => item.budgetCategoryId === category.id && unresolvedPrice(item))
       const spend = sumRows(rows)
       const hasSpend = rows.length > 0
       const budget = category.budgetAmount && DECIMAL.test(category.budgetAmount)
@@ -430,6 +496,7 @@ export function deriveBudgetSummary(
         remainingAmount: remaining !== null ? String(Math.round(remaining * 100) / 100) : null,
         remainingLabel: remaining !== null ? `${formatMoney(Math.abs(remaining), currency)} ${remaining < 0 ? 'over budget' : 'remaining'}` : null,
         overBudget: hasBudget && spend > budget,
+        ...paymentFields(rows, missingPricePresent),
         rows,
       }
     })
@@ -541,7 +608,7 @@ export function budgetCostContribution(sections: MemoryViewSection[]): { amount:
   const ids: string[] = []
   for (const item of items) {
     const line = safeBudgetCost(item)
-    if (line) { amount += line.amount; ids.push(item.id) }
+    if (line && line.amount > 0) { amount += line.amount; ids.push(item.id) }
   }
   return { amount, ids }
 }
@@ -810,6 +877,7 @@ export function deriveLabourSpendGroupFromBudget(bs: BudgetSummaryResponse): Lab
     remainingAmount: remaining !== null ? String(Math.round(remaining * 100) / 100) : null,
     remainingLabel: remaining !== null ? `${formatMoney(Math.abs(remaining), currency)} ${remaining < 0 ? 'over budget' : 'remaining'}` : null,
     overBudget: budget !== null && spend > budget,
+    ...paymentFields(rows, false),
     rows,
   }
 }

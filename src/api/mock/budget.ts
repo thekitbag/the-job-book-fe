@@ -2,6 +2,7 @@ import type { BudgetCategory, BudgetSummaryResponse, CreateBudgetCategoryRequest
 import { deriveBudgetSummary } from '../../memoryScan'
 import { ApiError } from '../client'
 import { mockBudgetCategoriesFor, mockSectionsFor } from './state'
+import { mockPaidMarkersBySource } from './money'
 
 let mockCategorySeq = 0
 
@@ -58,5 +59,10 @@ export function mockPatchBudgetCategory(jobId: string, categoryId: string, req: 
 }
 
 export function mockBudgetSummary(jobId: string): BudgetSummaryResponse {
-  return deriveBudgetSummary(jobId, mockSectionsFor(jobId), mockBudgetCategoriesFor(jobId))
+  return deriveBudgetSummary(
+    jobId,
+    mockSectionsFor(jobId),
+    mockBudgetCategoriesFor(jobId),
+    mockPaidMarkersBySource(jobId),
+  )
 }

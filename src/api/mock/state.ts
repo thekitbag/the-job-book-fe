@@ -4,6 +4,7 @@ import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER } from '
 // The one pilot job that gets the rich fixture (sections + budget
 // categories). Any other job — including one freshly created — starts empty.
 const MOCK_SEED_JOB_ID = 'job-pilot-garden-room-001'
+let mockScenario = 'default'
 
 // Canonical seed for the stateful mock memory-view. The bought/ordered section
 // deliberately spans the five Known-spend cases the pilot fix must distinguish:
@@ -555,7 +556,8 @@ export function mockSectionsFor(jobId: string): MemoryViewSection[] {
 }
 
 // Test seam: drop any accumulated mock edits.
-export function _resetMockMemoryForTesting(): void {
+export function _resetMockMemoryForTesting(scenario = 'default'): void {
+  mockScenario = scenario
   mockMemoryByJob = null
   mockBudgetByJob = null
 }
@@ -612,6 +614,43 @@ export function mockBudgetCategoriesFor(jobId: string): BudgetCategory[] {
         if (it.id === 'mem-labour-2') it.budgetCategoryId = 'cat-labour'
         // historical non-labour spend left assigned to the Labour category
         if (it.id === 'mem-view-015') it.budgetCategoryId = 'cat-labour'
+        if (mockScenario === 'payment-state') {
+          // Dedicated progressive-disclosure fixture:
+          // - electrics: all paid (hardcore; trusted £0 is excluded)
+          // - cladding: some paid (one of two plasterboard rows)
+          // - labour: not paid
+          // - timber: unresolved price takes precedence
+          if (it.id === 'mem-view-001') it.budgetCategoryId = 'cat-electrics'
+          if (it.id === 'mem-view-006' || it.id === 'mem-view-009') it.budgetCategoryId = 'cat-timber'
+          // Keep the all-not-paid Labour example unambiguous: this legacy
+          // non-labour invoice remains visible as committed cost, but outside
+          // the system Labour aggregate.
+          if (it.id === 'mem-view-015') it.budgetCategoryId = null
+        }
+      }
+      if (mockScenario === 'payment-state') {
+        upsertMockItem(sections, {
+          id: 'mem-view-zero',
+          memoryType: 'ordered_material',
+          summary: 'Cable offcuts at no cost',
+          materialName: 'cable offcuts',
+          quantity: '1',
+          unit: 'bundle',
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: null,
+          costAmount: '0',
+          costCurrency: 'GBP',
+          costQualifier: 'total',
+          totalCostAmount: '0',
+          uncertaintyFlags: [],
+          budgetCategoryId: 'cat-electrics',
+          sourceCandidateFactId: null,
+          reviewDecisionId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          source: null,
+        })
       }
     } else {
       mockBudgetByJob.set(jobId, []) // a job with no budget categories

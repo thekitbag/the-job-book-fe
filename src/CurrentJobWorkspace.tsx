@@ -18,7 +18,7 @@ import { useToast } from './Toast'
 import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -455,6 +455,17 @@ export default function CurrentJobWorkspace({
     onUndoPaid: (item) => { void handleUndoPaid(item) },
     pendingItemId: markingPaidId,
   }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, handleUndoPaid, markingPaidId])
+
+  // Paid-now source creation is atomic on the backend. Once the source exists,
+  // refetch both authoritative views: Budget for commitment/payment state and
+  // Money for the one linked movement.
+  const addMemoryItem = mem.addMemoryItem
+  const reloadMoney = money.reload
+  const addBoughtItem = useCallback(async (req: CreateMemoryItemRequest) => {
+    const created = await addMemoryItem(req)
+    if (req.markPaid) await reloadMoney()
+    return created
+  }, [addMemoryItem, reloadMoney])
 
   const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
   const saveTitle = async () => {
@@ -936,6 +947,8 @@ export default function CurrentJobWorkspace({
                   ariaLabel="Bought materials"
                   sectionAdds={{ ordered_materials: { kind: 'spend', label: 'Add bought item' } }}
                   markPaid={markPaid}
+                  onAddMemoryItem={addBoughtItem}
+                  budgetCategories={mem.budgetCategories}
                 />
               ) : materialsTab === 'used' ? (
                 <MemorySectionTab

@@ -17,7 +17,7 @@ import { resetMockApiForE2e } from './api/mock/reset'
 // that context, before App reads auth/jobs/memory. Reloads within the same test
 // preserve state through the sessionStorage guard.
 if (USE_MOCK && localStorage.getItem('job-book-e2e-seed') && !sessionStorage.getItem('job-book-e2e-reset-done')) {
-  resetMockApiForE2e()
+  resetMockApiForE2e(localStorage.getItem('job-book-e2e-seed') ?? 'default')
   localStorage.removeItem('job-book-selected-job-id')
   sessionStorage.setItem('job-book-e2e-reset-done', '1')
 }

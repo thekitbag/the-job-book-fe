@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { track } from './analytics'
 import BottomSheet from './BottomSheet'
 import { deriveEachTotal, formatMoney } from './memoryScan'
@@ -74,6 +74,15 @@ function DirectAddFields({
   const spendPreviewTotal = kind === 'spend' && costBasis === 'each'
     ? deriveEachTotal({ quantity, unit, costAmount, costQualifier: 'each' })
     : null
+  const canMarkBoughtPaid = kind === 'spend' && (
+    costBasis === 'total'
+      ? costOk
+      : spendPreviewTotal !== null && parseFloat(spendPreviewTotal) > 0
+  )
+
+  useEffect(() => {
+    if (kind === 'spend' && !canMarkBoughtPaid) setAlreadyPaid(false)
+  }, [kind, canMarkBoughtPaid])
 
   function build(): CreateMemoryItemRequest {
     if (kind === 'spend') {
@@ -90,6 +99,7 @@ function DirectAddFields({
         costQualifier: amount ? costBasis : null,
         costCurrency: amount ? 'GBP' : null,
         budgetCategoryId: categoryId || null,
+        markPaid: alreadyPaid && canMarkBoughtPaid,
       }
       // Only send an explicit total for a `total` basis; for `each` omit the key
       // so the backend derives quantity × unit cost.
@@ -184,6 +194,15 @@ function DirectAddFields({
             <span className="queue-field-label">Note (optional)</span>
             <input className="queue-field-input" name="locationOrUse" value={locationOrUse} onChange={e => setLocationOrUse(e.target.value)} placeholder="e.g. for the back wall" />
           </label>
+          {canMarkBoughtPaid && (
+            <label className="direct-add-paid">
+              <input type="checkbox" name="alreadyPaid" aria-label="Already paid" checked={alreadyPaid} onChange={e => setAlreadyPaid(e.target.checked)} />
+              <span className="direct-add-paid-text">
+                <span className="direct-add-paid-title">Already paid</span>
+                <span className="direct-add-paid-sub">Also records it in Money out</span>
+              </span>
+            </label>
+          )}
         </>
       )}
 

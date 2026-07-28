@@ -1,7 +1,7 @@
 import type { JobMoneyResponse, MarkMoneyOutRequest, MemoryViewItem, MoneyRow } from '../../types'
-import { deriveEachTotal, deriveHourlyTotal } from '../../memoryScan'
+import { deriveEachTotal, deriveHourlyTotal, type BudgetPaidMarker } from '../../memoryScan'
 import { ApiError } from '../client'
-import { findMockItem, mockSectionsFor } from './state'
+import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor } from './state'
 import { mockGetJobPayments } from './payments'
 
 // Stateful mock for Money — the unified actual-movement read model.
@@ -33,10 +33,67 @@ type MoneyEvent = {
 
 let nextId = 1
 const eventsByJob = new Map<string, MoneyEvent[]>()
+let mockMoneyScenario = 'default'
 
 function events(jobId: string): MoneyEvent[] {
   let e = eventsByJob.get(jobId)
-  if (!e) { e = []; eventsByJob.set(jobId, e) }
+  if (!e) {
+    e = []
+    eventsByJob.set(jobId, e)
+    if (mockMoneyScenario === 'payment-state' && jobId === 'job-pilot-garden-room-001') {
+      const now = new Date().toISOString()
+      e.push(
+        {
+          id: 'mock-money-seed-cladding',
+          jobId,
+          direction: 'out',
+          kind: 'cost_paid',
+          amount: '600',
+          occurredAt: now,
+          note: null,
+          reference: null,
+          sourceMemoryItemId: 'mem-view-004',
+          sourceItemLabel: 'plasterboard',
+          sourceMemoryType: 'ordered_material',
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'mock-money-seed-electrics',
+          jobId,
+          direction: 'out',
+          kind: 'cost_paid',
+          amount: '40',
+          occurredAt: new Date(Date.now() - 60_000).toISOString(),
+          note: null,
+          reference: null,
+          sourceMemoryItemId: 'mem-view-001',
+          sourceItemLabel: 'hardcore',
+          sourceMemoryType: 'ordered_material',
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'mock-money-seed-uncategorised',
+          jobId,
+          direction: 'out',
+          kind: 'cost_paid',
+          amount: '60',
+          occurredAt: new Date(Date.now() - 86_400_000).toISOString(),
+          note: 'Historic plant payment',
+          reference: null,
+          sourceMemoryItemId: null,
+          sourceItemLabel: 'Plant hire',
+          sourceMemoryType: null,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      )
+    }
+  }
   return e
 }
 
@@ -56,6 +113,16 @@ function trustedLineTotal(item: MemoryViewItem): { amount: string; currency: 'GB
   return { amount: total, currency: 'GBP' }
 }
 
+export function assertMockPaidEligible(item: MemoryViewItem): { amount: string; currency: 'GBP' } {
+  const line = trustedLineTotal(item)
+  if (!line) {
+    const err = new ApiError('This item can’t be marked paid', 400) as ApiError & { code?: string }
+    err.code = 'INVALID_FIELD'
+    throw err
+  }
+  return line
+}
+
 function itemLabel(item: MemoryViewItem): string {
   if (item.memoryType === 'labour') return item.labourTask?.trim() || item.labourPerson?.trim() || 'Labour'
   if (item.memoryType === 'budget_cost') return item.labourTask?.trim() || item.labourPerson?.trim() || item.materialName?.trim() || item.summary
@@ -63,6 +130,13 @@ function itemLabel(item: MemoryViewItem): string {
 }
 
 function eventToRow(e: MoneyEvent): MoneyRow {
+  // Category initialisation also applies the scenario's seeded assignments, so
+  // it must happen before resolving the current source item.
+  const categories = mockBudgetCategoriesFor(e.jobId)
+  const source = e.sourceMemoryItemId ? findMockItem(mockSectionsFor(e.jobId), e.sourceMemoryItemId) : undefined
+  const sourceCategory = source?.budgetCategoryId
+    ? categories.find(c => c.id === source.budgetCategoryId && !c.isArchived)
+    : undefined
   return {
     id: e.id,
     jobId: e.jobId,
@@ -77,6 +151,8 @@ function eventToRow(e: MoneyEvent): MoneyRow {
     sourceMemoryItemId: e.sourceMemoryItemId,
     sourceItemLabel: e.sourceItemLabel,
     sourceMemoryType: e.sourceMemoryType,
+    sourceBudgetCategoryId: sourceCategory?.id ?? null,
+    sourceBudgetCategoryName: sourceCategory?.name ?? null,
     editable: false,
     removable: e.kind === 'cost_paid',
     createdAt: e.createdAt,
@@ -103,6 +179,8 @@ export function mockGetJobMoney(jobId: string): JobMoneyResponse {
     sourceMemoryItemId: null,
     sourceItemLabel: null,
     sourceMemoryType: null,
+    sourceBudgetCategoryId: null,
+    sourceBudgetCategoryName: null,
     editable: true,
     removable: true,
     createdAt: p.createdAt,
@@ -145,6 +223,19 @@ export function mockGetJobMoney(jobId: string): JobMoneyResponse {
   }
 }
 
+export function mockPaidMarkersBySource(jobId: string): ReadonlyMap<string, BudgetPaidMarker> {
+  const paid = new Map<string, BudgetPaidMarker>()
+  for (const event of events(jobId)) {
+    if (!event.isDeleted && event.kind === 'cost_paid' && event.sourceMemoryItemId) {
+      paid.set(event.sourceMemoryItemId, {
+        moneyEventId: event.id,
+        paidAt: event.occurredAt,
+      })
+    }
+  }
+  return paid
+}
+
 function parseOccurredAt(occurredAt: string | null | undefined): string {
   if (!occurredAt) return new Date().toISOString()
   // Date-only → UK local noon (kept simple as UTC noon in the mock).
@@ -156,12 +247,7 @@ export function mockMarkMoneyOut(jobId: string, req: MarkMoneyOutRequest): JobMo
   const item = findMockItem(mockSectionsFor(jobId), req.sourceMemoryItemId)
   if (!item) throw new ApiError('Source item not found', 404)
 
-  const line = trustedLineTotal(item)
-  if (!line) {
-    const err = new ApiError('This item can’t be marked paid', 400) as ApiError & { code?: string }
-    err.code = 'INVALID_FIELD'
-    throw err
-  }
+  const line = assertMockPaidEligible(item)
 
   // One active paid-marker per source item.
   const existing = events(jobId).find(
@@ -238,7 +324,8 @@ export function recordMockRefund(jobId: string, returnedItem: MemoryViewItem): v
 }
 
 /** Test-only: reset all mock money-event state. */
-export function _resetMockMoneyForTesting(): void {
+export function _resetMockMoneyForTesting(scenario = 'default'): void {
+  mockMoneyScenario = scenario
   eventsByJob.clear()
   nextId = 1
 }

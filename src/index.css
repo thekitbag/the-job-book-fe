@@ -3278,6 +3278,65 @@ code {
   margin: 14px 0 0;
 }
 
+/* Payment is context on Budget, not a fourth collapsed money figure. The
+   category keeps its existing Cost / Budget / Remaining scan and adds one
+   word-state beneath it. Exact amounts only exist in the disclosed block. */
+.budget-payment-line {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.budget-payment-line:empty { display: none; }
+.budget-payment-state {
+  display: inline-block;
+  padding: 3px 7px;
+  border: 1px solid var(--grey-text);
+  color: var(--grey-text);
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.budget-payment-state--paid {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+}
+.budget-payment-state--some_paid {
+  border-color: var(--cobalt);
+  color: var(--cobalt);
+}
+.budget-payment-breakdown {
+  display: grid;
+  grid-template-columns: 1fr;
+  margin: 14px 0 0;
+  border-top: var(--rule-hair);
+  border-bottom: var(--rule-hair);
+}
+.budget-payment-breakdown--split { grid-template-columns: 1fr 1fr; }
+.budget-payment-breakdown > div { padding: 12px 0; }
+.budget-payment-breakdown--split > div + div {
+  padding-left: 16px;
+  border-left: var(--rule-hair);
+}
+.budget-payment-breakdown dt {
+  margin: 0;
+  color: var(--grey-text);
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.budget-payment-breakdown dd {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Per-category progress bar. Same 6px ink-on-track as the summary block, so
    spent-against-budget reads identically at both levels. */
 .budget-bar {
@@ -4556,7 +4615,19 @@ code {
 }
 .money-filter--active { color: var(--ink); border-bottom-color: var(--ink); }
 
-.money-list { list-style: none; margin: 0; padding: 0; border-top: var(--rule-heavy); }
+.money-list { margin: 0; padding: 0; border-top: var(--rule-heavy); }
+.money-day { margin: 0; }
+.money-day-label {
+  margin: 0;
+  padding: 9px 10px;
+  background: var(--grey-panel);
+  color: var(--grey-text);
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.money-day-rows { list-style: none; margin: 0; padding: 0; }
 .money-row {
   border-bottom: var(--rule-hair);
   padding: 15px 0;
@@ -4573,7 +4644,9 @@ code {
 .money-row-amount--in { color: var(--ink); }
 .money-row-amount--out { color: var(--grey-text); }
 .money-row-meta-line { display: flex; gap: 8px; flex-wrap: wrap; }
-.money-row-when, .money-row-meta { font-size: var(--text-sm); color: var(--grey-text); }
+.money-row-context, .money-row-when, .money-row-meta { font-size: var(--text-sm); color: var(--grey-text); }
+.money-row-context { font-weight: 700; }
+.money-row-context + .money-row-when::before { content: '·'; margin-right: 8px; }
 .money-row-actions { display: flex; align-items: center; gap: 20px; margin-top: 5px; }
 
 /* Paid tag on a Budget cost row — the money moved, said quietly so the row
