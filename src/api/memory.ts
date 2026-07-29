@@ -3,6 +3,8 @@ import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
 import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView, mockRemoveMemoryItem, mockReturnMemoryItem, mockUpdateMemoryItem, mockVerifyMemoryItem } from './mock/memory'
 
+export const PAID_LABOUR_COST_EDIT_MESSAGE = 'Undo paid before changing the cost.'
+
 // GET /api/jobs/:jobId/memory-view — trusted memory for the job, grouped by section.
 export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> {
   if (USE_MOCK) {
@@ -34,7 +36,13 @@ export async function updateMemoryItem(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(edit),
   })
-  if (res.status === 400) throw new ApiError('Invalid memory edit', 400)
+  if (res.status === 400) {
+    const body = await res.json().catch(() => null) as { code?: string; message?: string } | null
+    if (body?.code === 'INVALID_FIELD' && body.message?.includes('Undo paid before changing')) {
+      throw new ApiError(PAID_LABOUR_COST_EDIT_MESSAGE, 400)
+    }
+    throw new ApiError('Invalid memory edit', 400)
+  }
   if (res.status === 401) throw new ApiError('Unauthenticated', 401)
   if (res.status === 403) throw new ApiError('Forbidden', 403)
   if (res.status === 404) throw new ApiError('Memory item not found', 404)

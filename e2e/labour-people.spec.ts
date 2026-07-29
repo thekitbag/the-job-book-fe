@@ -33,4 +33,34 @@ test.describe('Labour cost ownership at phone width', () => {
     await expect(page.getByRole('region', { name: /^labour$/i }).getByText('£880', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /add cost/i })).toHaveCount(0)
   })
+
+  test('an old paid fixed-total row can edit text but guards cost changes', async ({ page }) => {
+    await openLabour(page)
+
+    await page.getByRole('button', { name: /open actions for roof/i }).click()
+    await expect(page.getByRole('button', { name: /mark as paid/i })).toBeVisible()
+    await page.getByRole('button', { name: /mark as paid/i }).click()
+    await expect(page.getByText('Marked paid', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: /open actions for roof/i }).click()
+    await page.getByRole('button', { name: /fix memory/i }).click()
+    const textEdit = page.getByRole('form', { name: /edit memory/i })
+    await expect(textEdit.getByLabel('Total cost (£)')).toHaveValue('600')
+    await textEdit.getByLabel('Task / work area').fill('roof finishing')
+    await textEdit.getByRole('button', { name: /save memory/i }).click()
+
+    await expect(page.getByRole('button', { name: /open actions for roof finishing/i })).toBeVisible()
+    await page.getByRole('button', { name: /open actions for roof finishing/i }).click()
+    await expect(page.getByText(/Paid — recorded in Money out/i)).toBeVisible()
+    await page.getByRole('button', { name: /fix memory/i }).click()
+
+    const costEdit = page.getByRole('form', { name: /edit memory/i })
+    await costEdit.getByLabel('Total cost (£)').fill('650')
+    await expect(costEdit.getByRole('alert')).toHaveText('Undo paid before changing the cost.')
+    await expect(costEdit.getByRole('button', { name: /save memory/i })).toBeDisabled()
+
+    await page.getByRole('button', { name: /back/i }).click()
+    await expect(page.getByRole('button', { name: /undo paid/i })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  })
 })

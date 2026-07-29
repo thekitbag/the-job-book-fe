@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
+import { ApiError, getReviewQueue, PAID_LABOUR_COST_EDIT_MESSAGE, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import { track } from './analytics'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
@@ -832,8 +832,11 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         }
       })
       setEditingMemId(null)
-    } catch {
-      setMemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+    } catch (error) {
+      const message = error instanceof ApiError && error.message === PAID_LABOUR_COST_EDIT_MESSAGE
+        ? PAID_LABOUR_COST_EDIT_MESSAGE
+        : 'Could not save — tap to retry'
+      setMemErrors(e => ({ ...e, [memoryItemId]: message }))
     } finally {
       setMemSubmittingId(null)
     }

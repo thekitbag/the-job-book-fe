@@ -141,6 +141,40 @@ describe('ItemActionDrawer — Mark as paid', () => {
     expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
   })
 
+  it('guards paid labour cost edits and keeps Undo paid available through Back', () => {
+    const labour = item({
+      memoryType: 'labour',
+      summary: 'Tom did 8 hours on electrics',
+      materialName: null,
+      quantity: null,
+      unit: null,
+      supplierName: null,
+      costAmount: '35',
+      costQualifier: 'per_hour',
+      totalCostAmount: '280',
+      labourHours: '8',
+      labourPerson: 'Tom',
+      labourPersonId: null,
+      labourTask: 'electrics',
+    })
+    const props = renderDrawer({
+      item: labour,
+      title: 'electrics',
+      markPaid: controls({ isPaid: () => true }),
+    })
+
+    fireEvent.click(drawer().getByRole('button', { name: /fix memory/i }))
+    const form = drawer().getByRole('form', { name: /edit memory/i })
+    fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '40' } })
+
+    expect(drawer().getByRole('alert')).toHaveTextContent('Undo paid before changing the cost.')
+    expect(form.querySelector('button[type="submit"]')).toBeDisabled()
+    expect(props.onSave).not.toHaveBeenCalled()
+
+    fireEvent.click(drawer().getByRole('button', { name: /^‹ back/i }))
+    expect(drawer().getByRole('button', { name: /undo paid/i })).toBeInTheDocument()
+  })
+
   it('omits Mark as paid when the item is not eligible', () => {
     renderDrawer({ markPaid: controls({ canMarkPaid: () => false }) })
     expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()

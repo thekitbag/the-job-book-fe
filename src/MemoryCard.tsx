@@ -223,7 +223,14 @@ export default function MemoryCard({
   if (isEditing) {
     return (
       <div className="mem-card mem-card--editing">
-        <MemoryEditForm initial={memoryItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
+        <MemoryEditForm
+          initial={memoryItemToEdit(item)}
+          submitting={submitting}
+          categories={categories}
+          isPaid={markPaid?.isPaid(item) ?? false}
+          onSubmit={onSave}
+          onCancel={onCancelEdit}
+        />
         {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
       </div>
     )

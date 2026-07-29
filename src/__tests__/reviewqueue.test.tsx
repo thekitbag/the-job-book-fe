@@ -1113,6 +1113,18 @@ describe('ReviewQueueScreen — Fix memory on remembered cards', () => {
     await waitFor(() => expect(screen.getByText(/could not save/i)).toBeInTheDocument())
     expect(screen.getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
   })
+
+  it('surfaces the paid labour cost guard returned by the backend', async () => {
+    mockUpdateMemoryItem.mockRejectedValue(new api.ApiError(api.PAID_LABOUR_COST_EDIT_MESSAGE, 400))
+    await openRemembered()
+    fireEvent.click(screen.getByRole('button', { name: /fix memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Undo paid before changing the cost.')
+    })
+    expect(screen.getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
+  })
 })
 
 // ── Worth checking resolution in Things to check ────────────────────────────
