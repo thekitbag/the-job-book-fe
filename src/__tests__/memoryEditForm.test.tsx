@@ -19,9 +19,9 @@ const CATS: BudgetCategory[] = [
   { id: 'c2', jobId: 'j', name: 'cladding', budgetAmount: null, budgetCurrency: null, sortOrder: 1, isArchived: false, createdAt: '', updatedAt: '' },
 ]
 
-function setup(initial: MemoryItemEdit, categories?: BudgetCategory[]) {
+function setup(initial: MemoryItemEdit, categories?: BudgetCategory[], isPaid = false) {
   const onSubmit = vi.fn()
-  render(<MemoryEditForm initial={initial} submitting={false} categories={categories} onSubmit={onSubmit} onCancel={() => {}} />)
+  render(<MemoryEditForm initial={initial} submitting={false} categories={categories} isPaid={isPaid} onSubmit={onSubmit} onCancel={() => {}} />)
   return { onSubmit }
 }
 
@@ -193,6 +193,119 @@ describe('MemoryEditForm — labour', () => {
     expect(screen.queryByLabelText('Hours')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ memoryType: 'used_material', labourHours: null, labourTask: null }))
+  })
+})
+
+describe('MemoryEditForm — paid labour hotfix', () => {
+  const paidHourly = (over: Partial<MemoryItemEdit> = {}) => initialEdit({
+    memoryType: 'labour',
+    materialName: null,
+    labourHours: '8',
+    labourPerson: 'Tom',
+    labourTask: 'electrics',
+    costAmount: '35',
+    costCurrency: 'GBP',
+    costQualifier: 'per_hour',
+    totalCostAmount: '280',
+    happenedAt: '2026-07-07T12:00:00',
+    ...over,
+  })
+
+  it('saves task, date and person text changes on paid labour without resending cost fields', () => {
+    const { onSubmit } = setup(paidHourly(), CATS, true)
+    fireEvent.change(screen.getByLabelText('Person / role'), { target: { value: 'Tom S' } })
+    fireEvent.change(screen.getByLabelText('Task / work area'), { target: { value: 'first-fix electrics' } })
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-07-08' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    const payload = onSubmit.mock.calls[0][0]
+    expect(payload).toMatchObject({
+      labourPerson: 'Tom S',
+      labourTask: 'first-fix electrics',
+      happenedAt: '2026-07-08T12:00:00',
+    })
+    for (const field of ['labourHours', 'costAmount', 'costCurrency', 'costQualifier', 'totalCostAmount']) {
+      expect(payload).not.toHaveProperty(field)
+    }
+  })
+
+  it('keeps a legacy paid labour row with labourPersonId null editable', () => {
+    const { onSubmit } = setup(paidHourly({ labourPersonId: null }), CATS, true)
+    fireEvent.change(screen.getByLabelText('Task / work area'), { target: { value: 'snagging' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      labourPersonId: null,
+      labourTask: 'snagging',
+    }))
+  })
+
+  it.each([
+    ['hours', paidHourly(), 'Hours', '9'],
+    ['rate', paidHourly(), 'costAmount', '40'],
+    ['fixed total', paidHourly({ costAmount: null, costQualifier: 'total', totalCostAmount: '600' }), 'costAmount', '650'],
+  ])('guards a paid labour %s change until paid is undone', (_label, initial, field, value) => {
+    const { onSubmit } = setup(initial, CATS, true)
+    const form = screen.getByRole('form', { name: /edit memory/i })
+    const input = field === 'Hours'
+      ? screen.getByLabelText('Hours')
+      : form.querySelector('input[name="costAmount"]')!
+    fireEvent.change(input, { target: { value } })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Undo paid before changing the cost.')
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('allows a blank hourly rate and sends an explicit hours-only cost clear', () => {
+    const { onSubmit } = setup(paidHourly(), CATS)
+    const rate = screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!
+    fireEvent.change(rate, { target: { value: '' } })
+
+    expect(screen.getByText('Hours only — no labour cost')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      labourHours: '8',
+      costAmount: null,
+      costCurrency: null,
+      costQualifier: null,
+      totalCostAmount: null,
+    }))
+  })
+
+  it('allows a £0 hourly rate and saves it as zero-cost labour', () => {
+    const { onSubmit } = setup(paidHourly(), CATS)
+    const rate = screen.getByRole('form', { name: /edit memory/i }).querySelector('input[name="costAmount"]')!
+    fireEvent.change(rate, { target: { value: '0' } })
+
+    expect(screen.getByText('£0 rate — no labour cost')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save memory/i })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+    const payload = onSubmit.mock.calls[0][0]
+    expect(payload).toMatchObject({
+      labourHours: '8',
+      costAmount: '0',
+      costCurrency: 'GBP',
+      costQualifier: 'per_hour',
+    })
+    expect(payload).not.toHaveProperty('totalCostAmount')
+  })
+
+  it.each([
+    ['hours-only', paidHourly({ costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null })],
+    ['£0 rate', paidHourly({ costAmount: '0', costQualifier: 'per_hour', totalCostAmount: null })],
+  ])('changes hours on %s labour without resending unchanged cost fields', (_label, initial) => {
+    const { onSubmit } = setup(initial, CATS)
+    fireEvent.change(screen.getByLabelText('Hours'), { target: { value: '9' } })
+    fireEvent.click(screen.getByRole('button', { name: /save memory/i }))
+
+    const payload = onSubmit.mock.calls[0][0]
+    expect(payload.labourHours).toBe('9')
+    for (const field of ['costAmount', 'costCurrency', 'costQualifier', 'totalCostAmount']) {
+      expect(payload).not.toHaveProperty(field)
+    }
   })
 })
 

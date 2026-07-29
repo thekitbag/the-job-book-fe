@@ -28,6 +28,22 @@ const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
 ]
 
 const CATEGORY_TYPES = new Set<MemoryType>(['ordered_material', 'labour'])
+const DECIMAL = /^\d+(\.\d+)?$/
+
+function sameDecimal(left: string | null | undefined, right: string | null | undefined): boolean {
+  if ((left ?? null) === (right ?? null)) return true
+  if (!left || !right || !DECIMAL.test(left) || !DECIMAL.test(right)) return false
+  return Number(left) === Number(right)
+}
+
+function labourCostInput(edit: MemoryItemEdit): string | null {
+  if (edit.costQualifier === 'total') return edit.costAmount ?? edit.totalCostAmount ?? null
+  return edit.costAmount
+}
+
+function isPositiveDecimal(value: string | null | undefined): boolean {
+  return !!value && DECIMAL.test(value) && Number(value) > 0
+}
 
 /**
  * Shared structured edit form for trusted memory ("Fix memory").
@@ -38,6 +54,7 @@ export default function MemoryEditForm({
   initial,
   submitting,
   categories = [],
+  isPaid = false,
   onSubmit,
   onCancel,
 }: {
@@ -46,10 +63,20 @@ export default function MemoryEditForm({
   // Active budget categories; when empty (or item not bought/ordered) no category
   // control is shown. Category applies only to ordered_material memory.
   categories?: BudgetCategory[]
+  // Known paid state from the item drawer. Text/date/person corrections remain
+  // editable; cost-affecting changes must go through Undo paid first.
+  isPaid?: boolean
   onSubmit: (edit: MemoryItemEdit) => void
   onCancel: () => void
 }) {
-  const [form, setForm] = useState<MemoryItemEdit>(initial)
+  const [form, setForm] = useState<MemoryItemEdit>(() =>
+    initial.memoryType === 'labour' &&
+    initial.costQualifier === 'total' &&
+    !initial.costAmount &&
+    initial.totalCostAmount
+      ? { ...initial, costAmount: initial.totalCostAmount }
+      : initial,
+  )
   // Labour effective day, edited as a date-only value (saved as local noon).
   const [happenedDate, setHappenedDate] = useState(initial.happenedAt ? localDateKey(initial.happenedAt) : '')
   const setStr = (k: Exclude<keyof MemoryItemEdit, 'memoryType' | 'costQualifier'>, v: string) =>
@@ -84,7 +111,39 @@ export default function MemoryEditForm({
         ? hourlyTotalGaps({ labourHours: form.labourHours, costAmount: form.costAmount })
         : eachTotalGaps({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount }))
     : []
-  const eachRecalcBlocked = eachRecalc && eachGaps.length > 0
+  const labourRateBlank = isLabour && form.costQualifier === 'per_hour' && !form.costAmount
+  const labourRateZero = isLabour &&
+    form.costQualifier === 'per_hour' &&
+    !!form.costAmount &&
+    DECIMAL.test(form.costAmount) &&
+    Number(form.costAmount) === 0
+  const labourNoCostRate = labourRateBlank || labourRateZero
+  const validLabourHours = !!form.labourHours && DECIMAL.test(form.labourHours) && Number(form.labourHours) > 0
+  const eachRecalcBlocked = eachRecalc && (
+    labourNoCostRate ? !validLabourHours : eachGaps.length > 0
+  )
+  const labourHoursChanged = isLabour &&
+    initial.memoryType === 'labour' &&
+    !sameDecimal(form.labourHours, initial.labourHours)
+  const labourRateOrTotalChanged = isLabour &&
+    initial.memoryType === 'labour' &&
+    !sameDecimal(labourCostInput(form), labourCostInput(initial))
+  const labourBasisChanged = isLabour &&
+    initial.memoryType === 'labour' &&
+    (form.costQualifier ?? null) !== (initial.costQualifier ?? null)
+  const hourlyCostAffectedByHours = labourHoursChanged && (
+    (initial.costQualifier === 'per_hour' && isPositiveDecimal(initial.costAmount)) ||
+    (form.costQualifier === 'per_hour' && isPositiveDecimal(form.costAmount))
+  )
+  const labourCostChanged = isLabour && (
+    initial.memoryType !== 'labour' ||
+    labourRateOrTotalChanged ||
+    labourBasisChanged ||
+    hourlyCostAffectedByHours
+  )
+  const paidLabourCostChanged = isPaid && initial.memoryType === 'labour' && (
+    form.memoryType !== 'labour' || labourCostChanged
+  )
   // Pilot is GBP, but preserve any non-GBP currency already on the item.
   const currencyCue = form.costCurrency && form.costCurrency !== 'GBP' ? `(${form.costCurrency})` : '(£)'
   const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
@@ -119,9 +178,29 @@ export default function MemoryEditForm({
     // the explicit total. Anything else (`approx`/`unknown`/not stated) has no
     // trusted total to send — omit rather than push a stale value.
     if (!isNote) {
-      if (eachRecalc) delete payload.totalCostAmount
-      else if (isTotalBasis) payload.totalCostAmount = payload.costAmount
-      else delete payload.totalCostAmount
+      if (isLabour && initial.memoryType === 'labour' && !labourCostChanged) {
+        // PATCH is partial. Omitting unchanged cost inputs is essential for
+        // legacy paid rows: resending a full-form cost expression can look
+        // like a cost mutation to the backend even when Mike changed only text.
+        const partial = payload as Partial<MemoryItemEdit>
+        if (!labourHoursChanged) delete partial.labourHours
+        delete partial.costAmount
+        delete partial.costCurrency
+        delete partial.costQualifier
+        delete partial.totalCostAmount
+      } else if (isLabour && labourRateBlank) {
+        // Blank hourly rate is an explicit move to hours-only labour.
+        payload.costAmount = null
+        payload.costCurrency = null
+        payload.costQualifier = null
+        payload.totalCostAmount = null
+      } else if (eachRecalc) {
+        delete payload.totalCostAmount
+      } else if (isTotalBasis) {
+        payload.totalCostAmount = payload.costAmount
+      } else {
+        delete payload.totalCostAmount
+      }
     }
     onSubmit(payload)
   }
@@ -249,7 +328,11 @@ export default function MemoryEditForm({
             </select>
           </label>
           {eachRecalc && (
-            derivedTotal ? (
+            labourNoCostRate && validLabourHours ? (
+              <p className="cost-preview" role="status">
+                {labourRateZero ? '£0 rate — no labour cost' : 'Hours only — no labour cost'}
+              </p>
+            ) : derivedTotal ? (
               <p className="cost-preview" role="status">
                 {isLabour
                   ? <>{form.labourHours} hours × {formatMoney(Number(form.costAmount), 'GBP')}/hour = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong></>
@@ -263,8 +346,13 @@ export default function MemoryEditForm({
           )}
         </>
       )}
+      {paidLabourCostChanged && (
+        <p className="queue-item-error" role="alert">
+          Undo paid before changing the cost.
+        </p>
+      )}
       <div className="queue-edit-actions">
-        <button type="submit" className="btn-queue-save" disabled={submitting || eachRecalcBlocked}>
+        <button type="submit" className="btn-queue-save" disabled={submitting || eachRecalcBlocked || paidLabourCostChanged}>
           {submitting ? 'Saving…' : 'Save memory'}
         </button>
         <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>

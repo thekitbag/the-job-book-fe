@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ApiError,
+  PAID_LABOUR_COST_EDIT_MESSAGE,
   assignMemoryItemCategory,
   createBudgetCategory,
   createMemoryItem,
@@ -210,8 +212,11 @@ export function useJobMemory(job: Job) {
       setEditingId(null)
       void refreshSummary()
       void loadBudget()
-    } catch {
-      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+    } catch (error) {
+      const message = error instanceof ApiError && error.message === PAID_LABOUR_COST_EDIT_MESSAGE
+        ? PAID_LABOUR_COST_EDIT_MESSAGE
+        : 'Could not save — tap to retry'
+      setItemErrors(e => ({ ...e, [memoryItemId]: message }))
     } finally {
       setSubmittingId(null)
     }

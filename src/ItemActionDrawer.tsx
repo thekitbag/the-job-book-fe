@@ -201,6 +201,7 @@ export default function ItemActionDrawer({
             initial={memoryItemToEdit(item)}
             submitting={submitting}
             categories={categories}
+            isPaid={markPaid?.isPaid(item) ?? false}
             onSubmit={edit => { savingRef.current = true; onSave(edit) }}
             onCancel={back}
           />

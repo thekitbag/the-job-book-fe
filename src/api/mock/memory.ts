@@ -1,5 +1,5 @@
 import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, ReturnMaterialRequest, ReturnMaterialResponse } from '../../types'
-import { deriveCostSummary, deriveEachTotal, deriveGrossKnownCost, deriveLabourHoursSummary, deriveLabourSummary, deriveRefundsSummary, deriveTotalKnownCost } from '../../memoryScan'
+import { deriveCostSummary, deriveEachTotal, deriveGrossKnownCost, deriveHourlyTotal, deriveLabourHoursSummary, deriveLabourSummary, deriveRefundsSummary, deriveTotalKnownCost } from '../../memoryScan'
 import { ApiError } from '../client'
 import { MOCK_JOBS } from './jobs'
 import { mockFindLabourPerson } from './labourPeople'
@@ -45,6 +45,12 @@ export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: 
   const sections = mockSectionsFor(jobId)
   const existing = findMockItem(sections, memoryItemId)
   const now = new Date().toISOString()
+  const costExpressionChanged = (
+    'costAmount' in edit ||
+    'costCurrency' in edit ||
+    'costQualifier' in edit ||
+    'labourHours' in edit
+  )
   const draft: MemoryViewItem = {
     id: memoryItemId,
     memoryType: edit.memoryType,
@@ -55,12 +61,16 @@ export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: 
     supplierName: edit.supplierName,
     deliveryTiming: edit.deliveryTiming,
     locationOrUse: edit.locationOrUse,
-    costAmount: edit.costAmount,
-    costCurrency: edit.costCurrency,
-    costQualifier: edit.costQualifier,
+    // PATCH cost inputs are partial. A text/date/person-only labour correction
+    // deliberately omits them so a paid row does not look like a cost change.
+    costAmount: 'costAmount' in edit ? (edit.costAmount ?? null) : (existing?.costAmount ?? null),
+    costCurrency: 'costCurrency' in edit ? (edit.costCurrency ?? null) : (existing?.costCurrency ?? null),
+    costQualifier: 'costQualifier' in edit ? (edit.costQualifier ?? null) : (existing?.costQualifier ?? null),
     totalCostAmount: 'totalCostAmount' in edit ? (edit.totalCostAmount ?? null) : (existing?.totalCostAmount ?? null),
     // Labour fields only meaningful for labour; cleared otherwise.
-    labourHours: edit.memoryType === 'labour' ? (edit.labourHours ?? null) : null,
+    labourHours: edit.memoryType === 'labour'
+      ? ('labourHours' in edit ? (edit.labourHours ?? null) : (existing?.labourHours ?? null))
+      : null,
     labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
     labourTask: edit.memoryType === 'labour' ? (edit.labourTask ?? null) : null,
     // Omitted preserves; for labour, honour explicit person/treatment changes.
@@ -85,8 +95,12 @@ export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: 
   const updated: MemoryViewItem = {
     ...draft,
     // Present key → honour value/null (explicit set/clear). Omitted → derive
-    // fresh quantity × unit cost for an `each` line, else preserve existing.
-    totalCostAmount: 'totalCostAmount' in edit ? draft.totalCostAmount : (deriveEachTotal(draft) ?? draft.totalCostAmount),
+    // a fresh total when its inputs changed, else preserve the stored total.
+    totalCostAmount: 'totalCostAmount' in edit
+      ? draft.totalCostAmount
+      : edit.memoryType === 'labour' && costExpressionChanged
+        ? (draft.costQualifier === 'total' ? draft.costAmount : deriveHourlyTotal(draft))
+        : (deriveEachTotal(draft) ?? draft.totalCostAmount),
   }
   // Remove from its current section, then re-home by the (possibly new) type.
   upsertMockItem(sections, updated)
