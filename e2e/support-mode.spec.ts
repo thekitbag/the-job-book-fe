@@ -85,7 +85,7 @@ test.describe('Support mode — founder flow', () => {
     await expect(jobTotal).toContainText('24h')
     await expect(jobTotal).toContainText('job total')
     await page.getByRole('tab', { name: 'Budget' }).click()
-    await expect(page.getByText(/£2,270/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /^budget$/i }).locator('.mem-hero-amount')).toContainText('£2,270 cost')
 
     // exit returns to the support surface with no target data left
     await page.getByRole('button', { name: 'Exit' }).click()

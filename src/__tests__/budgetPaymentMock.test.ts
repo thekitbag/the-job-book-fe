@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mockBudgetSummary } from '../api/mock/budget'
 import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView } from '../api/mock/memory'
-import { mockGetJobMoney } from '../api/mock/money'
+import { mockDeleteMoneyEvent, mockGetJobMoney, mockMarkMoneyOut } from '../api/mock/money'
 import { resetMockApiForE2e } from '../api/mock/reset'
 
 const JOB_ID = 'job-pilot-garden-room-001'
@@ -37,6 +37,15 @@ describe('category-aware payment mock contract', () => {
       paidAmount: null,
       notPaidAmount: '880',
       paymentStateReason: 'eligible_items',
+    })
+    expect(summary.totals).toMatchObject({
+      knownSpendAmount: '2270',
+      notPaidAmount: '1630',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: '£1,630 not paid',
+      allKnownCostsPaid: false,
+      hasKnownPayableCosts: true,
+      hasMissingPriceAttention: true,
     })
 
     const money = mockGetJobMoney(JOB_ID)
@@ -100,5 +109,59 @@ describe('category-aware payment mock contract', () => {
 
     expect(mockMemoryView(JOB_ID).sections.flatMap(section => section.items.map(item => item.id))).toEqual(beforeIds)
     expect(mockGetJobMoney(JOB_ID).rows.some(row => row.sourceItemLabel === 'free offcuts')).toBe(false)
+  })
+
+  it('Mark paid and Undo paid change authoritative overall not-paid only', () => {
+    const before = mockBudgetSummary(JOB_ID)
+    const position = {
+      knownSpendAmount: before.totals.knownSpendAmount,
+      budgetAmount: before.totals.budgetAmount,
+      remainingAmount: before.totals.remainingAmount,
+      overBudget: before.totals.overBudget,
+    }
+
+    const money = mockMarkMoneyOut(JOB_ID, { sourceMemoryItemId: 'mem-view-005' })
+    const paidEvent = money.rows.find(row => row.sourceMemoryItemId === 'mem-view-005')
+    const afterPaid = mockBudgetSummary(JOB_ID)
+    expect(afterPaid.totals).toMatchObject({
+      ...position,
+      notPaidAmount: '1030',
+      notPaidLabel: '£1,030 not paid',
+      allKnownCostsPaid: false,
+    })
+
+    mockDeleteMoneyEvent(JOB_ID, paidEvent!.id)
+    expect(mockBudgetSummary(JOB_ID).totals).toMatchObject({
+      ...position,
+      notPaidAmount: '1630',
+      notPaidLabel: '£1,630 not paid',
+      allKnownCostsPaid: false,
+    })
+  })
+
+  it('reports all known costs paid only after every eligible source is paid', () => {
+    for (const sourceMemoryItemId of ['mem-view-005', 'mem-labour-2', 'mem-labour-3', 'mem-view-015']) {
+      mockMarkMoneyOut(JOB_ID, { sourceMemoryItemId })
+    }
+
+    expect(mockBudgetSummary(JOB_ID).totals).toMatchObject({
+      notPaidAmount: '0',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: 'All known costs paid',
+      allKnownCostsPaid: true,
+      hasKnownPayableCosts: true,
+      hasMissingPriceAttention: true,
+    })
+  })
+
+  it('omits overall payment context when no eligible payable source exists', () => {
+    expect(mockBudgetSummary('job-with-no-costs').totals).toMatchObject({
+      notPaidAmount: null,
+      notPaidCurrency: null,
+      notPaidLabel: null,
+      allKnownCostsPaid: false,
+      hasKnownPayableCosts: false,
+      hasMissingPriceAttention: false,
+    })
   })
 })

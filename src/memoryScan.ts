@@ -516,6 +516,15 @@ export function deriveBudgetSummary(
   const refundTotal = refunds.knownRefundAmount ? parseFloat(refunds.knownRefundAmount) : 0
   const totalSpend = categorySummaries.reduce((n, c) => n + sumRows(c.rows), 0) + uncatSpend - refundTotal
   const totalRemaining = anyBudget ? totalBudget - totalSpend : null
+  const overallRows = [...categorySummaries.flatMap(category => category.rows), ...uncategorizedRows]
+  const overallPayableRows = overallRows.filter(
+    row => row.eligibleForPaymentState === true && parseFloat(row.lineTotalAmount) > 0,
+  )
+  const overallNotPaidRows = overallPayableRows.filter(row => row.paymentState === 'not_paid')
+  const hasKnownPayableCosts = overallPayableRows.length > 0
+  const allKnownCostsPaid = hasKnownPayableCosts && overallNotPaidRows.length === 0
+  const overallNotPaidTotal = sumRows(overallNotPaidRows)
+  const hasMissingPriceAttention = [...ordered, ...labour, ...budgetCosts].some(unresolvedPrice)
 
   const response: BudgetSummaryResponse = {
     jobId,
@@ -535,6 +544,14 @@ export function deriveBudgetSummary(
       remainingAmount: totalRemaining !== null ? String(Math.round(totalRemaining * 100) / 100) : null,
       remainingLabel: totalRemaining !== null ? `${formatMoney(Math.abs(totalRemaining), currency)} ${totalRemaining < 0 ? 'over budget' : 'remaining'}` : null,
       overBudget: anyBudget && totalSpend > totalBudget,
+      notPaidAmount: hasKnownPayableCosts ? roundedAmount(overallNotPaidTotal) : null,
+      notPaidCurrency: hasKnownPayableCosts ? 'GBP' : null,
+      notPaidLabel: hasKnownPayableCosts
+        ? (allKnownCostsPaid ? 'All known costs paid' : `${formatMoney(overallNotPaidTotal, currency)} not paid`)
+        : null,
+      allKnownCostsPaid,
+      hasKnownPayableCosts,
+      hasMissingPriceAttention,
     },
   }
   // System labour group (additive, like the backend): every safe labour money

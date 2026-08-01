@@ -44,7 +44,7 @@ test.describe('Job memory lens tabs', () => {
   test('opens the Budget tab with a single committed-cost figure', async ({ page }) => {
     await openSpend(page)
     await expect(page.locator('.ws-job-title')).toHaveText('Budget')
-    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2,270/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /^budget$/i }).locator('.mem-hero-amount')).toContainText('£2,270 cost')
   })
 
   test('Materials keeps used and leftover reachable, flagging worth-checking', async ({ page }) => {

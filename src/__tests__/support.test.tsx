@@ -76,7 +76,21 @@ const BUDGET = {
   uncategorized: { knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend', rows: [
     { memoryItemId: 'm1', memoryType: 'ordered_material', itemLabel: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total' },
   ] },
-  totals: { budgetAmount: null, budgetCurrency: null, knownSpendAmount: '320', knownSpendCurrency: 'GBP', remainingAmount: null, remainingLabel: null, overBudget: false },
+  totals: {
+    budgetAmount: null,
+    budgetCurrency: null,
+    knownSpendAmount: '320',
+    knownSpendCurrency: 'GBP',
+    remainingAmount: null,
+    remainingLabel: null,
+    overBudget: false,
+    notPaidAmount: '320',
+    notPaidCurrency: 'GBP' as const,
+    notPaidLabel: '£320 not paid',
+    allKnownCostsPaid: false,
+    hasKnownPayableCosts: true,
+    hasMissingPriceAttention: false,
+  },
 }
 
 const QUEUE = {
@@ -217,7 +231,9 @@ describe('Support mode — read-only view-as', () => {
 
   it('renders target data with no Record/Add/Fix/remove/move/review/photo-upload controls on any tab', async () => {
     await enterViewAs()
-    expect(await screen.findByText(/£320/)).toBeInTheDocument()
+    const budgetHero = await screen.findByRole('region', { name: 'Budget' })
+    expect(budgetHero.querySelector('.mem-hero-amount')).toHaveTextContent('£320 cost')
+    expect(within(budgetHero).getByText('£320 not paid')).toBeInTheDocument()
     for (const t of ['Budget', 'Money', 'Labour', 'Used', 'Notes', /To check/]) {
       fireEvent.click(screen.getByRole('tab', { name: t }))
       expect(screen.queryByRole('button', { name: /record/i })).toBeNull()

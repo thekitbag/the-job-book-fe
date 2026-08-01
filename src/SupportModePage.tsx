@@ -409,6 +409,7 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                 <p className="mem-hero-cap">Budget</p>
                 <p className="mem-hero-amount">
                   {moneyFigure(budget?.totals.knownSpendAmount ?? memory.costSummary?.totalKnownCost?.knownSpendAmount ?? null) ?? 'None yet'}
+                  {(budget?.totals.knownSpendAmount ?? memory.costSummary?.totalKnownCost?.knownSpendAmount) && <span className="mem-hero-cost"> cost</span>}
                   {budget?.totals.budgetAmount && <span className="mem-hero-of"> of {moneyFigure(budget.totals.budgetAmount)}</span>}
                 </p>
                 {/* Support sees the same refund adjustment Mike does, so a net
@@ -419,9 +420,17 @@ function SupportViewAs({ user, job, onExit, onNoAccess }: { user: SupportUser; j
                 {budget?.totals.remainingAmount && (
                   <p className="mem-hero-sub">
                     {budget.totals.overBudget
-                      ? `${moneyFigure(budget.totals.remainingAmount.replace('-', ''))} over budget`
-                      : `${moneyFigure(budget.totals.remainingAmount)} remaining budget`}
+                      ? `${moneyFigure(budget.totals.remainingAmount.replace('-', ''))} over`
+                      : `${moneyFigure(budget.totals.remainingAmount)} remaining`}
                   </p>
+                )}
+                {budget?.totals.hasKnownPayableCosts && (
+                  <p className="budget-overall-payment">
+                    {budget.totals.notPaidLabel}
+                  </p>
+                )}
+                {budget?.totals.hasMissingPriceAttention && (
+                  <p className="budget-missing-price-attention">Some costs still need a price</p>
                 )}
               </section>
 

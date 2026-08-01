@@ -64,14 +64,14 @@ test.describe('Budget category in review + Job memory bought tab', () => {
     await expect(hardcore.getByText(/saved to trusted memory/i)).toBeVisible()
   })
 
-  test('Job memory Spend tab shows one Known spend with category cards', async ({ page }) => {
+  test('Job memory Budget shows one overall cost with category cards', async ({ page }) => {
     await page.goto('/')
     await dismissIntro(page)
     await goToSection(page, 'Budget')
     await page.waitForTimeout(900)
 
-    // single job-level Known spend (bought £1,390 + labour £880 = £2,270)
-    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2,270/)).toBeVisible()
+    // Single job-level cost (bought £1,390 + labour £880 = £2,270).
+    await expect(page.getByRole('region', { name: /^budget$/i }).locator('.mem-hero-amount')).toContainText('£2,270 cost')
     await expect(page.getByRole('region', { name: /budget category cladding/i }).locator('.budget-figure', { hasText: 'Cost' }).getByText('£1,200', { exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: /uncategorised cost/i }).getByText('hardcore')).toBeVisible()
   })

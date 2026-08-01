@@ -71,12 +71,12 @@ test.describe('Pilot feedback: memory detail and costs', () => {
     await expect(remembered.getByText('Ordered scaffolding from TCS')).not.toBeVisible()
   })
 
-  test('Fix 3: bought tab renders Known spend and bought notes with cost', async ({ page }) => {
+  test('Fix 3: Budget renders overall cost and bought notes with cost', async ({ page }) => {
     await page.goto('/')
     await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
 
-    await expect(page.getByRole('region', { name: /^budget$/i }).getByText(/£2,270/)).toBeVisible()
+    await expect(page.getByRole('region', { name: /^budget$/i }).locator('.mem-hero-amount')).toContainText('£2,270 cost')
     const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
     await expect(hardcore.locator('.mem-row-tap-price')).toHaveText('£40')
   })
