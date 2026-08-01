@@ -120,7 +120,21 @@ function budgetSummary(): BudgetSummaryResponse {
       knownSpendAmount: '40', knownSpendCurrency: 'GBP', knownSpendLabel: '£40 known spend',
       rows: [{ memoryItemId: 'mem-hardcore', memoryType: 'ordered_material', itemLabel: 'hardcore', materialName: 'hardcore', quantity: '8', unit: 'bags', lineTotalAmount: '40', lineTotalCurrency: 'GBP', lineTotalLabel: '£40 total' }],
     },
-    totals: { budgetAmount: '2000', budgetCurrency: 'GBP', knownSpendAmount: '1440', knownSpendCurrency: 'GBP', remainingAmount: '560', remainingLabel: '£560 remaining', overBudget: false },
+    totals: {
+      budgetAmount: '2000',
+      budgetCurrency: 'GBP',
+      knownSpendAmount: '1440',
+      knownSpendCurrency: 'GBP',
+      remainingAmount: '560',
+      remainingLabel: '£560 remaining',
+      overBudget: false,
+      notPaidAmount: '1440',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: '£1,440 not paid',
+      allKnownCostsPaid: false,
+      hasKnownPayableCosts: true,
+      hasMissingPriceAttention: true,
+    },
   }
 }
 
@@ -207,13 +221,74 @@ describe('Workspace — shell / home', () => {
 })
 
 describe('Workspace — Spend tab', () => {
-  it('shows one job-level Known spend, against the total budget', async () => {
+  it('shows known cost against Budget with one backend-owned not-paid line', async () => {
     renderWorkspace()
     openTab('Budget')
     const hero = await spendHero()
-    expect(within(hero).getByText(/£1,440/)).toBeTruthy()
-    expect(within(hero).getByText(/of £2,000/)).toBeTruthy()
+    expect(hero).toHaveTextContent('£1,440 cost of £2,000')
     expect(within(hero).getByText(/£560 remaining/)).toBeTruthy()
+    expect(within(hero).getByText('£1,440 not paid')).toBeInTheDocument()
+    expect(hero.querySelectorAll('.budget-overall-payment')).toHaveLength(1)
+    expect(hero.querySelector('.budget-payment-breakdown')).toBeNull()
+    expect(within(hero).queryByText(/spent/i)).toBeNull()
+  })
+
+  it('renders the authoritative totals value rather than inferring category and Money splits', async () => {
+    const summary = budgetSummary()
+    Object.assign(summary.totals, {
+      notPaidAmount: '777',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: '£777 not paid',
+      allKnownCostsPaid: false,
+      hasKnownPayableCosts: true,
+      hasMissingPriceAttention: false,
+    })
+    mockGetBudgetSummary.mockResolvedValue(summary)
+
+    renderWorkspace()
+    openTab('Budget')
+    const hero = await spendHero()
+    expect(within(hero).getByText('£777 not paid')).toBeInTheDocument()
+    expect(within(hero).queryByText('£1,440 not paid')).toBeNull()
+  })
+
+  it('shows All known costs paid rather than £0 not paid while keeping price attention visible', async () => {
+    const summary = budgetSummary()
+    Object.assign(summary.totals, {
+      notPaidAmount: '0',
+      notPaidCurrency: 'GBP',
+      notPaidLabel: 'All known costs paid',
+      allKnownCostsPaid: true,
+      hasKnownPayableCosts: true,
+      hasMissingPriceAttention: true,
+    })
+    mockGetBudgetSummary.mockResolvedValue(summary)
+
+    renderWorkspace()
+    openTab('Budget')
+    const hero = await spendHero()
+    expect(within(hero).getByText('All known costs paid')).toBeInTheDocument()
+    expect(within(hero).queryByText(/£0 not paid/i)).toBeNull()
+    expect(within(hero).getByText('Some costs still need a price')).toBeInTheDocument()
+  })
+
+  it('omits overall payment context when the backend reports no payable costs', async () => {
+    const summary = budgetSummary()
+    Object.assign(summary.totals, {
+      notPaidAmount: null,
+      notPaidCurrency: null,
+      notPaidLabel: null,
+      allKnownCostsPaid: false,
+      hasKnownPayableCosts: false,
+      hasMissingPriceAttention: false,
+    })
+    mockGetBudgetSummary.mockResolvedValue(summary)
+
+    renderWorkspace()
+    openTab('Budget')
+    const hero = await spendHero()
+    expect(hero.querySelector('.budget-overall-payment')).toBeNull()
+    expect(within(hero).queryByText('All known costs paid')).toBeNull()
   })
 
   it('renders a category card with spend and remaining, and No budget set when none', async () => {
@@ -622,16 +697,28 @@ describe('Workspace — assign / fix / verify', () => {
     await waitFor(() => expect(mockVerifyMemoryItem).toHaveBeenCalledWith('job-mem-001', 'mem-battens'))
   })
 
-  it('renders authoritative spend without a Budget-page price editor', async () => {
+  it('renders authoritative Budget cost without a Budget-page price editor', async () => {
     const after = memoryView()
     after.costSummary = {
       orderedMaterials: { ...memoryView().costSummary!.orderedMaterials, knownSpendAmount: '1500', knownSpendLabel: '£1500 known spend' },
       totalKnownCost: { knownSpendAmount: '1500', knownSpendCurrency: 'GBP', knownSpendLabel: '£1500 known spend', includedMemoryItemIds: [] },
     }
+    const budgetAfter = budgetSummary()
+    budgetAfter.totals = {
+      ...budgetAfter.totals,
+      knownSpendAmount: '1500',
+      remainingAmount: '500',
+      remainingLabel: '£500 remaining',
+      notPaidAmount: '1500',
+      notPaidLabel: '£1,500 not paid',
+    }
     mockGetMemoryView.mockResolvedValueOnce(after)
+    mockGetBudgetSummary.mockResolvedValueOnce(budgetAfter)
     renderWorkspace()
     openTab('Budget')
-    expect(within(await spendHero()).getByText(/£1,500/)).toBeTruthy()
+    expect((await spendHero()).querySelector('.mem-hero-amount')).toHaveTextContent(
+      '£1,500 cost',
+    )
     expect(screen.queryByRole('button', { name: /add prices/i })).toBeNull()
   })
 

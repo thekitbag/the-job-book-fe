@@ -31,10 +31,17 @@ test.describe('Budget payment state and category-aware Money', () => {
   test('uses progressive disclosure for paid, not-paid and mixed categories at 390px', async ({ page }) => {
     await openBudget(page)
 
+    const hero = page.getByRole('region', { name: 'Budget', exact: true })
     const cladding = page.getByRole('region', { name: 'Budget category cladding' })
     const electrics = page.getByRole('region', { name: 'Budget category electrics' })
     const timber = page.getByRole('region', { name: 'Budget category timber' })
     const labour = page.getByRole('region', { name: 'Labour', exact: true })
+
+    await expect(hero).toContainText('£2,270 cost of £7,500')
+    await expect(hero.locator('.budget-overall-payment')).toHaveText('£1,630 not paid')
+    await expect(hero.locator('.budget-overall-payment')).toHaveCount(1)
+    await expect(hero.getByText('Some costs still need a price')).toBeVisible()
+    await expect(hero.getByText(/spent/i)).toHaveCount(0)
 
     await expect(cladding.locator('.budget-payment-state')).toHaveText('Some paid')
     await expect(electrics.locator('.budget-payment-state')).toHaveText('Paid')
@@ -73,9 +80,16 @@ test.describe('Budget payment state and category-aware Money', () => {
 
   test('Mark paid and Undo paid change category state and Money, never Budget figures', async ({ page }) => {
     await openBudget(page)
+    const hero = page.getByRole('region', { name: 'Budget', exact: true })
     const cladding = page.getByRole('region', { name: 'Budget category cladding' })
     await cladding.getByRole('button', { name: /show items/i }).click()
     const figuresBefore = await cladding.locator('.budget-cat-figures').textContent()
+    const mastheadPositionBefore = {
+      amount: await hero.locator('.mem-hero-amount').textContent(),
+      remaining: await hero.locator('.mem-hero-sub').textContent(),
+      bar: await hero.locator('.mem-hero-bar > span').getAttribute('style'),
+    }
+    await expect(hero.locator('.budget-overall-payment')).toHaveText('£1,630 not paid')
 
     const plasterboard = cladding.locator('.mem-card', { hasText: 'plasterboard' })
     await expect(plasterboard).toHaveCount(2)
@@ -83,13 +97,56 @@ test.describe('Budget payment state and category-aware Money', () => {
     await page.getByRole('dialog').getByRole('button', { name: /mark as paid/i }).click()
 
     await expect(cladding.locator('.budget-payment-state')).toHaveText('Paid')
+    await expect(hero.locator('.budget-overall-payment')).toHaveText('£1,030 not paid')
     expect(await cladding.locator('.budget-cat-figures').textContent()).toBe(figuresBefore)
+    expect({
+      amount: await hero.locator('.mem-hero-amount').textContent(),
+      remaining: await hero.locator('.mem-hero-sub').textContent(),
+      bar: await hero.locator('.mem-hero-bar > span').getAttribute('style'),
+    }).toEqual(mastheadPositionBefore)
 
     await plasterboard.nth(1).getByRole('button', { name: /open actions/i }).click()
     await page.getByRole('dialog').getByRole('button', { name: /undo paid/i }).click()
 
     await expect(cladding.locator('.budget-payment-state')).toHaveText('Some paid')
+    await expect(hero.locator('.budget-overall-payment')).toHaveText('£1,630 not paid')
     expect(await cladding.locator('.budget-cat-figures').textContent()).toBe(figuresBefore)
+    expect({
+      amount: await hero.locator('.mem-hero-amount').textContent(),
+      remaining: await hero.locator('.mem-hero-sub').textContent(),
+      bar: await hero.locator('.mem-hero-bar > span').getAttribute('style'),
+    }).toEqual(mastheadPositionBefore)
+  })
+
+  test('marks every remaining known cost paid without hiding missing-price attention', async ({ page }) => {
+    await openBudget(page)
+    const hero = page.getByRole('region', { name: 'Budget', exact: true })
+    const mastheadPositionBefore = await hero.locator('.mem-hero-amount, .mem-hero-sub').allTextContents()
+
+    const cladding = page.getByRole('region', { name: 'Budget category cladding' })
+    await cladding.getByRole('button', { name: /show items/i }).click()
+    const plasterboard = cladding.locator('.mem-card', { hasText: 'plasterboard' })
+    await plasterboard.nth(1).getByRole('button', { name: /open actions/i }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /mark as paid/i }).click()
+    await expect(hero.locator('.budget-overall-payment')).toHaveText('£1,030 not paid')
+
+    const labour = page.getByRole('region', { name: 'Labour', exact: true })
+    await labour.getByRole('button', { name: /show items/i }).click()
+    for (const [label, expected] of [['electrics', '£750 not paid'], ['roof', '£150 not paid']]) {
+      await labour.locator('.mem-card', { hasText: label }).getByRole('button', { name: /open actions/i }).click()
+      await page.getByRole('dialog').getByRole('button', { name: /mark as paid/i }).click()
+      await expect(hero.locator('.budget-overall-payment')).toHaveText(expected)
+    }
+
+    const uncategorised = page.getByRole('region', { name: 'Uncategorised cost' })
+    await uncategorised.locator('.mem-card', { hasText: 'agency invoice' }).getByRole('button', { name: /open actions/i }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /mark as paid/i }).click()
+
+    await expect(hero.locator('.budget-overall-payment')).toHaveText('All known costs paid')
+    await expect(hero.getByText(/£0 not paid/i)).toHaveCount(0)
+    await expect(hero.getByText('Some costs still need a price')).toBeVisible()
+    expect(await hero.locator('.mem-hero-amount, .mem-hero-sub').allTextContents()).toEqual(mastheadPositionBefore)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 
   test('Add bought item paid-now creates one linked Money row and updates its Budget category', async ({ page }) => {

@@ -436,7 +436,18 @@ describe('deriveBudgetSummary', () => {
       ['unpaid', 'not_paid'],
     ])
     expect(timber.rows[0].paidMoneyEventId).toBe('money-1')
-    expect(after.totals).toEqual(before.totals)
+    expect(before.totals).toMatchObject({
+      notPaidAmount: '200',
+      notPaidLabel: '£200 not paid',
+    })
+    expect(after.totals).toMatchObject({
+      notPaidAmount: '80',
+      notPaidLabel: '£80 not paid',
+      budgetAmount: before.totals.budgetAmount,
+      knownSpendAmount: before.totals.knownSpendAmount,
+      remainingAmount: before.totals.remainingAmount,
+      overBudget: before.totals.overBudget,
+    })
     expect(after.categories[0]).toMatchObject({
       knownSpendAmount: before.categories[0].knownSpendAmount,
       remainingAmount: before.categories[0].remainingAmount,

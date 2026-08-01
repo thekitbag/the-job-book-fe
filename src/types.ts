@@ -728,6 +728,15 @@ export interface BudgetSummaryTotals {
   remainingAmount: string | null
   remainingLabel: string | null
   overBudget: boolean
+  // Authoritative job-level payment context from budget-summary. Optional
+  // during the additive rollout; absence means omit the masthead line rather
+  // than joining category and Money rows in the frontend.
+  notPaidAmount?: string | null
+  notPaidCurrency?: 'GBP' | null
+  notPaidLabel?: string | null
+  allKnownCostsPaid?: boolean
+  hasKnownPayableCosts?: boolean
+  hasMissingPriceAttention?: boolean
 }
 
 // System labour spend group (Labour Tracking V2). Present even when Mike has

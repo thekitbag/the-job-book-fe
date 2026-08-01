@@ -12,7 +12,7 @@ async function goToSection(page: import('@playwright/test').Page, section: strin
 
 
 // 390px, VITE_USE_MOCK_API=true. Job memory "What I've bought" tab.
-// Seeded garden-room: Known spend £1,390 (hardcore £40 + plasterboard £1,200 + agency invoice £150),
+// Seeded garden-room: known cost £1,390 (hardcore £40 + plasterboard £1,200 + agency invoice £150),
 // budgets timber £4,000 + cladding £2,000 (£6,000). Not counted: timber (no price,
 // currency-null), insulation (approx → worth checking), membrane ×2 (no price).
 
@@ -29,12 +29,11 @@ const uncategorised = (page: Page) => page.getByRole('region', { name: /uncatego
 
 // Total known cost = bought £1,390 + rated/total labour £880 = £2,270, of the
 // £7,500 budget (timber 4000 + cladding 2000 + labour 1500).
-test.describe('Cost capture & Known spend (Spend tab)', () => {
-  test('shows one Known spend hero (bought + labour) against the total budget', async ({ page }) => {
+test.describe('Cost capture & Budget', () => {
+  test('shows one overall cost (bought + labour) against the total budget', async ({ page }) => {
     await openBought(page)
     const hero = heroRegion(page)
-    await expect(hero.getByText(/£2,270/)).toBeVisible()
-    await expect(hero.getByText(/of £7,500/)).toBeVisible()
+    await expect(hero.locator('.mem-hero-amount')).toHaveText('£2,270 cost of £7,500')
     await expect(hero.getByText(/£5,230 remaining/)).toBeVisible()
     await expect(page.getByText(/total spend/i)).toHaveCount(0)
   })

@@ -49,14 +49,14 @@ test.describe('Job photos', () => {
     await expect(page.getByText(/added to spend/i)).toHaveCount(0)
   })
 
-  test('photo-only upload appears after save; known spend is unchanged', async ({ page }) => {
+  test('photo-only upload appears after save; Budget cost is unchanged', async ({ page }) => {
     await gotoApp(page)
 
-    // baseline known spend from the Spend hero
+    // Baseline cost from the Budget hero.
     await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
     const hero = page.getByRole('region', { name: /^budget$/i })
-    await expect(hero.getByText(/£2,270/)).toBeVisible()
+    await expect(hero.locator('.mem-hero-amount')).toContainText('£2,270 cost')
 
     const section = await openPhotos(page)
     await section.getByRole('button', { name: 'Add photo' }).click()
@@ -68,10 +68,10 @@ test.describe('Job photos', () => {
     // the new photo card renders (newest first, no descriptor → generic alt)
     await expect(section.locator('.photo-card').first().locator('img[alt="Job photo"]')).toBeVisible()
 
-    // receipt/photo upload must not change known spend
+    // Receipt/photo upload must not change Budget cost.
     await goToSection(page, 'Budget')
     await page.waitForTimeout(800)
-    await expect(hero.getByText(/£2,270/)).toBeVisible()
+    await expect(hero.locator('.mem-hero-amount')).toContainText('£2,270 cost')
   })
 
   test('upload with descriptor and memory-item link renders both', async ({ page }) => {

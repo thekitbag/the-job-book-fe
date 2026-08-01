@@ -118,42 +118,53 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
   totals: BudgetSummaryResponse['totals'] | null
   onShowBreakdown: () => void
 }) {
-  const known = total.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
+  const knownAmount = totals?.knownSpendAmount ?? total.knownSpendAmount
+  const knownCurrency = totals?.knownSpendCurrency ?? total.knownSpendCurrency
+  const known = knownAmount ? parseFloat(knownAmount) : 0
   const budget = totals?.budgetAmount ? parseFloat(totals.budgetAmount) : null
   const hasBudget = budget !== null && budget > 0
   const pct = hasBudget ? Math.min(100, Math.round((known / budget!) * 100)) : 0
   const over = !!totals?.overBudget
   const remaining = totals?.remainingAmount != null ? parseFloat(totals.remainingAmount) : null
+  // The backend owns the eligible-cost set and active paid-marker matching.
+  // Older responses omit these additive fields, in which case the FE omits
+  // payment context rather than inferring a second total from other APIs.
+  const overallPaymentLabel = totals?.hasKnownPayableCosts ? totals.notPaidLabel : null
   // No kicker: the screen is called Budget and the figure is the biggest thing
   // on it. The region's accessible name is "Budget".
   return (
     <section className={`mem-hero${over ? ' mem-hero--over' : ''}`} aria-label="Budget">
       <p className="mem-hero-amount">
-        {total.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : 'None yet'}
+        {knownAmount ? formatMoney(known, knownCurrency) : 'None yet'}
+        {knownAmount && <span className="mem-hero-cost"> cost</span>}
         {hasBudget && <span className="mem-hero-of"> of {formatMoney(budget!, 'GBP')}</span>}
       </p>
-      {/* Over budget is the one warning state here, and it takes warning-red —
-          never the accent, which only ever means "tappable". */}
-      {hasBudget && over && (
-        <p className="mem-hero-warning">
-          <span className="mem-hero-warning-dot" aria-hidden="true" />
-          {formatMoney(known - budget!, 'GBP')} over budget
-        </p>
-      )}
-      {hasBudget
-        ? <>
-            {/* The remaining figure is accent-coloured, so by the theme's rule
-                it has to do something: it jumps to the per-category breakdown
-                that explains it. Client-formatted "remaining budget" — never the
-                backend's spend-era label. */}
-            {!over && remaining !== null && (
+      <div className="mem-hero-outcomes">
+        {/* Over budget is the one warning state here, and it takes warning-red —
+            never the accent, which only ever means "tappable". */}
+        {hasBudget && over && (
+          <p className="mem-hero-warning">
+            <span className="mem-hero-warning-dot" aria-hidden="true" />
+            {formatMoney(known - budget!, 'GBP')} over
+          </p>
+        )}
+        {/* The remaining figure is accent-coloured, so by the theme's rule it
+            jumps to the per-category breakdown that explains it. */}
+        {hasBudget && !over && remaining !== null && (
               <button type="button" className="mem-hero-sub" onClick={onShowBreakdown}>
-                {formatMoney(remaining, 'GBP')} remaining budget ›
+                {formatMoney(remaining, 'GBP')} remaining ›
               </button>
-            )}
-            <div className="mem-hero-bar"><span style={{ width: `${pct}%` }} /></div>
-          </>
+        )}
+        {overallPaymentLabel && (
+          <p className="budget-overall-payment">{overallPaymentLabel}</p>
+        )}
+      </div>
+      {hasBudget
+        ? <div className="mem-hero-bar"><span style={{ width: `${pct}%` }} /></div>
         : <p className="mem-hero-sub mem-hero-sub--quiet">No budget set — add a category below</p>}
+      {totals?.hasMissingPriceAttention && (
+        <p className="budget-missing-price-attention">Some costs still need a price</p>
+      )}
     </section>
   )
 }

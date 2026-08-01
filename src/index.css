@@ -3636,12 +3636,35 @@ code {
   line-height: 1;
   color: var(--ink);
 }
-.mem-hero-of {
+.mem-hero-of,
+.mem-hero-cost {
   font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: 0;
   color: var(--grey-text);
   opacity: 1;
+}
+.mem-hero-outcomes {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0 18px;
+}
+.mem-hero-outcomes .mem-hero-sub,
+.mem-hero-outcomes .mem-hero-warning { margin-top: 8px; }
+.budget-overall-payment {
+  margin: 8px 0 0 auto;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+}
+.budget-missing-price-attention {
+  margin: 12px 0 0;
+  color: var(--grey-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 /* "£2,598 left to spend ›" — accent-coloured because it opens the breakdown. */
 .mem-hero-sub {
@@ -4387,8 +4410,11 @@ code {
 .ws-page--banded .btn-switch-job { color: var(--cobalt-on-ink); }
 .ws-page--banded .ws-header-top { padding-bottom: 20px; }
 .ws-page--banded .mem-hero-amount { color: var(--paper); font-size: 50px; }
-.ws-page--banded .mem-hero-of { color: var(--record-sub); }
+.ws-page--banded .mem-hero-of,
+.ws-page--banded .mem-hero-cost { color: var(--record-sub); }
 .ws-page--banded .mem-hero-sub { color: var(--cobalt-on-ink); }
+.ws-page--banded .budget-overall-payment { color: var(--paper); }
+.ws-page--banded .budget-missing-price-attention { color: var(--record-sub); }
 .ws-page--banded .mem-hero-bar { background: var(--track-on-ink); }
 .ws-page--banded .mem-hero-bar > span { background: var(--paper); }
 /* Warning red stays red on ink — it is legible, and it is the one colour that
