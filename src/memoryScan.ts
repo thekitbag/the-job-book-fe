@@ -1,4 +1,4 @@
-import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, GrossKnownCost, JobPhoto, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, RefundsSummary, ReturnedRefundRow, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
+import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, GrossKnownCost, JobPhoto, JobReceipt, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, RefundsSummary, ReturnedRefundRow, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
@@ -1252,6 +1252,42 @@ export function mergeLatestActivityWithPhotos(
     effectiveAt: photo.uploadedAt,
   }))
   return [...items, ...photoItems]
+    .sort((a, b) => (b.effectiveAt ?? '').localeCompare(a.effectiveAt ?? ''))
+    .slice(0, limit)
+}
+
+/**
+ * How a receipt/invoice identifies itself in a list. Mike's own description
+ * first, then the original file name he recognises, and only then a generic
+ * label — never a storage key and never an invented supplier or amount.
+ */
+export function receiptDisplayName(receipt: JobReceipt): string {
+  const descriptor = receipt.descriptor?.trim()
+  if (descriptor) return descriptor
+  const fileName = receipt.originalFileName?.trim()
+  if (fileName) return fileName
+  return 'Receipt uploaded'
+}
+
+/**
+ * Folds receipts/invoices into a latest-activity list as 'receipt' rows,
+ * re-sorted newest-first and re-limited. A receipt is evidence Mike uploaded,
+ * never processed spend, so costLabel is always null.
+ */
+export function mergeLatestActivityWithReceipts(
+  items: LatestActivityItem[],
+  receipts: JobReceipt[],
+  limit = 5,
+): LatestActivityItem[] {
+  const receiptItems: LatestActivityItem[] = receipts.map(receipt => ({
+    memoryItemId: receipt.id,
+    type: 'receipt',
+    typeLabel: 'Receipt',
+    headline: receiptDisplayName(receipt),
+    costLabel: null,
+    effectiveAt: receipt.uploadedAt,
+  }))
+  return [...items, ...receiptItems]
     .sort((a, b) => (b.effectiveAt ?? '').localeCompare(a.effectiveAt ?? ''))
     .slice(0, limit)
 }

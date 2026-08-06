@@ -15,6 +15,7 @@ vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
+    getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-x', receipts: [] })),
   getNoteTranscript: vi.fn(),
   getReviewQueue: vi.fn(),
   getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),

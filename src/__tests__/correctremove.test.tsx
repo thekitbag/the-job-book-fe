@@ -23,6 +23,7 @@ vi.mock('../api', async (importOriginal) => {
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-cr-001', photos: [] })),
+    getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-cr-001', receipts: [] })),
     getJobPayments: vi.fn(() => Promise.resolve({
       jobId: 'job-cr-001', generatedAt: '',
       customerTotalAmount: null, customerTotalCurrency: null, customerTotalLabel: null,

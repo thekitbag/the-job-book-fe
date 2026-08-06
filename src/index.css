@@ -4510,7 +4510,8 @@ code {
 .ws-type-chip--used,
 .ws-type-chip--returned,
 .ws-type-chip--note,
-.ws-type-chip--photo    { color: var(--grey-text); }
+.ws-type-chip--photo,
+.ws-type-chip--receipt  { color: var(--grey-text); }
 
 /* — Payments workspace (money in — visually separate from Spend) — */
 .pay-section { display: flex; flex-direction: column; gap: 1rem; }
@@ -5167,6 +5168,60 @@ code {
   margin: 0.2rem 0;
 }
 .photo-file-input { padding: 0.45rem; }
+
+/* ── Job log › Receipts (evidence, never accounting) ──────────────────────────
+   A receipt is a ledger row like every other remembered item: hairline-separated,
+   tappable across its full width, actions in the shared drawer. The thumbnail is
+   a small fixed tile rather than a gallery image — this view is for finding a
+   file again, not for looking at pictures. */
+.receipt-card { padding: 0; }
+.receipt-thumb {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  background: var(--grey-track);
+}
+/* PDFs and anything the browser can't render (HEIC) get a plain type tile
+   instead of a broken image. */
+.receipt-thumb--file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--grey-text);
+}
+.receipt-row-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.receipt-row-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.receipt-row-meta {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--grey-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.receipt-picked {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.receipt-add-note { margin: 0; font-size: var(--text-sm); font-weight: 400; color: var(--grey-text); }
+/* "Open file" is a real link in the drawer, so it needs the button styling's
+   missing piece. */
+a.row-sheet-opt { text-decoration: none; }
 /* ── Labour tab: daily labour view (Labour Tracking V2) ── */
 .labour-job-total {
   margin: 0;

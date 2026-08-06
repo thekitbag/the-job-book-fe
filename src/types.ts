@@ -817,7 +817,7 @@ export interface LabourTodaySummary {
   perPerson: { person: string; hours: number }[]
 }
 
-export type LatestActivityType = 'bought' | 'used' | 'returned' | 'labour' | 'note' | 'photo' | 'payment'
+export type LatestActivityType = 'bought' | 'used' | 'returned' | 'labour' | 'note' | 'photo' | 'payment' | 'receipt'
 
 export interface LatestActivityItem {
   memoryItemId: string
@@ -976,6 +976,56 @@ export interface PatchJobPhotoRequest {
   descriptor?: string | null
   linkedNoteId?: string | null
   linkedMemoryItemId?: string | null
+}
+
+// ── Receipts and invoices (job evidence, never accounting) ───────────────────
+// A receipt is classified by Mike's intent at upload time, not by file format:
+// "Add photo" makes a photo, "Add receipt or invoice" makes receipt evidence.
+// A receipt image therefore never appears under Photos. Receipts are storage
+// and recall only — no OCR, no parsing, no spend, no Money, no memory items.
+
+// Whether the stored file is a renderable image or a PDF document. Drives the
+// thumbnail-vs-icon decision only; the backend is the authority on the value.
+export type JobEvidenceFileKind = 'image' | 'pdf'
+
+export interface JobReceipt {
+  id: string
+  jobId: string
+  kind: 'receipt'
+  fileKind: JobEvidenceFileKind
+  // Optional short description Mike typed. Blank → null.
+  descriptor: string | null
+  // The file's original name, kept for recognition only — never a storage key.
+  originalFileName: string | null
+  mimeType: string
+  sizeBytes: number
+  uploadedAt: string
+  createdAt: string
+  updatedAt: string
+  // Authenticated backend route (e.g. /api/jobs/:jobId/receipts/:id/file).
+  // Never a public object-storage URL.
+  fileUrl: string
+  // Optional authenticated thumbnail route; null for PDFs (and whenever the
+  // backend has no separate thumbnail), which fall back to a file-type icon.
+  thumbnailUrl: string | null
+}
+
+export interface JobReceiptsResponse {
+  jobId: string
+  receipts: JobReceipt[]
+}
+
+// Multipart upload fields for POST /api/jobs/:jobId/receipts. File-only save is
+// valid: descriptor is optional, trimmed, blank → null, max 120 chars. No
+// supplier/amount/date/category/spend-link fields exist by design.
+export interface UploadJobReceiptRequest {
+  file: File
+  descriptor?: string | null
+}
+
+// PATCH /api/jobs/:jobId/receipts/:receiptId — omitted preserves, null clears.
+export interface PatchJobReceiptRequest {
+  descriptor?: string | null
 }
 
 // ── Founder Support Mode (internal, read-only) ───────────────────────────────

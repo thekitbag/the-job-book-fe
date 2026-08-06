@@ -16,6 +16,7 @@ vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
+  getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-x', receipts: [] })),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn(() => Promise.resolve([])),
   getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
@@ -594,15 +595,14 @@ describe('CurrentJobWorkspace — Job log workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Open Job log' }))
   }
 
-  it('contains All / Notes / Photos filters with All first — no Receipts or Variations until supported', async () => {
+  it('contains All / Notes / Photos / Receipts filters with All first — no Variations until supported', async () => {
     const user = userEvent.setup()
     renderWorkspace()
     await openJobLog(user)
-    for (const f of ['All', 'Notes', 'Photos']) {
+    for (const f of ['All', 'Notes', 'Photos', 'Receipts']) {
       expect(screen.getByRole('tab', { name: f })).toBeInTheDocument()
     }
     expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.queryByRole('tab', { name: /receipts/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /variations/i })).not.toBeInTheDocument()
   })
 
