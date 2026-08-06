@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getJobReceipts, patchJobReceipt, removeJobReceipt, resolveApiUrl, uploadJobReceipt } from './api'
 import { mimeTypeFamily, safeErrorKind, sizeBucket, track } from './analytics'
 import { receiptDisplayName } from './memoryScan'
+import { RECEIPT_FILE_ACCEPT, receiptFileMetadata, receiptSelectionProblem } from './receiptFile'
 import { formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
 import type { JobReceipt } from './types'
@@ -16,10 +17,15 @@ import type { JobReceipt } from './types'
 // follows Mike's intent at upload time, not the file format: a receipt image
 // uploaded here is receipt evidence and never appears under Photos.
 
-// Browser-accepted types. The backend is the authority — this only shapes the
-// picker, so a phone that offers HEIC or an odd PDF MIME still gets through to
-// a server-side decision.
-const FILE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf'
+// Accept value and the pre-upload check both live in receiptFile.ts: iOS hands
+// over PDFs with unreliable MIME types, so neither the picker nor this form may
+// decide a file is invalid on `file.type` alone.
+
+const UNSUPPORTED_FILE_MESSAGE = 'That file type isn’t supported. Use a photo, screenshot, or PDF.'
+// A cloud-backed picker (Google Drive, iCloud) can hand over a placeholder with
+// no bytes. Nothing was uploaded and nothing failed on the server, so the copy
+// names the actual fix rather than inviting a pointless retry.
+const EMPTY_FILE_MESSAGE = 'Couldn’t read that file. If it’s in Google Drive or iCloud, download it to your phone and try again.'
 
 // What went wrong with the file, in Mike's words. Backend error codes are
 // mapped explicitly; anything else is a plain retryable failure.
@@ -27,7 +33,7 @@ function uploadErrorCopy(err: unknown): string {
   const code = (err as { code?: string } | null)?.code
   const status = (err as { status?: number } | null)?.status
   if (code === 'RECEIPT_UNSUPPORTED_TYPE' || status === 415) {
-    return 'That file type isn’t supported. Use a photo, screenshot, or PDF.'
+    return UNSUPPORTED_FILE_MESSAGE
   }
   if (code === 'RECEIPT_TOO_LARGE' || status === 413) {
     return 'That file is too big. Try a photo of the receipt instead.'
@@ -228,8 +234,25 @@ export default function JobReceiptsSection({ jobId, onReceiptsChanged = () => {}
   // v1). On failure the file and description stay put so retry is one tap.
   const submit = async () => {
     if (!file || uploading) return
-    setUploading(true)
     setUploadError(null)
+    // On-device breadcrumb: when a phone upload doesn't arrive, this is the
+    // line that says whether the browser ever had readable bytes. Cloud-backed
+    // pickers (Drive, iCloud) are the reason — they can hand over a 0-byte
+    // placeholder, or a PDF typed as octet-stream.
+    const meta = receiptFileMetadata(file)
+    console.info('[receipt] upload attempt', meta)
+
+    // The only frontend rejections. Anything else — including a .pdf with an
+    // empty or unknown type — is posted, because the backend validates bytes.
+    const problem = receiptSelectionProblem(file)
+    if (problem) {
+      console.info('[receipt] upload not attempted', { ...meta, reason: problem })
+      track('receipt_upload_blocked', { job_id: jobId, reason: problem })
+      setUploadError(problem === 'empty' ? EMPTY_FILE_MESSAGE : UNSUPPORTED_FILE_MESSAGE)
+      return
+    }
+
+    setUploading(true)
     const safeMeta = { job_id: jobId, mime_type_family: mimeTypeFamily(file.type), size_bucket: sizeBucket(file.size) }
     track('receipt_upload_started', safeMeta)
     try {
@@ -290,8 +313,15 @@ export default function JobReceiptsSection({ jobId, onReceiptsChanged = () => {}
                 className="queue-field-input photo-file-input"
                 type="file"
                 name="receipt"
-                accept={FILE_ACCEPT}
-                onChange={e => { setUploadError(null); setFile(e.target.files?.[0] ?? null) }}
+                accept={RECEIPT_FILE_ACCEPT}
+                onChange={e => {
+                  setUploadError(null)
+                  const picked = e.target.files?.[0] ?? null
+                  // Logged at selection too: on a phone this is the earliest
+                  // point where a Drive placeholder shows itself (size 0).
+                  if (picked) console.info('[receipt] file selected', receiptFileMetadata(picked))
+                  setFile(picked)
+                }}
               />
             </label>
             {file && <p className="receipt-picked">{file.name}</p>}

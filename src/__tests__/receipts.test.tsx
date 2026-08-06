@@ -111,8 +111,8 @@ async function receiptsSection() {
   return await screen.findByRole('region', { name: /receipts and invoices/i })
 }
 
-function pickFile(form: HTMLElement, name: string, type: string) {
-  const file = new File(['bytes'], name, { type })
+function pickFile(form: HTMLElement, name: string, type: string, content: string[] = ['bytes']) {
+  const file = new File(content, name, { type })
   fireEvent.change(form.querySelector('input[type="file"]')!, { target: { files: [file] } })
   return file
 }
@@ -158,16 +158,16 @@ describe('Job log — Receipts view and add flow', () => {
     expect(within(form).queryByText(/supplier|amount|category|paid/i)).toBeNull()
   })
 
-  it('the picker accepts images and PDFs', async () => {
+  // A strict MIME accept list greys PDFs out in the iOS Files picker and in
+  // Android's Drive picker, so the file can never be selected and no upload is
+  // ever attempted. The extension form is what makes those pickers usable.
+  it('the picker uses a mobile-friendly accept value, not a strict MIME list', async () => {
     renderWorkspace()
     openJobLog('Receipts')
     const section = await receiptsSection()
     fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
     const input = within(section).getByRole('form', { name: 'Add receipt or invoice' }).querySelector('input[type="file"]')!
-    const accept = input.getAttribute('accept')!
-    expect(accept).toContain('application/pdf')
-    expect(accept).toContain('image/jpeg')
-    expect(accept).toContain('image/heic')
+    expect(input.getAttribute('accept')).toBe('image/*,.pdf,application/pdf')
   })
 
   it('an optional description is sent and shown as the receipt identity', async () => {
@@ -223,7 +223,9 @@ describe('Job log — Receipts view and add flow', () => {
     expect(within(section).getByText('Receipt uploaded')).toBeInTheDocument()
   })
 
-  it('an unsupported file shows a clear message and the form stays recoverable', async () => {
+  // The backend has the last word on file type: an ambiguous selection is sent,
+  // and a 415 comes back as the same plain-English message.
+  it('a backend-rejected file type shows a clear message and the form stays recoverable', async () => {
     const rejected = Object.assign(new Error('bad type'), { status: 415, code: 'RECEIPT_UNSUPPORTED_TYPE' })
     mockUploadJobReceipt.mockRejectedValueOnce(rejected).mockResolvedValue(receipt())
     renderWorkspace()
@@ -231,7 +233,7 @@ describe('Job log — Receipts view and add flow', () => {
     const section = await receiptsSection()
     fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
     const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
-    pickFile(form, 'notes.docx', 'application/msword')
+    pickFile(form, 'scan-0012', 'application/octet-stream')
     fireEvent.change(form.querySelector('input[name="descriptor"]')!, { target: { value: 'Jewson receipt' } })
     fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
 
@@ -260,6 +262,101 @@ describe('Job log — Receipts view and add flow', () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
     await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalledTimes(2))
     expect(await within(section).findByText('IMG_4821.jpg')).toBeInTheDocument()
+  })
+})
+
+// ── Phone pickers: the file's declared type is a hint, not proof ─────────────
+// A PDF chosen from iOS Files or Android's Google Drive picker arrives with an
+// unreliable MIME type. Anything that rejects on `file.type` alone blocks Mike's
+// real receipts on the only device he uses, with no request to show for it, so
+// these cases must all reach the backend.
+
+describe('Job log — receipts from phone file pickers', () => {
+  const IOS_PDF_SHAPES: [string, string][] = [
+    ['no type at all', ''],
+    ['application/octet-stream', 'application/octet-stream'],
+    ['application/x-pdf', 'application/x-pdf'],
+    ['text/plain', 'text/plain'],
+  ]
+
+  it.each(IOS_PDF_SHAPES)('uploads a .pdf declared as %s', async (_label, type) => {
+    mockUploadJobReceipt.mockResolvedValue(receipt({ id: 'receipt-ios', fileKind: 'pdf', originalFileName: 'receipt.pdf' }))
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    const file = pickFile(form, 'receipt.pdf', type)
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+
+    // The POST is attempted with the exact file the picker handed over.
+    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalledWith(JOB.id, { file, descriptor: null }))
+    const sent = mockUploadJobReceipt.mock.calls[0][1].file
+    expect({ name: sent.name, type: sent.type, size: sent.size })
+      .toEqual({ name: 'receipt.pdf', type, size: file.size })
+    expect(sent.size).toBeGreaterThan(0)
+    expect(within(section).queryByRole('alert')).toBeNull()
+  })
+
+  it('uploads an uppercase .PDF from a cloud picker', async () => {
+    mockUploadJobReceipt.mockResolvedValue(receipt({ fileKind: 'pdf' }))
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    pickFile(form, 'Invoice 88213.PDF', 'application/octet-stream')
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalled())
+  })
+
+  it('logs the selected file metadata so a phone failure can be diagnosed', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    mockUploadJobReceipt.mockResolvedValue(receipt({ fileKind: 'pdf' }))
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    const file = pickFile(form, 'receipt.pdf', '')
+    expect(log).toHaveBeenCalledWith('[receipt] file selected', { name: 'receipt.pdf', type: '', size: file.size })
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalled())
+    expect(log).toHaveBeenCalledWith('[receipt] upload attempt', { name: 'receipt.pdf', type: '', size: file.size })
+    log.mockRestore()
+  })
+
+  // Google Drive can hand over a placeholder with no bytes. There is nothing to
+  // POST, so this is neither an upload success nor an upload failure — the copy
+  // has to name the actual fix.
+  it('a zero-byte cloud file is not uploaded and says how to fix it', async () => {
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    pickFile(form, 'drive-invoice.pdf', 'application/pdf', [])
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+
+    const alert = await within(section).findByRole('alert')
+    expect(alert).toHaveTextContent(/download it to your phone and try again/i)
+    expect(alert).not.toHaveTextContent(/check your connection/i)
+    expect(mockUploadJobReceipt).not.toHaveBeenCalled()
+    // Still recoverable: the form stays open with the description intact.
+    expect(within(section).getByRole('button', { name: 'Save receipt' })).toBeEnabled()
+  })
+
+  it('an obvious non-image, non-PDF file is refused before any request', async () => {
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    pickFile(form, 'notes.docx', 'application/msword')
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+
+    expect(await within(section).findByRole('alert')).toHaveTextContent(/file type isn’t supported/i)
+    expect(mockUploadJobReceipt).not.toHaveBeenCalled()
   })
 })
 

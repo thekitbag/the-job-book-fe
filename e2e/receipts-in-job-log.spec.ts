@@ -115,6 +115,46 @@ test.describe('Receipts in Job log', () => {
     await expect(photos.getByText('IMG_4821.jpg')).toHaveCount(0)
   })
 
+  // Phone pickers (iOS Files, Android Google Drive) declare PDFs with whatever
+  // type they feel like. Each of these must reach POST /receipts; a frontend
+  // that rejects them produces exactly the reported symptom — nothing uploads
+  // and the server never sees a request.
+  test('a Drive/iOS-shaped PDF with an unknown type is uploaded, not blocked', async ({ page }) => {
+    await gotoApp(page)
+    const section = await openReceipts(page)
+    await section.getByRole('button', { name: 'Add receipt or invoice' }).click()
+    const form = section.getByRole('form', { name: 'Add receipt or invoice' })
+    await form.locator('input[type="file"]').setInputFiles({
+      name: 'drive-invoice.pdf', mimeType: 'application/octet-stream', buffer: PDF,
+    })
+    await form.getByRole('button', { name: 'Save receipt' }).click()
+    await page.waitForTimeout(900)
+
+    // Stored and shown as a PDF despite the octet-stream label.
+    const row = section.getByRole('button', { name: /drive-invoice.pdf — receipt actions/ })
+    await expect(row).toBeVisible()
+    await expect(row.locator('.receipt-thumb--file')).toHaveText('PDF')
+    await expect(form.getByRole('alert')).toHaveCount(0)
+  })
+
+  // Whether the request is actually withheld is asserted in the unit tests (the
+  // e2e run is mock-backed, so there is no network to watch); here the point is
+  // that the user sees the specific fix and no phantom receipt row.
+  test('a zero-byte cloud placeholder is not saved and says how to fix it', async ({ page }) => {
+    await gotoApp(page)
+    const section = await openReceipts(page)
+    await section.getByRole('button', { name: 'Add receipt or invoice' }).click()
+    const form = section.getByRole('form', { name: 'Add receipt or invoice' })
+    await form.locator('input[type="file"]').setInputFiles({
+      name: 'drive-placeholder.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(0),
+    })
+    await form.getByRole('button', { name: 'Save receipt' }).click()
+    await page.waitForTimeout(600)
+
+    await expect(form.getByRole('alert')).toHaveText(/download it to your phone and try again/i)
+    await expect(section.getByRole('button', { name: /drive-placeholder.pdf — receipt actions/ })).toHaveCount(0)
+  })
+
   test('an unsupported file is rejected with clear copy and the form stays recoverable', async ({ page }) => {
     await gotoApp(page)
     const section = await openReceipts(page)

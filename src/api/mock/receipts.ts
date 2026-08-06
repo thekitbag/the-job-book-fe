@@ -1,5 +1,6 @@
 import type { JobEvidenceFileKind, JobReceipt, JobReceiptsResponse, PatchJobReceiptRequest, UploadJobReceiptRequest } from '../../types'
 import { ApiError } from '../client'
+import { isObviouslyUnsupportedReceipt, looksLikePdf } from '../../receiptFile'
 
 // Stateful per-job receipt/invoice store, mirroring the photo mock's shape.
 // Module-level, so it resets on every full page load (each Playwright test
@@ -77,15 +78,24 @@ export function mockGetJobReceipts(jobId: string): JobReceiptsResponse {
   return { jobId, receipts: receiptsFor(jobId).map(r => ({ ...r })) }
 }
 
-// Validate the way the backend does: MIME type and size, never file extension
-// alone, and reject an empty file.
+// Classify the way a tolerant backend does: the declared MIME type is a hint,
+// not proof. A PDF picked from iOS Files or Google Drive can arrive as
+// application/x-pdf, application/octet-stream, text/plain, or with no type at
+// all, so anything PDF-shaped is normalised to application/pdf rather than
+// rejected. Only a file that is unambiguously neither an image nor a PDF is
+// refused — the real backend additionally checks magic bytes.
 function classify(file: File): JobEvidenceFileKind {
+  if (looksLikePdf(file)) return 'pdf'
   const type = (file.type || '').toLowerCase()
-  if (type === 'application/pdf') return 'pdf'
   if (ACCEPTED_IMAGE_TYPES.includes(type)) return 'image'
-  const err = new ApiError('That file type is not supported', 415) as ApiError & { code?: string }
-  err.code = 'RECEIPT_UNSUPPORTED_TYPE'
-  throw err
+  if (isObviouslyUnsupportedReceipt(file)) {
+    const err = new ApiError('That file type is not supported', 415) as ApiError & { code?: string }
+    err.code = 'RECEIPT_UNSUPPORTED_TYPE'
+    throw err
+  }
+  // Ambiguous type, no PDF signal: the server would sniff the bytes. The mock
+  // has none to sniff, so it takes the file as an image.
+  return 'image'
 }
 
 export function mockUploadJobReceipt(jobId: string, req: UploadJobReceiptRequest): JobReceipt {
@@ -109,7 +119,9 @@ export function mockUploadJobReceipt(jobId: string, req: UploadJobReceiptRequest
     descriptor,
     // Path components stripped, length bounded — recognition only.
     originalFileName: req.file.name ? req.file.name.split(/[\\/]/).pop()!.slice(0, 160) : null,
-    mimeType: req.file.type,
+    // Normalised, like the backend: whatever odd type the picker declared, a
+    // PDF is stored and served as application/pdf.
+    mimeType: fileKind === 'pdf' ? 'application/pdf' : (req.file.type || 'image/jpeg'),
     sizeBytes: req.file.size,
     uploadedAt: now,
     createdAt: now,
