@@ -363,10 +363,13 @@ export default function CurrentJobWorkspace({
     setJoblogFilter('all')
   }, [job.id])
 
-  const mem = useJobMemory(job)
   // Money (in + out) — loaded independently of memory/budget so a Money failure
-  // never hides the Budget/Labour lenses (and vice versa).
+  // never hides the Budget/Labour lenses (and vice versa). Declared before
+  // memory so a category correction can refresh it: Money out rows caption
+  // themselves with their source item's Budget category, and would otherwise
+  // keep showing the old one until the section was reopened.
   const money = useMoney(job.id)
+  const mem = useJobMemory(job, { onCategoryChanged: money.reload })
   const toast = useToast()
   // Source item currently being marked paid, so its drawer control shows a
   // busy state and a double-tap can't fire two markers.
