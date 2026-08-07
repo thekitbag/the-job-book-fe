@@ -143,7 +143,13 @@ describe('Job log — Receipts view and add flow', () => {
     mockGetJobReceipts.mockResolvedValue({ jobId: JOB.id, receipts: [saved] })
     expect(within(section).queryByRole('button', { name: /IMG_4821.jpg — receipt actions/ })).toBeNull()
     fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
-    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalledWith(JOB.id, { file, descriptor: null }))
+    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalled())
+    // The bytes are read before the request, so what's posted is an in-memory
+    // copy of the selection, not the picker's (possibly lazy) handle.
+    const [, sent] = mockUploadJobReceipt.mock.calls[0]
+    expect(sent.descriptor).toBeNull()
+    expect(sent.file.name).toBe(file.name)
+    expect(sent.file.size).toBe(file.size)
     expect(await within(section).findByRole('button', { name: /IMG_4821.jpg — receipt actions/ })).toBeInTheDocument()
   })
 
@@ -289,11 +295,12 @@ describe('Job log — receipts from phone file pickers', () => {
     const file = pickFile(form, 'receipt.pdf', type)
     fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
 
-    // The POST is attempted with the exact file the picker handed over.
-    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalledWith(JOB.id, { file, descriptor: null }))
+    // The upload is attempted, with the file's bytes intact and its type
+    // normalised to application/pdf whatever the picker claimed.
+    await waitFor(() => expect(mockUploadJobReceipt).toHaveBeenCalled())
     const sent = mockUploadJobReceipt.mock.calls[0][1].file
     expect({ name: sent.name, type: sent.type, size: sent.size })
-      .toEqual({ name: 'receipt.pdf', type, size: file.size })
+      .toEqual({ name: 'receipt.pdf', type: 'application/pdf', size: file.size })
     expect(sent.size).toBeGreaterThan(0)
     expect(within(section).queryByRole('alert')).toBeNull()
   })
@@ -344,6 +351,68 @@ describe('Job log — receipts from phone file pickers', () => {
     expect(mockUploadJobReceipt).not.toHaveBeenCalled()
     // Still recoverable: the form stays open with the description intact.
     expect(within(section).getByRole('button', { name: 'Save receipt' })).toBeEnabled()
+  })
+
+  // The reported Android failure: Drive hands over a File that looks fine —
+  // real name, real type, non-zero size — but whose bytes can't actually be
+  // read. If that read happens inside fetch's multipart streaming, fetch
+  // rejects with a bare TypeError: no status, no code, nothing sent, and the
+  // only copy left is "check your connection". Reading first makes it
+  // explainable.
+  it('a Drive file whose bytes cannot be read says so instead of blaming the connection', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    const file = pickFile(form, 'drive-invoice.pdf', 'application/pdf')
+    // A lazily-backed content:// handle that fails when something reads it.
+    vi.spyOn(file, 'arrayBuffer').mockRejectedValue(
+      Object.assign(new Error('Could not read file'), { name: 'NotReadableError' }),
+    )
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+
+    const alert = await within(section).findByRole('alert')
+    expect(alert).toHaveTextContent(/download it to your phone and try again/i)
+    expect(alert).not.toHaveTextContent(/check your connection/i)
+    expect(mockUploadJobReceipt).not.toHaveBeenCalled()
+    // The console line says which stage failed, so the next report is diagnosable.
+    expect(log).toHaveBeenCalledWith('[receipt] upload failed', expect.objectContaining({
+      stage: 'read', name: 'drive-invoice.pdf', error: 'ReceiptFileReadError',
+    }))
+    log.mockRestore()
+  })
+
+  it('a file that reads as zero bytes is treated the same way', async () => {
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    const file = pickFile(form, 'drive-invoice.pdf', 'application/pdf')
+    // Non-zero size up front, nothing behind it — the placeholder only reveals
+    // itself on read, so the pre-check can't catch this one.
+    vi.spyOn(file, 'arrayBuffer').mockResolvedValue(new ArrayBuffer(0))
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+
+    expect(await within(section).findByRole('alert')).toHaveTextContent(/download it to your phone and try again/i)
+    expect(mockUploadJobReceipt).not.toHaveBeenCalled()
+  })
+
+  it('a genuine network failure still says to check the connection', async () => {
+    mockUploadJobReceipt.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderWorkspace()
+    openJobLog('Receipts')
+    const section = await receiptsSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Add receipt or invoice' }))
+    const form = within(section).getByRole('form', { name: 'Add receipt or invoice' })
+    pickFile(form, 'receipt.pdf', 'application/pdf')
+    fireEvent.click(within(section).getByRole('button', { name: 'Save receipt' }))
+
+    // The file read fine, so this one really is retryable.
+    expect(await within(section).findByRole('alert')).toHaveTextContent(/check your connection/i)
+    expect(mockUploadJobReceipt).toHaveBeenCalled()
   })
 
   it('an obvious non-image, non-PDF file is refused before any request', async () => {

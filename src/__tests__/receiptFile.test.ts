@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   RECEIPT_FILE_ACCEPT,
   isObviouslyUnsupportedReceipt,
   looksLikePdf,
   receiptFileMetadata,
+  readReceiptFile,
   receiptSelectionProblem,
 } from '../receiptFile'
 
@@ -71,6 +72,42 @@ describe('receiptSelectionProblem', () => {
 
   it('has no complaint about a readable PDF of unknown type', () => {
     expect(receiptSelectionProblem(file('receipt.pdf', ''))).toBeNull()
+  })
+})
+
+describe('readReceiptFile', () => {
+  it('returns an in-memory copy with the bytes intact', async () => {
+    const out = await readReceiptFile(file('receipt.pdf', 'application/pdf', 'hello'))
+    expect(out.name).toBe('receipt.pdf')
+    expect(out.size).toBe(5)
+    expect(await out.text()).toBe('hello')
+  })
+
+  it.each(['', 'application/octet-stream', 'application/x-pdf', 'text/plain'])(
+    'normalises a PDF declared as "%s" to application/pdf',
+    async type => {
+      const out = await readReceiptFile(file('receipt.pdf', type))
+      expect(out.type).toBe('application/pdf')
+    },
+  )
+
+  it('leaves an image type alone', async () => {
+    expect((await readReceiptFile(file('site.jpg', 'image/jpeg'))).type).toBe('image/jpeg')
+  })
+
+  // The Android/Drive case: the handle looks fine until something reads it.
+  it('throws unreadable when the bytes cannot be read', async () => {
+    const f = file('drive.pdf', 'application/pdf')
+    vi.spyOn(f, 'arrayBuffer').mockRejectedValue(
+      Object.assign(new Error('nope'), { name: 'NotReadableError' }),
+    )
+    await expect(readReceiptFile(f)).rejects.toMatchObject({ name: 'ReceiptFileReadError', reason: 'unreadable' })
+  })
+
+  it('throws empty when the read succeeds with no bytes', async () => {
+    const f = file('drive.pdf', 'application/pdf')
+    vi.spyOn(f, 'arrayBuffer').mockResolvedValue(new ArrayBuffer(0))
+    await expect(readReceiptFile(f)).rejects.toMatchObject({ name: 'ReceiptFileReadError', reason: 'empty' })
   })
 })
 

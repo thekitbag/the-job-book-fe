@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getJobReceipts, patchJobReceipt, removeJobReceipt, resolveApiUrl, uploadJobReceipt } from './api'
 import { mimeTypeFamily, safeErrorKind, sizeBucket, track } from './analytics'
 import { receiptDisplayName } from './memoryScan'
-import { RECEIPT_FILE_ACCEPT, receiptFileMetadata, receiptSelectionProblem } from './receiptFile'
+import { RECEIPT_FILE_ACCEPT, ReceiptFileReadError, readReceiptFile, receiptFileMetadata, receiptSelectionProblem } from './receiptFile'
 import { formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
 import type { JobReceipt } from './types'
@@ -25,11 +25,14 @@ const UNSUPPORTED_FILE_MESSAGE = 'That file type isn’t supported. Use a photo,
 // A cloud-backed picker (Google Drive, iCloud) can hand over a placeholder with
 // no bytes. Nothing was uploaded and nothing failed on the server, so the copy
 // names the actual fix rather than inviting a pointless retry.
-const EMPTY_FILE_MESSAGE = 'Couldn’t read that file. If it’s in Google Drive or iCloud, download it to your phone and try again.'
+const UNREADABLE_FILE_MESSAGE = 'Couldn’t read that file. If it’s in Google Drive or iCloud, download it to your phone and try again.'
 
 // What went wrong with the file, in Mike's words. Backend error codes are
 // mapped explicitly; anything else is a plain retryable failure.
 function uploadErrorCopy(err: unknown): string {
+  // The file itself never read. Retrying achieves nothing — the file has to be
+  // on the phone first — so the copy must not blame the connection.
+  if (err instanceof ReceiptFileReadError) return UNREADABLE_FILE_MESSAGE
   const code = (err as { code?: string } | null)?.code
   const status = (err as { status?: number } | null)?.status
   if (code === 'RECEIPT_UNSUPPORTED_TYPE' || status === 415) {
@@ -248,7 +251,7 @@ export default function JobReceiptsSection({ jobId, onReceiptsChanged = () => {}
     if (problem) {
       console.info('[receipt] upload not attempted', { ...meta, reason: problem })
       track('receipt_upload_blocked', { job_id: jobId, reason: problem })
-      setUploadError(problem === 'empty' ? EMPTY_FILE_MESSAGE : UNSUPPORTED_FILE_MESSAGE)
+      setUploadError(problem === 'empty' ? UNREADABLE_FILE_MESSAGE : UNSUPPORTED_FILE_MESSAGE)
       return
     }
 
@@ -256,14 +259,32 @@ export default function JobReceiptsSection({ jobId, onReceiptsChanged = () => {}
     const safeMeta = { job_id: jobId, mime_type_family: mimeTypeFamily(file.type), size_bucket: sizeBucket(file.size) }
     track('receipt_upload_started', safeMeta)
     try {
-      await uploadJobReceipt(jobId, { file, descriptor: descriptor.trim() || null })
+      // Read the bytes BEFORE the request. A Drive-backed file only fails when
+      // something reads it; doing that here means the failure is attributable
+      // and the POST that follows carries in-memory bytes.
+      const readable = await readReceiptFile(file)
+      console.info('[receipt] file read', { ...receiptFileMetadata(readable), from: meta.type || '(no type)' })
+      await uploadJobReceipt(jobId, { file: readable, descriptor: descriptor.trim() || null })
       track('receipt_upload_succeeded', { ...safeMeta, described: descriptor.trim() ? 'yes' : 'no' })
       resetForm()
       setOpen(false)
       await load()
       onReceiptsChanged()
     } catch (err: unknown) {
-      track('receipt_upload_failed', { ...safeMeta, error_kind: safeErrorKind((err as { code?: string } | null)?.code) })
+      // Everything the device can tell us about the failure, in one line: the
+      // difference between "the file never read" and "the server said no" is
+      // invisible in the UI copy but decides where to look next.
+      const detail = err as { name?: string; status?: number; code?: string; message?: string } | null
+      console.info('[receipt] upload failed', {
+        ...meta,
+        stage: err instanceof ReceiptFileReadError ? 'read' : 'request',
+        error: detail?.name, status: detail?.status, code: detail?.code, message: detail?.message,
+      })
+      track('receipt_upload_failed', {
+        ...safeMeta,
+        stage: err instanceof ReceiptFileReadError ? 'read' : 'request',
+        error_kind: err instanceof ReceiptFileReadError ? err.reason : safeErrorKind(detail?.code),
+      })
       setUploadError(uploadErrorCopy(err))
     } finally {
       setUploading(false)

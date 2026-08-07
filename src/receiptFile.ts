@@ -49,6 +49,47 @@ export function receiptSelectionProblem(file: File): ReceiptSelectionProblem | n
 }
 
 /**
+ * Read the selection into memory and hand back a plain in-memory file to post.
+ *
+ * This exists because of Android's Google Drive picker. The `File` it returns is
+ * a lazily-backed content:// handle: it reports a believable name, type, and
+ * size, but the bytes are only fetched when something actually reads it. If that
+ * read fails — the document isn't cached on the device, the Drive session has
+ * lapsed, or it's a Google-native doc with no real file behind it — and the read
+ * is happening because `fetch` is streaming the multipart body, then fetch
+ * rejects with a bare TypeError. No status, no error code, nothing sent, nothing
+ * in the server log, and the UI can only say "check your connection".
+ *
+ * Reading first moves that failure somewhere it can be explained, and the POST
+ * that follows carries bytes already in memory, so it cannot die mid-stream.
+ *
+ * Throws `ReceiptFileReadError` when the bytes can't be read or come back empty.
+ */
+export class ReceiptFileReadError extends Error {
+  constructor(public readonly reason: 'unreadable' | 'empty', cause?: unknown) {
+    super(`Receipt file ${reason}`)
+    this.name = 'ReceiptFileReadError'
+    this.cause = cause
+  }
+}
+
+export async function readReceiptFile(file: File): Promise<File> {
+  let bytes: ArrayBuffer
+  try {
+    bytes = await file.arrayBuffer()
+  } catch (cause) {
+    throw new ReceiptFileReadError('unreadable', cause)
+  }
+  // A cloud placeholder can also read "successfully" as nothing at all.
+  if (bytes.byteLength === 0) throw new ReceiptFileReadError('empty')
+  // Normalise the part's content type on the way out: a PDF the picker labelled
+  // application/x-pdf, octet-stream, or nothing is posted as application/pdf.
+  // The backend still checks magic bytes; this just stops it having to guess.
+  const type = looksLikePdf(file) ? 'application/pdf' : (file.type || 'application/octet-stream')
+  return new File([bytes], file.name || 'receipt', { type })
+}
+
+/**
  * The selected file's identity, for a console line and for tests. Deliberately
  * a plain object rather than an analytics event: the file name can carry
  * customer detail, so it stays on the device.
