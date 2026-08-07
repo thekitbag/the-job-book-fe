@@ -66,10 +66,11 @@ export function receiptSelectionProblem(file: File): ReceiptSelectionProblem | n
  * Throws `ReceiptFileReadError` when the bytes can't be read or come back empty.
  */
 export class ReceiptFileReadError extends Error {
-  constructor(public readonly reason: 'unreadable' | 'empty', cause?: unknown) {
+  // Declared rather than relying on Error.cause: the build targets a lib
+  // without it, and the underlying DOMException is worth keeping for the log.
+  constructor(public readonly reason: 'unreadable' | 'empty', public readonly readCause?: unknown) {
     super(`Receipt file ${reason}`)
     this.name = 'ReceiptFileReadError'
-    this.cause = cause
   }
 }
 
