@@ -6,17 +6,13 @@
 import { execFileSync } from 'child_process'
 
 // GHSA ids we knowingly accept, with the reason they can't be fixed today.
-const ALLOWLIST = new Map([
-  [
-    'GHSA-mh99-v99m-4gvg',
-    // brace-expansion DoS. Only patched in 5.0.8, whose named `{ expand }`
-    // export is incompatible with the minimatch@3 that eslint-plugin-jsx-a11y
-    // (latest) and the workbox build chain still require. Dev/build-time only;
-    // not shipped in the production bundle. Remove once upstream ships a
-    // compatible release.
-    'brace-expansion <= 5.0.7, no compatible patched version (dev/build-only)',
-  ],
-])
+//
+// Empty is the goal: an entry here suppresses a real high/critical finding, so
+// each one needs a reason it cannot be fixed and gets removed the moment a
+// compatible release lands. GHSA-mh99-v99m-4gvg (brace-expansion) lived here
+// until 1.1.18 / 2.1.4 / 5.0.9 shipped the fix without the incompatible
+// `{ expand }` export that had blocked the upgrade.
+const ALLOWLIST = new Map([])
 
 const BLOCKING = new Set(['high', 'critical'])
 
