@@ -30,9 +30,19 @@ function postsCard(page: Page) {
   return page.locator('.mem-card').filter({ hasText: 'fence posts' }).first()
 }
 
-async function knownSpend(page: Page): Promise<string> {
+// Opening Budget starts a refetch, so the hero briefly shows whatever it had
+// before. Every read here waits for a settled money figure rather than
+// sampling once — a single innerText() call races the refetch and reads the
+// stale value on a slow runner.
+function budgetHero(page: Page) {
+  return page.locator('.mem-hero-amount').first()
+}
+
+async function openBudget(page: Page) {
   await goToSection(page, 'Budget')
-  return (await page.locator('.mem-hero-amount').first().innerText()).trim()
+  const hero = budgetHero(page)
+  await expect(hero).toContainText(/£[\d,]+ cost/)
+  return hero
 }
 
 test.describe('Returned materials', () => {
@@ -50,7 +60,7 @@ test.describe('Returned materials', () => {
 
   test('partial return: Left over drops to 2, Returned shows 4 with merchant and refund', async ({ page }) => {
     await gotoApp(page)
-    const before = await knownSpend(page)
+    await expect(await openBudget(page)).toHaveText('£2,270 cost of £7,500')
 
     await goToSection(page, 'Materials', 'Left over')
     await expect(postsCard(page)).toContainText('6 · from Jewson')
@@ -77,10 +87,11 @@ test.describe('Returned materials', () => {
     await page.getByRole('tab', { name: 'Bought' }).click()
     await expect(page.getByRole('tabpanel', { name: /bought materials/i })).toContainText('hardcore')
 
-    // Net spend is £80 lower. The Spend screen states the net figure only —
-    // the refund itself is shown under Materials → Returned, not here.
-    const after = await knownSpend(page)
-    expect(after).not.toBe(before)
+    // Net spend is exactly £80 lower. The Budget screen states the net figure
+    // only — the refund itself is shown under Materials → Returned, not here.
+    // Asserting the figure rather than "it changed" also catches a refund
+    // applied with the wrong sign or amount.
+    await expect(await openBudget(page)).toHaveText('£2,190 cost of £7,500')
     await expect(page.getByRole('region', { name: /^budget$/i })).not.toContainText('refund')
   })
 

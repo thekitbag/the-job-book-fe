@@ -187,13 +187,12 @@ test.describe('Current job home', () => {
     await expect(page.getByRole('tab', { name: 'Bought' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('Job log contains All / Notes / Photos filters and no Receipts yet', async ({ page }) => {
+  test('Job log contains All / Notes / Photos / Receipts filters, All first', async ({ page }) => {
     await goToSection(page, 'Job log')
-    for (const f of ['All', 'Notes', 'Photos']) {
+    for (const f of ['All', 'Notes', 'Photos', 'Receipts']) {
       await expect(page.getByRole('tab', { name: f })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('tab', { name: /receipts/i })).toHaveCount(0)
   })
 
   test('no file size on the normal workspace', async ({ page }) => {

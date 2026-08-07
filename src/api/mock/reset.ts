@@ -5,6 +5,7 @@ import { _resetMockMemoryForTesting } from './state'
 import { _resetMockMoneyForTesting } from './money'
 import { _resetMockPaymentsForTesting } from './payments'
 import { _resetMockPhotosForTesting } from './photos'
+import { _resetMockReceiptsForTesting } from './receipts'
 
 export function resetMockApiForE2e(scenario = 'default'): void {
   _resetMockAuthForTesting()
@@ -14,4 +15,5 @@ export function resetMockApiForE2e(scenario = 'default'): void {
   _resetMockMoneyForTesting(scenario)
   _resetMockPaymentsForTesting()
   _resetMockPhotosForTesting()
+  _resetMockReceiptsForTesting()
 }

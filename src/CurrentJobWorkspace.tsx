@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ApiError, getDraftFacts, getJobPhotos, getReviewQueue, patchJob } from './api'
+import { ApiError, getDraftFacts, getJobPhotos, getJobReceipts, getReviewQueue, patchJob } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
 import { useTranscriptPoll } from './useTranscriptPoll'
 import { usePwaInstall } from './usePwaInstall'
 import { useJobMemory } from './useJobMemory'
-import { deriveLatestActivity, formatMoney, mergeLatestActivityWithPhotos } from './memoryScan'
+import { deriveLatestActivity, formatMoney, mergeLatestActivityWithPhotos, mergeLatestActivityWithReceipts } from './memoryScan'
 import SpendTab from './SpendTab'
 import LabourTab from './LabourTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
+import JobReceiptsSection from './JobReceiptsSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
 import MoneySection, { useMoney } from './MoneySection'
@@ -18,7 +19,7 @@ import { useToast } from './Toast'
 import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, JobReceipt, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -40,9 +41,9 @@ type Section = 'home' | 'spend' | 'money' | 'labour' | 'materials' | 'joblog'
 // that went back to the merchant really left the job, and hiding it under the
 // stock he still has would be a different (wrong) claim.
 type MaterialsTab = 'bought' | 'used' | 'leftover' | 'returned'
-// Receipts becomes a filter here once receipt support lands — no inert filter
-// until then.
-type JobLogFilter = 'all' | 'notes' | 'photos'
+// Receipts are their own filter: classification follows Mike's intent at upload
+// time, so a receipt image lives here and never under Photos.
+type JobLogFilter = 'all' | 'notes' | 'photos' | 'receipts'
 
 const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
   // The 'spend' section is user-facing "Budget": it tracks committed/allocated
@@ -64,6 +65,7 @@ const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'hom
   labour: { section: 'labour' },
   note: { section: 'joblog', joblogFilter: 'notes' },
   photo: { section: 'joblog', joblogFilter: 'photos' },
+  receipt: { section: 'joblog', joblogFilter: 'receipts' },
   payment: { section: 'money' },
 }
 
@@ -130,7 +132,7 @@ function HomeSectionCards({ total, budgetAmount, labourHours, moneySummary, onOp
       denom: hasHours ? 'logged' : 'None yet',
     },
     { section: 'materials', title: 'Materials', value: null, denom: 'Bought · used · left · returned' },
-    { section: 'joblog', title: 'Job log', value: null, denom: 'Notes · photos' },
+    { section: 'joblog', title: 'Job log', value: null, denom: 'Notes · photos · receipts' },
   ]
 
   return (
@@ -563,6 +565,21 @@ export default function CurrentJobWorkspace({
 
   useEffect(() => { loadPhotos() }, [loadPhotos])
 
+  // Job log "All" needs receipts alongside notes and photos, so the workspace
+  // reads them independently of JobReceiptsSection's own fetch — same stale-job
+  // guard, same quiet failure. Receipts are evidence only: this read never
+  // feeds Budget, Money, or latest activity on job home.
+  const [receipts, setReceipts] = useState<JobReceipt[]>([])
+
+  const loadReceipts = useCallback(() => {
+    const requestedJobId = job.id
+    getJobReceipts(requestedJobId)
+      .then(res => { if (currentJobIdRef.current === requestedJobId) setReceipts(res.receipts) })
+      .catch(() => { if (currentJobIdRef.current === requestedJobId) setReceipts([]) })
+  }, [job.id])
+
+  useEffect(() => { loadReceipts() }, [loadReceipts])
+
   const readyExtractionCount = notes.filter(
     n => n.localState === 'uploaded' && n.extractionStatus === 'ready',
   ).length
@@ -655,9 +672,12 @@ export default function CurrentJobWorkspace({
   // Bought/used/labour stay in their own sections — the log is the narrative
   // record (notes, photos, receipts), not a duplicate of the money lenses.
   const jobLogItems = useMemo(
-    () => mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 500), photos, 500)
-      .filter(i => i.type === 'note' || i.type === 'photo'),
-    [mem.data, photos],
+    () => mergeLatestActivityWithReceipts(
+      mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 500), photos, 500),
+      receipts,
+      500,
+    ).filter(i => i.type === 'note' || i.type === 'photo' || i.type === 'receipt'),
+    [mem.data, photos, receipts],
   )
 
   // Photo link targets: trusted memory items only — review-queue drafts are
@@ -983,7 +1003,7 @@ export default function CurrentJobWorkspace({
         {section === 'joblog' && (
           <>
             <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Job log filters">
-              {([['all', 'All'], ['notes', 'Notes'], ['photos', 'Photos']] as const).map(([key, label]) => (
+              {([['all', 'All'], ['notes', 'Notes'], ['photos', 'Photos'], ['receipts', 'Receipts']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   role="tab"
@@ -997,7 +1017,7 @@ export default function CurrentJobWorkspace({
             </div>
             {joblogFilter === 'all' && renderMemoryTab(
               jobLogItems.length === 0 ? (
-                <p className="mem-tab-empty">Nothing in the job log yet. Notes and photos land here.</p>
+                <p className="mem-tab-empty">Nothing in the job log yet. Notes, photos, and receipts land here.</p>
               ) : (
                 <ul className="ws-latest-card ws-joblog-feed" aria-label="Job log">
                   {jobLogItems.map(item => (
@@ -1005,7 +1025,7 @@ export default function CurrentJobWorkspace({
                       <button
                         type="button"
                         className="ws-latest-row"
-                        onClick={() => setJoblogFilter(item.type === 'photo' ? 'photos' : 'notes')}
+                        onClick={() => setJoblogFilter(item.type === 'photo' ? 'photos' : item.type === 'receipt' ? 'receipts' : 'notes')}
                         aria-label={`${item.typeLabel}: ${item.headline}`}
                       >
                         <span className="ws-latest-top">
@@ -1029,6 +1049,9 @@ export default function CurrentJobWorkspace({
             )}
             {joblogFilter === 'photos' && (
               <JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />
+            )}
+            {joblogFilter === 'receipts' && (
+              <JobReceiptsSection jobId={job.id} onReceiptsChanged={loadReceipts} />
             )}
           </>
         )}
