@@ -1,5 +1,13 @@
 import type { BudgetCategory, BudgetCategorySuggestion, BudgetCategorySummary, BudgetSpendRow, BudgetSummaryResponse, ExcludedSpendRow, GrossKnownCost, JobPhoto, JobReceipt, LabourCostSummary, LabourDayItem, LabourDaySummary, LabourExcludedRow, LabourExclusionReason, LabourHoursSummary, LabourSpendRow, LabourSpendSummary, LabourTodaySummary, LatestActivityItem, LatestActivityType, MemoryViewItem, MemoryViewSection, OrderedCostSummary, RefundsSummary, ReturnedRefundRow, ScanViewItem, ScanViewSection, SpendExclusionReason, TotalKnownCost } from './types'
 
+// Memory types that can carry a Budget category. One list, shared by the card
+// (which offers the shortcut) and the edit form (which corrects an existing
+// assignment) so the two can never disagree about what is assignable — a stale
+// second copy here is what silently dropped budget_cost items out of the Fix
+// memory category field. If the backend ever exposes eligibility per item,
+// prefer that over this set.
+export const CATEGORY_ASSIGNABLE_TYPES = new Set<string>(['ordered_material', 'labour', 'budget_cost'])
+
 // ── Shared display formatting ───────────────────────────────────────────────
 // Centralised so the scan summary and the detail cards (and the review queue)
 // format cost/total identically and cannot drift.

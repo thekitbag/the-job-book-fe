@@ -55,6 +55,13 @@ type LoadState = 'loading' | 'ready' | 'error'
 // Shared props a tab passes to <MemoryCard> minus the item itself.
 type CardExtras = Omit<MemoryCardProps, 'item'>
 
+export interface UseJobMemoryOptions {
+  // Called after an item's Budget category changes, so surfaces that show
+  // category context sourced from elsewhere (Money) can refetch. Budget itself
+  // is refetched internally and needs no callback.
+  onCategoryChanged?: () => void
+}
+
 /**
  * Owns everything the job-memory lenses (Spend / Labour / Used / Notes) need:
  * memory-view + budget-summary loading with independent failure, the in-place
@@ -62,8 +69,17 @@ type CardExtras = Omit<MemoryCardProps, 'item'>
  * cost derivations. Lifted out of the old JobMemoryScreen so the workspace tabs
  * can share one source of truth.
  */
-export function useJobMemory(job: Job) {
+export function useJobMemory(job: Job, opts: UseJobMemoryOptions = {}) {
+  // Money out rows show their source item's Budget category, so a recategorised
+  // item leaves Money displaying the old one until it refetches. Held in a ref
+  // so passing an inline callback can't churn every memoized handler below.
+  const onCategoryChangedRef = useRef(opts.onCategoryChanged)
+  onCategoryChangedRef.current = opts.onCategoryChanged
+  // Latest loaded memory view, for handlers that need the pre-save item without
+  // taking `data` as a dependency.
+  const dataRef = useRef<MemoryViewResponse | null>(null)
   const [data, setData] = useState<MemoryViewResponse | null>(null)
+  dataRef.current = data
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [errorMsg, setErrorMsg] = useState('')
   const [refreshError, setRefreshError] = useState(false)
@@ -182,6 +198,7 @@ export function useJobMemory(job: Job) {
         })),
       } : prev)
       void loadBudget()
+      onCategoryChangedRef.current?.()
     } catch {
       setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not change category — tap to retry' }))
     } finally {
@@ -193,8 +210,19 @@ export function useJobMemory(job: Job) {
     setSubmittingId(memoryItemId)
     setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
     try {
+      // Read through a ref rather than the `data` closure: this handler is
+      // memoized on job id alone, and pulling `data` into its deps would
+      // rebuild every card's props on each load.
+      const before = dataRef.current?.sections
+        .flatMap(s => s.items)
+        .find(it => it.id === memoryItemId)
       const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
       track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
+      // A category correction is the one edit whose effect reaches outside
+      // Budget: Money out rows caption themselves with the source item's
+      // category. Compare against the pre-save item so an unrelated text fix
+      // doesn't trigger a needless refetch.
+      const categoryChanged = (before?.budgetCategoryId ?? null) !== (updated.budgetCategoryId ?? null)
       setData(prev => {
         if (!prev) return prev
         let prevItem: MemoryViewItem | undefined
@@ -212,6 +240,7 @@ export function useJobMemory(job: Job) {
       setEditingId(null)
       void refreshSummary()
       void loadBudget()
+      if (categoryChanged) onCategoryChangedRef.current?.()
     } catch (error) {
       const message = error instanceof ApiError && error.message === PAID_LABOUR_COST_EDIT_MESSAGE
         ? PAID_LABOUR_COST_EDIT_MESSAGE
@@ -540,13 +569,22 @@ export function useJobMemory(job: Job) {
     }
   }, [orderedForCheck, handleSaveEdit])
 
-  // Shared MemoryCard props for an item; pass categories only where a picker helps.
+  // Shared MemoryCard props for an item.
+  //
+  // Categories go to EVERY card, not just the ones offering the one-tap "Pick
+  // category" shortcut. Withholding them used to disable the Budget category
+  // field inside Fix memory as a side effect, so a cost item could be filed
+  // once and never corrected again. `withPicker` now controls only the
+  // shortcut — an affordance for items with no category yet — while
+  // recategorising an already-filed item stays where every other correction
+  // lives: inside Fix memory.
   const cardProps = useCallback((item: MemoryViewItem, withPicker: boolean): CardExtras => ({
     isEditing: editingId === item.id,
     submitting: submittingId === item.id,
     verifying: verifyingId === item.id,
     errorMsg: itemErrors[item.id] ?? null,
-    categories: withPicker ? budgetCategories : [],
+    categories: budgetCategories,
+    canPickCategory: withPicker,
     assigningCategory: assigningCategoryId === item.id,
     mutating: mutatingId === item.id,
     onStartEdit: () => setEditingId(item.id),

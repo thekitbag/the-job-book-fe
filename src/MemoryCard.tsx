@@ -5,14 +5,15 @@ import BottomSheet from './BottomSheet'
 import ItemActionDrawer from './ItemActionDrawer'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
-import { costDetailRows, deriveEachTotal, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
+import { CATEGORY_ASSIGNABLE_TYPES, costDetailRows, deriveEachTotal, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
 import type { MarkPaidControls } from './markPaid'
 import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
 
 // Types shown with a structured type label + detail rows (not a prose summary).
 export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'budget_cost', 'used_material', 'leftover_material', 'returned_material', 'labour'])
 // Types that can carry a budget category (a picker is offered for these).
-export const CATEGORY_TYPES = new Set<string>(['ordered_material', 'labour', 'budget_cost'])
+// Single definition in memoryScan so the card and the edit form agree.
+export const CATEGORY_TYPES = CATEGORY_ASSIGNABLE_TYPES
 // Types that count towards known spend — these carry the date cue and the
 // "no longer count in known spend" warning when removed.
 const SPEND_TYPES = new Set<string>(['ordered_material', 'labour', 'budget_cost'])
@@ -155,6 +156,10 @@ export interface MemoryCardProps {
   verifying: boolean
   errorMsg: string | null
   categories: BudgetCategory[]
+  // Whether this surface offers the one-tap "Choose category" shortcut for an
+  // item with no category yet. Independent of `categories`, which is always
+  // supplied so Fix memory can correct a category that is already set.
+  canPickCategory?: boolean
   assigningCategory: boolean
   excludedReason?: string | null
   mutating: boolean
@@ -187,6 +192,7 @@ export default function MemoryCard({
   verifying,
   errorMsg,
   categories,
+  canPickCategory: offerCategoryShortcut = false,
   assigningCategory,
   excludedReason,
   mutating,
@@ -262,7 +268,9 @@ export default function MemoryCard({
     ).concat(dateLabel ? [dateLabel] : []).filter(Boolean).join(' · ')
     const label = name ?? item.summary
     // Uncategorised cost entries can be filed to a category from the drawer.
-    const canPickCategory = CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId
+    // Already-categorised items deliberately do NOT get this shortcut: changing
+    // an existing category is a correction, and corrections live in Fix memory.
+    const canPickCategory = offerCategoryShortcut && CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId
     // Cost stated in cost language — never "paid": Budget tracks committed cost.
     const costLine = price ? `${price} cost` : null
     const isPaid = markPaid?.isPaid(item) ?? false
@@ -368,7 +376,7 @@ export default function MemoryCard({
         </div>
       )}
 
-      {isRow && CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId && (
+      {isRow && offerCategoryShortcut && CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId && (
         <button
           type="button"
           className="mem-card-pick"

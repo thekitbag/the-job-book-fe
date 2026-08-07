@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatMoney, localDateKey, localNoonISO } from './memoryScan'
+import { CATEGORY_ASSIGNABLE_TYPES, deriveEachTotal, deriveHourlyTotal, eachTotalGaps, hourlyTotalGaps, joinWithAnd, formatMoney, localDateKey, localNoonISO } from './memoryScan'
 import type { BudgetCategory, CostQualifier, MemoryItemEdit, MemoryType } from './types'
 
 // Reclassification targets. Deliberately excludes 'returned_material': a return
@@ -27,7 +27,9 @@ const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'unknown', label: 'Not clear' },
 ]
 
-const CATEGORY_TYPES = new Set<MemoryType>(['ordered_material', 'labour'])
+// Shared with MemoryCard: a local copy here had gone stale and left budget_cost
+// items — the type that now carries job cost — with no category field at all.
+const CATEGORY_TYPES = CATEGORY_ASSIGNABLE_TYPES
 const DECIMAL = /^\d+(\.\d+)?$/
 
 function sameDecimal(left: string | null | undefined, right: string | null | undefined): boolean {
@@ -60,8 +62,10 @@ export default function MemoryEditForm({
 }: {
   initial: MemoryItemEdit
   submitting: boolean
-  // Active budget categories; when empty (or item not bought/ordered) no category
-  // control is shown. Category applies only to ordered_material memory.
+  // Active budget categories for this job. When empty, or the item's type can't
+  // carry a category, no category control is shown. Supplied for every
+  // category-assignable item — including ones that already have a category, so
+  // the assignment can be corrected here rather than only set once.
   categories?: BudgetCategory[]
   // Known paid state from the item drawer. Text/date/person corrections remain
   // editable; cost-affecting changes must go through Undo paid first.
@@ -69,11 +73,14 @@ export default function MemoryEditForm({
   onSubmit: (edit: MemoryItemEdit) => void
   onCancel: () => void
 }) {
+  // A `total`-basis item usually carries its figure in totalCostAmount with no
+  // costAmount at all. The form shows one "Total cost" field bound to
+  // costAmount and mirrors it back into totalCostAmount on save, so without
+  // this seed the field opens blank and saving — even a category-only
+  // correction — writes the total away as null. Applies to every type: it was
+  // labour-only, which left bought items silently losing their cost.
   const [form, setForm] = useState<MemoryItemEdit>(() =>
-    initial.memoryType === 'labour' &&
-    initial.costQualifier === 'total' &&
-    !initial.costAmount &&
-    initial.totalCostAmount
+    initial.costQualifier === 'total' && !initial.costAmount && initial.totalCostAmount
       ? { ...initial, costAmount: initial.totalCostAmount }
       : initial,
   )
@@ -241,7 +248,10 @@ export default function MemoryEditForm({
             value={form.budgetCategoryId ?? ''}
             onChange={e => setForm(f => ({ ...f, budgetCategoryId: e.target.value || null }))}
           >
-            <option value="">Choose category</option>
+            {/* Named as the state it puts the item in, not as an instruction:
+                picking it on an already-filed item is how a category is
+                cleared, and "Choose category" gave no hint that it would. */}
+            <option value="">Uncategorised</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
