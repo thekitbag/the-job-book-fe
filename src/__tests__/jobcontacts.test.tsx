@@ -107,12 +107,16 @@ function renderWorkspace() {
 // is the path the flow tests exercise.
 async function openJobDetails() {
   fireEvent.click(screen.getAllByRole('button', { name: 'Job details' })[0])
-  return await screen.findByRole('dialog', { name: 'Job details' })
+  const sheet = await screen.findByRole('dialog', { name: 'Job details' })
+  // Wait out the details fetch: the sheet renders immediately with a loading
+  // line, and everything a caller wants to click only exists after it resolves.
+  await within(sheet).findByRole('button', { name: /site address/i })
+  return sheet
 }
 
 async function openContactForm(name: 'Add contact' | RegExp) {
   const sheet = screen.getByRole('dialog')
-  fireEvent.click(within(sheet).getByRole('button', { name }))
+  fireEvent.click(await within(sheet).findByRole('button', { name }))
   return await screen.findByRole('form', { name: /contact/i })
 }
 
@@ -349,7 +353,9 @@ describe('Job details — contacts', () => {
   it('offers a retry when job details fail to load', async () => {
     mockGetJobDetails.mockRejectedValue(new Error('offline'))
     renderWorkspace()
-    await openJobDetails()
+    // Not the shared helper: on a failed load the sheet never reaches the
+    // state that helper waits for.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Job details' })[0])
     expect(await screen.findByText('Couldn’t load job details.')).toBeInTheDocument()
 
     mockGetJobDetails.mockResolvedValue(details({}, [contact()]))
