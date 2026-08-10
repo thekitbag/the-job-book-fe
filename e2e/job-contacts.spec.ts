@@ -21,9 +21,11 @@ async function gotoApp(page: Page) {
   }
 }
 
+// The everyday route: the labelled control on the job screen itself. The
+// overflow menu still works, but founder testing showed nobody looks in an
+// unlabelled "⋯" for a phone number.
 async function openJobDetails(page: Page) {
-  await page.getByRole('button', { name: /more actions/i }).click()
-  await page.getByRole('menuitem', { name: 'Job details' }).click()
+  await page.getByRole('button', { name: 'Job details' }).first().click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
   return sheet
@@ -42,6 +44,35 @@ async function addContact(page: Page, fields: { name: string; role?: string; pho
 }
 
 test.describe('Job details — contacts and site address', () => {
+  test('is discoverable on the job screen without opening the overflow menu', async ({ page }) => {
+    await gotoApp(page)
+
+    // Visible and labelled on the job screen as loaded — no menu, no glyph to
+    // decode — and it leads straight to Add contact / Add site address.
+    const control = page.getByRole('button', { name: 'Job details' })
+    await expect(control).toBeVisible()
+    await control.click()
+    await expect(page.getByRole('button', { name: 'Add contact' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add site address' })).toBeVisible()
+  })
+
+  test('is reachable from a section header without going back to job home', async ({ page }) => {
+    await gotoApp(page)
+    await page.getByRole('button', { name: 'Open Budget' }).click()
+    await expect(page.getByRole('button', { name: '‹ Job home' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Job details' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add contact' })).toBeVisible()
+  })
+
+  test('remains available from the header overflow menu', async ({ page }) => {
+    await gotoApp(page)
+    await page.getByRole('button', { name: /more actions/i }).click()
+    await page.getByRole('menuitem', { name: 'Job details' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+  })
+
   test('opens from the current job with a quiet empty state and no CRM language', async ({ page }) => {
     await gotoApp(page)
     const sheet = await openJobDetails(page)

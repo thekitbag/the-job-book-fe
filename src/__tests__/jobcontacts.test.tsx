@@ -102,11 +102,11 @@ function renderWorkspace() {
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
 }
 
-// Job details is reached from the current job's header menu — no navigation
-// away from the job, and no new stable section.
+// The everyday route: a visible, labelled control on the job screen. Founder
+// testing found the overflow menu too hidden, so this — not "More actions" —
+// is the path the flow tests exercise.
 async function openJobDetails() {
-  fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Job details' }))
+  fireEvent.click(screen.getAllByRole('button', { name: 'Job details' })[0])
   return await screen.findByRole('dialog', { name: 'Job details' })
 }
 
@@ -121,7 +121,42 @@ function fill(form: HTMLElement, field: string, value: string) {
 }
 
 describe('Job details — placement', () => {
-  it('is reachable from the current job header menu, and job home gains no Contacts card', async () => {
+  it('is reachable from a visible labelled control on job home, not only the overflow menu', async () => {
+    renderWorkspace()
+    await screen.findByRole('navigation', { name: 'Job sections' })
+
+    // Visible on the job screen without opening anything first: a new user can
+    // find site address and contacts without knowing to inspect "⋯".
+    const control = screen.getByRole('button', { name: 'Job details' })
+    expect(control).toBeVisible()
+    expect(control.closest('.ws-header-menu')).toBeNull()
+
+    fireEvent.click(control)
+    expect(await screen.findByRole('dialog', { name: 'Job details' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add contact' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add site address' })).toBeInTheDocument()
+  })
+
+  it('is reachable from a section header, without returning to job home', async () => {
+    renderWorkspace()
+    await screen.findByRole('navigation', { name: 'Job sections' })
+    fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
+
+    // The section header carries the same labelled control — looking up a
+    // number from Budget costs no navigation.
+    fireEvent.click(screen.getByRole('button', { name: 'Job details' }))
+    expect(await screen.findByRole('dialog', { name: 'Job details' })).toBeInTheDocument()
+  })
+
+  it('remains available from the header overflow menu as well', async () => {
+    renderWorkspace()
+    await screen.findByRole('navigation', { name: 'Job sections' })
+    fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Job details' }))
+    expect(await screen.findByRole('dialog', { name: 'Job details' })).toBeInTheDocument()
+  })
+
+  it('adds no Contacts card to job home and uses no CRM language', async () => {
     renderWorkspace()
     await screen.findByRole('navigation', { name: 'Job sections' })
 
