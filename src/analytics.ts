@@ -81,7 +81,11 @@ export function sanitizeProperties(properties?: Record<string, unknown>): Record
   const safe: Record<string, string | number | boolean | null> = {}
   if (!properties) return safe
   for (const [key, value] of Object.entries(properties)) {
-    if (BLOCKED_KEY_PATTERN.test(key)) continue
+    // A boolean cannot carry content, whatever its key is called. Without this
+    // the presence flags the job-contacts spec asks for (has_phone, has_email)
+    // would be dropped by name alone, and the events would say nothing. Only
+    // true/false is exempt: a string under a blocked key is still dropped.
+    if (BLOCKED_KEY_PATTERN.test(key) && typeof value !== 'boolean') continue
     if (!isSafeValue(value)) continue
     safe[key] = value
   }

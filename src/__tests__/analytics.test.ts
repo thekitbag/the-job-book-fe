@@ -214,6 +214,15 @@ describe('sanitizeProperties directly', () => {
   it('keeps null, numbers, and booleans', () => {
     expect(sanitizeProperties({ a: null, b: 3, c: true })).toEqual({ a: null, b: 3, c: true })
   })
+
+  // Presence flags (job contacts: has_phone / has_email) are the whole point of
+  // the event, and a boolean cannot carry content whatever its key says. A
+  // string under the same key is still dropped.
+  it('keeps booleans under blocked keys but never strings', () => {
+    expect(sanitizeProperties({
+      has_phone: true, has_email: false, phone: '07700 900118', email: 'mike@example.com',
+    })).toEqual({ has_phone: true, has_email: false })
+  })
 })
 
 describe('bucket helpers', () => {

@@ -1204,3 +1204,60 @@ export interface MarkMoneyOutRequest {
   note?: string | null
   reference?: string | null
 }
+
+// ── Job details: site address + job-local contacts ───────────────────────────
+// Contacts are job context, not CRM: scoped to one job, manually entered, never
+// created from voice extraction, and never reusable across jobs. One optional
+// site address belongs to the job itself.
+
+export interface JobContact {
+  id: string
+  jobId: string
+  name: string
+  role: string | null
+  phone: string | null
+  email: string | null
+  note: string | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+// GET /api/jobs/:jobId/details
+export interface JobDetailsResponse {
+  job: {
+    id: string
+    title: string
+    jobType: string | null
+    status: string
+    roughLocationOrLabel: string | null
+    siteAddress: string | null
+    createdAt: string
+    updatedAt: string
+  }
+  contacts: JobContact[]
+}
+
+// PATCH /api/jobs/:jobId/details — omitted preserves, null/blank clears.
+export interface PatchJobDetailsRequest {
+  siteAddress?: string | null
+}
+
+// POST /api/jobs/:jobId/contacts — name is the only required field.
+export interface CreateJobContactRequest {
+  name: string
+  role?: string | null
+  phone?: string | null
+  email?: string | null
+  note?: string | null
+}
+
+// PATCH /api/jobs/:jobId/contacts/:contactId — omitted preserves, null/blank
+// clears an optional field. Name can be changed but never cleared.
+export interface PatchJobContactRequest {
+  name?: string
+  role?: string | null
+  phone?: string | null
+  email?: string | null
+  note?: string | null
+}

@@ -14,6 +14,7 @@ import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './
 import JobReceiptsSection from './JobReceiptsSection'
 import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
 import BottomSheet from './BottomSheet'
+import JobDetailsSheet from './JobDetailsSheet'
 import MoneySection, { useMoney } from './MoneySection'
 import { useToast } from './Toast'
 import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
@@ -351,6 +352,10 @@ export default function CurrentJobWorkspace({
   // sheet open with a retryable inline error. Archive gets an in-sheet
   // confirmation step before any request is sent.
   const [statusSheetOpen, setStatusSheetOpen] = useState(false)
+  // Job details sheet — site address and job-local contacts, opened from the
+  // header menu. Loaded on open only: contacts are reference context and must
+  // never sit on the path that carries Record.
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
@@ -361,6 +366,9 @@ export default function CurrentJobWorkspace({
     setSection('home')
     setMaterialsTab('bought')
     setJoblogFilter('all')
+    // A details sheet left open would otherwise show the new job's contacts
+    // under the old job's heading.
+    setDetailsSheetOpen(false)
   }, [job.id])
 
   // Money (in + out) — loaded independently of memory/budget so a Money failure
@@ -488,6 +496,16 @@ export default function CurrentJobWorkspace({
       setSavingTitle(false)
     }
   }
+
+  // One entry point, reached from three places: the labelled control on the
+  // job-home status line, the same control in every section header, and the
+  // header menu item.
+  const openDetailsSheet = useCallback(() => {
+    setRenaming(false)
+    setStatusSheetOpen(false)
+    setHeaderMenuOpen(false)
+    setDetailsSheetOpen(true)
+  }, [])
 
   const openStatusSheet = () => { setStatusError(null); setConfirmingArchive(false); setRenaming(false); setStatusSheetOpen(true) }
   const closeStatusSheet = () => { setStatusSheetOpen(false); setConfirmingArchive(false); setStatusError(null) }
@@ -752,6 +770,12 @@ export default function CurrentJobWorkspace({
             <button type="button" className="btn-switch-job" onClick={() => setSection('home')}>‹ Job home</button>
             <div className="ws-header-top-right">
               {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
+              {/* Same affordance inside every section: looking up a supplier's
+                  number from Budget shouldn't mean navigating back to job home
+                  first. */}
+              <button type="button" className="btn-job-details" onClick={openDetailsSheet}>
+                Job details<span className="btn-job-details-chev" aria-hidden="true">›</span>
+              </button>
             </div>
           </div>
           <div className="ws-header-titles">
@@ -777,6 +801,10 @@ export default function CurrentJobWorkspace({
               {headerMenuOpen && (
                 <div className="ws-header-menu" role="menu">
                   <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); startRename() }}>Rename job</button>
+                  {/* Job details (site address + who's on the job) is reference
+                      context, not daily work — it belongs behind the menu, not
+                      on a home card next to Budget and Labour. */}
+                  <button type="button" role="menuitem" onClick={openDetailsSheet}>Job details</button>
                   {user?.role === 'INTERNAL' && (
                     <a role="menuitem" href="/internal/support" onClick={() => setHeaderMenuOpen(false)}>Support</a>
                   )}
@@ -825,6 +853,13 @@ export default function CurrentJobWorkspace({
                 >
                   {jobStatusLabel(job.status)}
                   <span className="ws-status-chip-chev" aria-hidden="true">▾</span>
+                </button>
+                {/* Named, on the status line: site address and phone numbers
+                    are things Mike goes looking for, and an unlabelled "⋯" is
+                    not somewhere anyone looks for a phone number. The menu
+                    item stays, but it is no longer the only way in. */}
+                <button type="button" className="btn-job-details" onClick={openDetailsSheet}>
+                  Job details<span className="btn-job-details-chev" aria-hidden="true">›</span>
                 </button>
               </div>
             </>
@@ -892,6 +927,10 @@ export default function CurrentJobWorkspace({
           )}
           {statusError && <p className="queue-item-error" role="alert">{statusError}</p>}
         </BottomSheet>
+      )}
+
+      {detailsSheetOpen && (
+        <JobDetailsSheet jobId={job.id} jobTitle={job.title} onClose={() => setDetailsSheetOpen(false)} />
       )}
 
       <div className="ws-body">
