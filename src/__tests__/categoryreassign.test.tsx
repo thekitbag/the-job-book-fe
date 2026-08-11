@@ -163,7 +163,7 @@ beforeEach(() => {
 })
 
 function renderWorkspace() {
-  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
+  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} />)
 }
 
 function openSection(name: string) {

@@ -4,7 +4,9 @@ import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
-import JobPickerScreen from './JobPickerScreen'
+import BookHomeScreen from './BookHomeScreen'
+import AllJobsScreen from './AllJobsScreen'
+import type { JobGroupKey } from './jobGroups'
 import type { AuthUser, Job } from './types'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
@@ -42,7 +44,9 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 }
 
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
-type AppView = 'workspace' | 'reviewQueue' | 'jobPicker'
+// The app still launches into the last selected Job Home. Book Home is the
+// level above it, reached from a job — never the default screen.
+type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs'
 
 export default function App() {
   // A password-reset link must work even for a browser that still has a valid
@@ -54,6 +58,9 @@ export default function App() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('workspace')
+  // Which group All Jobs opens looking at — set only when Book Home's
+  // "Finished jobs" row is the way in.
+  const [allJobsFocus, setAllJobsFocus] = useState<JobGroupKey | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
   // Current account (for role-gated UI like the internal Support entry).
   // Best-effort: the app works without it; only INTERNAL extras depend on it.
@@ -168,6 +175,11 @@ export default function App() {
     })
   }
 
+  // Opening a job from Book Home or All Jobs is what makes it the recording
+  // destination — and the only thing that does. Moving up to the book level
+  // and back down again leaves the selection exactly where it was, and a
+  // recording already in flight keeps the job id it captured at start.
+  //
   // `cause` keeps job_switched meaning a deliberate switch: selecting the job
   // that was just created is part of job_created, not a switch.
   function handleSelectJob(job: Job, cause: 'switch' | 'created' = 'switch') {
@@ -241,15 +253,16 @@ export default function App() {
             <a className="btn-support-entry" href="/internal/support">Founder support ›</a>
           </div>
         )}
-      <JobPickerScreen
+      {/* An empty book still opens on All Jobs rather than a special
+          first-run screen: it already carries the one route that matters
+          (New job), and it is the same page Mike will use ever after. */}
+      <AllJobsScreen
         jobs={[]}
-        selectedJobId={null}
         online={online}
-        onSelect={handleSelectJob}
-        onJobAdded={handleJobAdded}
-        onClose={() => {}}
-        title="Add first job"
         hideBack={true}
+        onOpenJob={handleSelectJob}
+        onJobAdded={handleJobAdded}
+        onBack={() => {}}
       />
       </>
     )
@@ -263,15 +276,26 @@ export default function App() {
     )
   }
 
-  if (view === 'jobPicker') {
+  if (view === 'bookHome') {
     return (
-      <JobPickerScreen
+      <BookHomeScreen
         jobs={jobs}
-        selectedJobId={selectedJob.id}
+        onOpenJob={handleSelectJob}
+        onOpenAllJobs={() => { setAllJobsFocus(null); setView('allJobs') }}
+        onOpenFinishedJobs={() => { setAllJobsFocus('finished'); setView('allJobs') }}
+      />
+    )
+  }
+
+  if (view === 'allJobs') {
+    return (
+      <AllJobsScreen
+        jobs={jobs}
         online={online}
-        onSelect={handleSelectJob}
+        focusGroup={allJobsFocus}
+        onOpenJob={handleSelectJob}
         onJobAdded={handleJobAdded}
-        onClose={() => setView('workspace')}
+        onBack={() => setView('bookHome')}
       />
     )
   }
@@ -284,7 +308,7 @@ export default function App() {
     <CurrentJobWorkspace
       job={selectedJob}
       onOpenReviewQueue={() => setView('reviewQueue')}
-      onSwitchJob={() => setView('jobPicker')}
+      onOpenBookHome={() => setView('bookHome')}
       onLogout={handleLogout}
       user={currentUser}
       onJobUpdated={handleJobUpdated}

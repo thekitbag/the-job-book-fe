@@ -95,7 +95,7 @@ const IN_AND_OUT = money({
 function renderWorkspace() {
   return render(
     <ToastProvider>
-      <CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />
+      <CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} />
     </ToastProvider>,
   )
 }

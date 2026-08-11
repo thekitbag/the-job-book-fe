@@ -92,14 +92,14 @@ describe('PWA install banner', () => {
       value: vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
     })
 
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
   })
 
   it('is hidden after the user dismisses it', async () => {
     const user = userEvent.setup()
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     // No prompt yet — banner not visible
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
@@ -118,7 +118,7 @@ describe('PWA install banner', () => {
   it('stays hidden on re-render after dismissal stored in localStorage', () => {
     localStorage.setItem(DISMISSED_KEY, 'true')
 
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
     fireInstallPrompt()
 
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
@@ -131,7 +131,7 @@ describe('PWA install banner', () => {
     })
     Object.defineProperty(navigator, 'maxTouchPoints', { writable: true, value: 5 })
 
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     const banner = await screen.findByRole('region', { name: /install app/i })
     expect(banner).toBeInTheDocument()
@@ -141,7 +141,7 @@ describe('PWA install banner', () => {
 
   it('triggers the native install prompt when Install is clicked', async () => {
     const user = userEvent.setup()
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     const promptFn = fireInstallPrompt()
 
@@ -155,7 +155,7 @@ describe('PWA install banner', () => {
   it('hides the install banner when the device is offline', () => {
     Object.defineProperty(navigator, 'onLine', { writable: true, value: false })
 
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
     fireInstallPrompt()
 
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()
@@ -165,7 +165,7 @@ describe('PWA install banner', () => {
   })
 
   it('smoke test: CaptureScreen renders without install banner when no prompt and not iOS', () => {
-    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={MOCK_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /install app/i })).not.toBeInTheDocument()

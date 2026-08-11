@@ -112,6 +112,6 @@ test.describe('Support mode — founder flow', () => {
     // back in the normal app, the founder still sees their own (job-less) state
     await page.goto('/')
     await page.waitForTimeout(1000)
-    await expect(page.getByRole('heading', { name: /add first job/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'All jobs 0' })).toBeVisible()
   })
 })

@@ -86,7 +86,7 @@ beforeEach(() => {
 })
 
 function renderWorkspace() {
-  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
+  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} />)
 }
 // The each × quantity auto-total is a bought-material feature; it lives in
 // Materials → Bought (Budget's Add cost is a general budget_cost with no

@@ -1,4 +1,4 @@
-import type { EditableJobStatus, Job, JobType } from '../types'
+import type { CreateJobRequest, EditableJobStatus, Job } from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { mockCreateJob, mockGetCurrentJob, mockGetJobs, mockPatchJob } from './mock/jobs'
 
@@ -17,13 +17,14 @@ export async function getJobs(): Promise<Job[]> {
   return res.json() as Promise<Job[]>
 }
 
-// POST /api/jobs — create a lightweight job. Requires network.
-export async function createJob(title: string, jobType?: JobType): Promise<Job> {
-  if (USE_MOCK) return mockCreateJob(title, jobType)
+// POST /api/jobs — create a lightweight job. Requires network. One request
+// creates one job; the caller must not retry a request it can't prove failed.
+export async function createJob(req: CreateJobRequest): Promise<Job> {
+  if (USE_MOCK) return mockCreateJob(req)
   const res = await apiFetch('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: title.trim(), jobType }),
+    body: JSON.stringify(req),
   })
   if (!res.ok) throw new ApiError(`POST /api/jobs → ${res.status}`, res.status)
   return res.json() as Promise<Job>

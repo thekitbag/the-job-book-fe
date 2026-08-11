@@ -152,17 +152,17 @@ const EMPTY_BUDGET: BudgetSummaryResponse = {
 }
 
 const onOpenReviewQueue = vi.fn()
-const onSwitchJob = vi.fn()
+const onOpenBookHome = vi.fn()
 
 beforeEach(() => {
-  onOpenReviewQueue.mockReset(); onSwitchJob.mockReset()
+  onOpenReviewQueue.mockReset(); onOpenBookHome.mockReset()
   mockGetMemoryView.mockResolvedValue(memoryView())
   mockGetBudgetSummary.mockResolvedValue(budgetSummary())
   window.confirm = vi.fn(() => true)
 })
 
 function renderWorkspace(job: Job = JOB) {
-  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={onOpenReviewQueue} onSwitchJob={onSwitchJob} />)
+  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={onOpenReviewQueue} onOpenBookHome={onOpenBookHome} />)
 }
 // Navigate to a lens in the new job-home model: sections are cards on home,
 // Used lives inside Materials, and Notes lives inside Job log.
@@ -197,10 +197,10 @@ describe('Workspace — shell / home', () => {
     expect(screen.getByRole('button', { name: 'Open Budget' })).toBeTruthy()
   })
 
-  it('Switch calls onSwitchJob', async () => {
+  it('The Job Book route calls onOpenBookHome', async () => {
     renderWorkspace()
-    fireEvent.click(screen.getByRole('button', { name: /switch/i }))
-    expect(onSwitchJob).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /the job book/i }))
+    expect(onOpenBookHome).toHaveBeenCalled()
   })
 
   it('shows a retryable error on the Spend tab when memory fails to load', async () => {
@@ -739,7 +739,7 @@ describe('Workspace — assign / fix / verify', () => {
     mockGetBudgetSummary.mockReturnValueOnce(deferred).mockResolvedValue(budgetSummary())
     const { rerender } = renderWorkspace()
     openTab('Budget')
-    rerender(<CurrentJobWorkspace job={JOB_B} onOpenReviewQueue={onOpenReviewQueue} onSwitchJob={onSwitchJob} />)
+    rerender(<CurrentJobWorkspace job={JOB_B} onOpenReviewQueue={onOpenReviewQueue} onOpenBookHome={onOpenBookHome} />)
     await waitFor(() => expect(mockGetBudgetSummary).toHaveBeenCalledTimes(2))
     await act(async () => { resolveB(stale); await deferred })
     expect(screen.queryByText('STALE')).toBeNull()

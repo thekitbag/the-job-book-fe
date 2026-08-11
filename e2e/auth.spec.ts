@@ -38,8 +38,9 @@ test.describe('Email/password auth (mock mode)', () => {
     await form.getByLabel(/^password$/i).fill('a-strong-password')
     await form.locator('button[type="submit"]').click()
 
-    // New account: no Mike jobs, prompted to add a first job instead.
-    await expect(page.getByRole('heading', { name: 'Add first job' })).toBeVisible()
+    // New account: no Mike jobs, an empty book with New job as the way in.
+    await expect(page.getByRole('heading', { name: 'All jobs 0' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New job' })).toBeVisible()
     await expect(page.locator('.ws-job-title')).toHaveCount(0)
   })
 

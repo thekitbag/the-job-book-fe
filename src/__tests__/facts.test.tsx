@@ -71,7 +71,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/looking for job facts/i)).toBeInTheDocument()
@@ -92,7 +92,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/looking for job facts/i)).toBeInTheDocument()
@@ -120,7 +120,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([fact])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/draft facts/i)).toBeInTheDocument()
@@ -147,7 +147,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([fact])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/from what the system heard/i)).toBeInTheDocument()
@@ -177,7 +177,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([fact])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       // Badge text is the standalone word "Unclear" — the summary also contains the word,
@@ -210,7 +210,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([fact])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/low confidence/i)).toBeInTheDocument()
@@ -240,7 +240,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([fact])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/needs checking/i)).toBeInTheDocument()
@@ -261,7 +261,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/no facts found/i)).toBeInTheDocument()
@@ -282,7 +282,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/could not extract draft facts/i)).toBeInTheDocument()
@@ -309,7 +309,7 @@ describe('draft facts visibility', () => {
     }])
     mockGetDraftFacts.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/transcribing/i)).toBeInTheDocument()
@@ -340,7 +340,7 @@ describe('draft facts visibility', () => {
       makeFact({ sourceNoteIds: ['srv-011'], summary: 'Installed 4 floor joists' }),
     ])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Installed 4 floor joists')).toBeInTheDocument()
@@ -364,7 +364,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockRejectedValue(new Error('GET /api/jobs/job-test-001/facts → 404'))
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/could not load facts/i)).toBeInTheDocument()
@@ -395,7 +395,7 @@ describe('draft facts visibility', () => {
     mockGetStatuses.mockResolvedValue([])
     mockGetDraftFacts.mockResolvedValue([fact])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/needs checking/i)).toBeInTheDocument()

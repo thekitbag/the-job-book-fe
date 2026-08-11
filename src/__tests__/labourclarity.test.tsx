@@ -102,7 +102,7 @@ beforeEach(() => {
 
 const onJobUpdated = vi.fn()
 function renderWorkspace(job: Job = JOB) {
-  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} onJobUpdated={onJobUpdated} />)
+  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} onJobUpdated={onJobUpdated} />)
 }
 function openTab(name: string) {
   const back = screen.queryByRole('button', { name: /job home/i })
@@ -241,7 +241,7 @@ describe('Job title editing', () => {
     await waitFor(() => expect(mockPatchJob).toHaveBeenCalledWith(JOB.id, { title: 'Patel Garden Room' }))
     expect(onJobUpdated).toHaveBeenCalledWith(expect.objectContaining({ title: 'Patel Garden Room' }))
     // the app re-renders with the updated job — header shows the new title
-    rerender(<CurrentJobWorkspace job={{ ...JOB, title: 'Patel Garden Room' }} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} onJobUpdated={onJobUpdated} />)
+    rerender(<CurrentJobWorkspace job={{ ...JOB, title: 'Patel Garden Room' }} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} onJobUpdated={onJobUpdated} />)
     expect(screen.getByRole('heading', { name: 'Patel Garden Room' })).toBeInTheDocument()
   })
 
