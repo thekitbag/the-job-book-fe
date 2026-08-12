@@ -53,10 +53,14 @@ export default function MemorySectionTab({
   markPaid,
   onAddMemoryItem,
   budgetCategories = [],
+  focusItemId = null,
 }: {
   mem: JobMemory
   sectionKeys: string[]
   ariaLabel: string
+  // The one item another screen sent Mike here to correct: its action drawer
+  // opens on arrival (see MemoryCard's autoOpen).
+  focusItemId?: string | null
   directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
   sectionAdds?: Partial<Record<string, SectionAdd>>
   // Budget cost items only (e.g. Materials → Bought): mark-as-paid capability.
@@ -112,7 +116,7 @@ export default function MemorySectionTab({
                 ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} categories={budgetCategories} onAdd={addItem} actionHidden={s.items.length === 0} />
                 : <h2 className="mem-section-heading">{countLabel}</h2>}
               {s.items.length > 0
-                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} />)
+                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={markPaid} />)
                 : s.add
                   ? <EmptyState
                       title={empty?.title ?? 'Nothing logged yet'}

@@ -5755,3 +5755,208 @@ a.row-sheet-opt { text-decoration: none; }
 /* In a section header it sits in the top row beside the offline badge, where
    the row is already right-aligned. */
 .ws-header-top-right .btn-job-details { margin-left: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Cross-job Money — the Book Home row, the Money page, one supplier account
+   Read-only by design: there is no checkbox, no select-all, no Mark paid and
+   no settlement footer to style here, because none of them exist in this
+   slice. Rows are routes back to the job that owns the fact.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Book Home: one Money row under the heavy rule ── */
+
+.book-money-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  border: none;
+  border-top: var(--rule-heavy);
+  background: none;
+  padding: 18px 0;
+  min-height: 64px;
+  margin-top: 18px;
+  text-align: left;
+}
+.book-money-row:active { background: var(--grey-press); }
+
+.book-money-text { flex: 1; min-width: 0; }
+.book-money-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+}
+.book-money-scope { display: block; font-size: var(--text-sm); color: var(--grey-text); }
+
+/* The figures column: right-aligned, and allowed to wrap on a narrow phone
+   rather than shoving the job column into a single letter. */
+.book-money-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+.book-money-line { font-size: var(--text-md); overflow-wrap: anywhere; }
+.book-money-amount { font-weight: 700; color: var(--ink); }
+.book-money-words { color: var(--grey-text); }
+
+/* With Money above it, Finished jobs is no longer the first thing under the
+   rule — it takes a hairline instead, so the heavy rule stays unique. */
+.book-finished-row--under { border-top: var(--rule-hair); margin-top: 0; }
+
+/* ── Money page ── */
+
+/* "Money   Across all jobs" — scope, not a subtitle, so it sits on the title's
+   baseline where the total sits on All Jobs. */
+.book-money-across {
+  font-size: var(--text-md);
+  font-weight: 400;
+  color: var(--grey-hairline);
+  flex-shrink: 1;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.bm-section { margin-top: 26px; }
+
+.bm-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: var(--rule-heavy);
+  padding-bottom: 8px;
+}
+.bm-section-headline { min-width: 0; }
+
+/* The direction's whole answer, in one figure. */
+.bm-total {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Counts, in the backend's words. Wraps to as many lines as it needs. */
+.bm-section-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bm-rows { list-style: none; margin: 0; padding: 0; }
+
+.bm-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  border: none;
+  border-bottom: var(--rule-hair);
+  background: none;
+  padding: 16px 0;
+  min-height: 64px;
+  text-align: left;
+}
+.bm-row:active { background: var(--grey-press); }
+
+.bm-row-main { flex: 1; min-width: 0; }
+.bm-row-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* Supplier/job/item names on Mike's phone are long and often three words of
+   the same length — the meta line has to wrap, never truncate, or two accounts
+   become indistinguishable. */
+.bm-row-meta {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+  overflow-wrap: anywhere;
+}
+.bm-row-amount {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+  flex-shrink: 0;
+  /* No tabular-nums: this face spaces the thousands comma so widely in tabular
+     figures that "£3,000" reads as "£3 , 000". These are single figures on a
+     row, not a column to align. */
+}
+
+/* ── Missing price: visible, and visibly outside the total ── */
+
+.bm-missing {
+  background: var(--surface-sunk);
+  margin-top: 14px;
+  padding: 14px 16px;
+}
+.bm-missing-head {
+  margin: 0 0 4px;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--ink);
+}
+.bm-missing-list { list-style: none; margin: 0; padding: 0; }
+
+.bm-missing-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 10px 0;
+  min-height: 48px;
+  text-align: left;
+}
+.bm-missing-row:active { opacity: 0.6; }
+.bm-missing-text { flex: 1; min-width: 0; }
+.bm-missing-item { display: block; font-size: var(--text-md); font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.bm-missing-meta { display: block; font-size: var(--text-sm); color: var(--grey-text); overflow-wrap: anywhere; }
+/* Cobalt, because it goes somewhere: the source item, where a price can be
+   added. Nothing on this page changes a price in place. */
+.bm-missing-action {
+  color: var(--cobalt);
+  font-weight: 700;
+  font-size: var(--text-md);
+  flex-shrink: 0;
+}
+
+/* ── Supplier detail ── */
+
+.bm-detail-sub {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: var(--text-md);
+  color: var(--grey-hairline);
+  overflow-wrap: anywhere;
+}
+
+.bm-empty {
+  margin-top: 26px;
+  font-size: var(--text-md);
+  color: var(--grey-text);
+}

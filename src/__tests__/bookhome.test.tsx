@@ -22,6 +22,9 @@ vi.mock('../api', async (importOriginal) => {
     logout: vi.fn(() => Promise.resolve()),
     getCurrentUser: vi.fn(() => Promise.resolve({ id: 'u1', email: 'mike@test', name: 'Mike', role: 'PILOT' })),
     onUnauthorized: vi.fn(),
+    // Cross-job Money has its own suite (bookmoney.test.tsx). Here the backend
+    // says there is nothing to show, which is what proves the row is omitted.
+    getBookMoney: vi.fn(() => Promise.resolve({ bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null })),
     ApiError: actual.ApiError,
   }
 })
@@ -144,10 +147,12 @@ describe('Book Home and job navigation', () => {
     expect(screen.queryByText('In progress')).not.toBeInTheDocument()
   })
 
-  it('shows no Money, Workshop or "to check" rows in this slice', async () => {
+  it('shows no Money row when the backend has nothing to show, and no Workshop or "to check" rows', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoBookHome(user)
+    // Money is backend-gated: with showMoneyRow false there is no row, and no
+    // £0 or "nothing owed" stand-in for it either.
     expect(screen.queryByText(/money/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/workshop/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/to check/i)).not.toBeInTheDocument()

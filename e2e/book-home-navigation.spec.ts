@@ -23,7 +23,7 @@ async function openBookHome(page: Page) {
 
 async function openAllJobs(page: Page) {
   await openBookHome(page)
-  await page.getByRole('button', { name: /all jobs/i }).click()
+  await page.getByRole('button', { name: 'All jobs', exact: true }).click()
   await expect(page.getByRole('heading', { name: /^All jobs/ })).toBeVisible()
 }
 
@@ -37,7 +37,7 @@ test.describe('Book Home and job navigation', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('Book Home lists live jobs, counts finished, and has no Record or Money', async ({ page }) => {
+  test('Book Home lists live jobs, counts finished, and has no Record', async ({ page }) => {
     await openBookHome(page)
 
     await expect(page.getByRole('button', { name: /Garden Room/ })).toBeVisible()
@@ -46,9 +46,10 @@ test.describe('Book Home and job navigation', () => {
     await expect(page.getByRole('button', { name: /Whitmore Patio/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /finished jobs 2/i })).toBeVisible()
 
-    // no global Record, and none of the future destinations from the design pack
+    // No global Record: recording always belongs to a named job. Money is now a
+    // real destination (see cross-job-money.spec.ts); Workshop and "to check"
+    // are still design-pack futures with nothing behind them.
     await expect(page.getByRole('button', { name: /record/i })).toHaveCount(0)
-    await expect(page.getByText(/money/i)).toHaveCount(0)
     await expect(page.getByText(/workshop/i)).toHaveCount(0)
     await expect(page.getByText(/to check/i)).toHaveCount(0)
   })

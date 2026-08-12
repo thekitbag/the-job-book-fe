@@ -25,6 +25,9 @@ vi.mock('../api', async (importOriginal) => {
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getReviewQueue: vi.fn(),
     submitQueueDecision: vi.fn(),
+    // The book level asks for cross-job Money; these tests are about job
+    // switching, so it answers with nothing to show.
+    getBookMoney: vi.fn(() => Promise.resolve({ bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null })),
     ApiError: actual.ApiError,
   }
 })

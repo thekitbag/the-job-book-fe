@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getCurrentUser, getJobs, logout, onUnauthorized, ApiError } from './api'
+import { getBookMoney, getCurrentUser, getJobs, logout, onUnauthorized, ApiError } from './api'
 import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import BookHomeScreen from './BookHomeScreen'
+import BookMoneyScreen from './BookMoneyScreen'
 import AllJobsScreen from './AllJobsScreen'
 import type { JobGroupKey } from './jobGroups'
-import type { AuthUser, Job } from './types'
+import type { AuthUser, BookMoneyResponse, Job } from './types'
+import type { JobEntry } from './CurrentJobWorkspace'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
 const CACHED_JOBS_KEY = 'job-book-cached-jobs'
@@ -46,7 +48,7 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
 // The app still launches into the last selected Job Home. Book Home is the
 // level above it, reached from a job — never the default screen.
-type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs'
+type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'bookMoney'
 
 export default function App() {
   // A password-reset link must work even for a browser that still has a valid
@@ -62,6 +64,14 @@ export default function App() {
   // "Finished jobs" row is the way in.
   const [allJobsFocus, setAllJobsFocus] = useState<JobGroupKey | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
+  // Cross-job Money (GET /api/book/money) — one response behind both the Book
+  // Home row and the Money page, loaded at the book level rather than per job.
+  // A failure only costs the Money row: the jobs index never depends on it.
+  const [bookMoney, setBookMoney] = useState<BookMoneyResponse | null>(null)
+  const [bookMoneyState, setBookMoneyState] = useState<'loading' | 'ready' | 'error'>('loading')
+  // Where a job should open when something outside it sent Mike there — a
+  // supplier line (Budget, that item) or an owed row (that job's Money).
+  const [jobEntry, setJobEntry] = useState<JobEntry | null>(null)
   // Current account (for role-gated UI like the internal Support entry).
   // Best-effort: the app works without it; only INTERNAL extras depend on it.
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -142,6 +152,22 @@ export default function App() {
       .catch(() => setCurrentUser(null))
   }, [appState])
 
+  // Cross-job Money. Fetched when the book level is opened rather than kept
+  // permanently fresh: it is a summary of facts corrected inside jobs, so every
+  // arrival at Book Home or Money re-reads it and a correction made moments ago
+  // is already reflected.
+  const loadBookMoney = useCallback(() => {
+    setBookMoneyState(prev => (prev === 'ready' ? 'ready' : 'loading'))
+    getBookMoney()
+      .then(res => { setBookMoney(res); setBookMoneyState('ready') })
+      .catch(() => setBookMoneyState('error'))
+  }, [])
+
+  const openBookHome = useCallback(() => {
+    loadBookMoney()
+    setView('bookHome')
+  }, [loadBookMoney])
+
   // A job edit (title rename, status change) must update everywhere the job
   // is shown or cached: the workspace header, the job list, and the offline
   // cache. Archiving is special: it removes the job from the normal list,
@@ -182,13 +208,36 @@ export default function App() {
   //
   // `cause` keeps job_switched meaning a deliberate switch: selecting the job
   // that was just created is part of job_created, not a switch.
-  function handleSelectJob(job: Job, cause: 'switch' | 'created' = 'switch') {
+  function handleSelectJob(job: Job, cause: 'switch' | 'created' = 'switch', entry: JobEntry | null = null) {
     if (cause === 'switch' && selectedJob && selectedJob.id !== job.id) {
       track('job_switched', { job_id: job.id })
     }
+    // Opening a job plainly lands on its home; only an explicit entry (from a
+    // Money row) says otherwise, and it never outlives this one navigation.
+    setJobEntry(entry)
     setSelectedJob(job)
     localStorage.setItem(SELECTED_JOB_ID_KEY, job.id)
     setView('workspace')
+  }
+
+  // Cross-job Money hands Mike back to the job that owns the fact: a supplier
+  // or missing-price line to the source item in Budget, an owed row to that
+  // job's Money. The job must be one of his current jobs — Money never shows
+  // rows from anywhere else, so a miss here means the jobs list is stale, and
+  // staying put is better than opening the wrong job.
+  function openSourceItem(target: { jobId: string; sourceMemoryItemId: string }) {
+    const job = jobs.find(j => j.id === target.jobId)
+    if (!job) return
+    track('book_money_source_opened', { job_id: job.id })
+    // Which lens shows this item is the job's call, not Money's — see JobEntry.
+    handleSelectJob(job, 'switch', { jobId: job.id, focusItemId: target.sourceMemoryItemId })
+  }
+
+  function openJobMoney(jobId: string) {
+    const job = jobs.find(j => j.id === jobId)
+    if (!job) return
+    track('book_money_owed_opened', { job_id: job.id })
+    handleSelectJob(job, 'switch', { jobId: job.id, section: 'money' })
   }
 
   function handleJobAdded(job: Job) {
@@ -280,9 +329,24 @@ export default function App() {
     return (
       <BookHomeScreen
         jobs={jobs}
+        money={bookMoney?.bookHome ?? null}
         onOpenJob={handleSelectJob}
         onOpenAllJobs={() => { setAllJobsFocus(null); setView('allJobs') }}
         onOpenFinishedJobs={() => { setAllJobsFocus('finished'); setView('allJobs') }}
+        onOpenMoney={() => { track('book_money_opened'); loadBookMoney(); setView('bookMoney') }}
+      />
+    )
+  }
+
+  if (view === 'bookMoney') {
+    return (
+      <BookMoneyScreen
+        data={bookMoney}
+        loadState={bookMoneyState}
+        onBack={() => setView('bookHome')}
+        onReload={loadBookMoney}
+        onOpenSource={openSourceItem}
+        onOpenJobMoney={openJobMoney}
       />
     )
   }
@@ -307,8 +371,9 @@ export default function App() {
   return (
     <CurrentJobWorkspace
       job={selectedJob}
+      entry={jobEntry && jobEntry.jobId === selectedJob.id ? jobEntry : null}
       onOpenReviewQueue={() => setView('reviewQueue')}
-      onOpenBookHome={() => setView('bookHome')}
+      onOpenBookHome={openBookHome}
       onLogout={handleLogout}
       user={currentUser}
       onJobUpdated={handleJobUpdated}

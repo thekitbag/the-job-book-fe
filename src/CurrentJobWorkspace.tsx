@@ -46,6 +46,19 @@ type MaterialsTab = 'bought' | 'used' | 'leftover' | 'returned'
 // time, so a receipt image lives here and never under Photos.
 type JobLogFilter = 'all' | 'notes' | 'photos' | 'receipts'
 
+/**
+ * How a job was entered from outside itself — cross-job Money routing a
+ * supplier line back to the cost that produced it, or an owed row to that job's
+ * Money. Absent for every ordinary arrival, which always lands on job home.
+ */
+export type JobEntry = {
+  jobId: string
+  // An owed row goes straight to this job's Money; a cost line names the source
+  // item instead and lets the job work out which lens actually shows it.
+  section?: 'money'
+  focusItemId?: string
+}
+
 const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
   // The 'spend' section is user-facing "Budget": it tracks committed/allocated
   // job cost against budget, not cash paid out. Internal key stays 'spend'.
@@ -309,6 +322,7 @@ function CaptureConfirmation({
 
 export default function CurrentJobWorkspace({
   job,
+  entry = null,
   onOpenReviewQueue,
   onOpenBookHome,
   onLogout = () => {},
@@ -316,6 +330,8 @@ export default function CurrentJobWorkspace({
   onJobUpdated = () => {},
 }: {
   job: Job
+  // Set only when another screen sent Mike into this job at a specific place.
+  entry?: JobEntry | null
   onOpenReviewQueue: () => void
   onOpenBookHome: () => void
   onLogout?: () => void
@@ -379,6 +395,41 @@ export default function CurrentJobWorkspace({
   const money = useMoney(job.id)
   const mem = useJobMemory(job, { onCategoryChanged: money.reload })
   const toast = useToast()
+
+  // Arriving from cross-job Money: Mike lands on the lens that actually shows
+  // the fact he tapped, rather than on job home (the reset above).
+  //
+  // Which lens that is depends on the item, not on the caller: a cost counted
+  // in Budget (or filed to a category) shows in Budget, while a bought item
+  // with no usable price is exactly the item Budget leaves out — it lives in
+  // Materials → Bought, which is also where its price gets added. Resolving it
+  // here keeps that knowledge in the job, where it belongs.
+  //
+  // Applied once per entry: resolving to a plain value and depending on that
+  // value means a later memory reload (say, after Mike fixes the price) can't
+  // drag him back to this lens a second time.
+  const focusItemId = entry?.jobId === job.id ? entry.focusItemId ?? null : null
+  const memData = mem.data
+  const includedIds = mem.includedIds
+  const entryTarget = useMemo<'money' | 'spend' | 'materials' | null>(() => {
+    if (!entry || entry.jobId !== job.id) return null
+    if (entry.section === 'money') return 'money'
+    if (!entry.focusItemId) return null
+    // Wait for the memory view: landing on the wrong lens and moving him a
+    // moment later would read as the app changing its mind.
+    if (!memData) return null
+    const item = memData.sections.flatMap(s => s.items).find(i => i.id === entry.focusItemId)
+    // The item is gone, or Budget shows it: Budget is the right place either
+    // way — it is where a cross-job cost is explained.
+    if (!item || item.budgetCategoryId || includedIds.has(item.id)) return 'spend'
+    return item.memoryType === 'ordered_material' ? 'materials' : 'spend'
+  }, [entry, job.id, memData, includedIds])
+
+  useEffect(() => {
+    if (!entryTarget) return
+    if (entryTarget === 'materials') setMaterialsTab('bought')
+    setSection(entryTarget)
+  }, [entry, entryTarget])
   // Source item currently being marked paid, so its drawer control shows a
   // busy state and a double-tap can't fire two markers.
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
@@ -985,7 +1036,9 @@ export default function CurrentJobWorkspace({
           </div>
         )}
 
-        {section === 'spend' && renderMemoryTab(<SpendTab mem={mem} markPaid={markPaid} />)}
+        {section === 'spend' && renderMemoryTab(
+          <SpendTab mem={mem} markPaid={markPaid} focusItemId={focusItemId} />,
+        )}
         {section === 'money' && <MoneySection jobId={job.id} money={money} />}
         {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} jobId={job.id} markPaid={markPaid} />)}
 
@@ -1011,6 +1064,7 @@ export default function CurrentJobWorkspace({
                   sectionKeys={['ordered_materials']}
                   ariaLabel="Bought materials"
                   sectionAdds={{ ordered_materials: { kind: 'spend', label: 'Add bought item' } }}
+                  focusItemId={focusItemId}
                   markPaid={markPaid}
                   onAddMemoryItem={addBoughtItem}
                   budgetCategories={mem.budgetCategories}
