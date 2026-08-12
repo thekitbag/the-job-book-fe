@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AuthScreen from '../AuthScreen'
-import JobPickerScreen from '../JobPickerScreen'
+import AllJobsScreen from '../AllJobsScreen'
 import { login, signup, requestPasswordReset, createJob } from '../api'
 import { identifyAnalyticsUser, track } from '../analytics'
 import type { AuthUser, Job } from '../types'
@@ -95,7 +95,7 @@ describe('analytics — auth events', () => {
 })
 
 describe('analytics — job creation', () => {
-  it('creating a job tracks job_created with job_id and job_type but never the title', async () => {
+  it('creating a job tracks job_created with safe properties but never the title or where', async () => {
     const created: Job = {
       id: 'job-new-1', title: 'Mrs Patel garden room', jobType: 'garden_room',
       roughLocationOrLabel: null, status: 'planning', createdAt: '', updatedAt: '',
@@ -103,13 +103,15 @@ describe('analytics — job creation', () => {
     vi.mocked(createJob).mockResolvedValue(created)
     const user = userEvent.setup()
     render(
-      <JobPickerScreen jobs={[]} selectedJobId={null} online={true} onSelect={() => {}} onJobAdded={() => {}} onClose={() => {}} hideBack={true} />,
+      <AllJobsScreen jobs={[]} online={true} onOpenJob={() => {}} onJobAdded={() => {}} onBack={() => {}} hideBack={true} />,
     )
-    await user.click(screen.getByRole('button', { name: /add.*job/i }))
-    await user.type(screen.getByLabelText(/job (title|name)/i), 'Mrs Patel garden room')
-    await user.click(screen.getByRole('button', { name: /save|add job/i }))
+    await user.click(screen.getByRole('button', { name: 'New job' }))
+    await user.type(screen.getByLabelText(/job name/i), 'Mrs Patel garden room')
+    await user.type(screen.getByLabelText(/where \(optional\)/i), 'Beech Road')
+    await user.click(screen.getByRole('button', { name: /^add job$/i }))
 
-    await waitFor(() => expect(track).toHaveBeenCalledWith('job_created', { job_id: 'job-new-1', job_type: 'garden_room' }))
+    await waitFor(() => expect(track).toHaveBeenCalledWith('job_created', { job_id: 'job-new-1', job_status: 'planning', has_where: true }))
     expect(allTrackedPayloads()).not.toMatch(/Mrs Patel/)
+    expect(allTrackedPayloads()).not.toMatch(/Beech Road/)
   })
 })

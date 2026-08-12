@@ -310,14 +310,14 @@ function CaptureConfirmation({
 export default function CurrentJobWorkspace({
   job,
   onOpenReviewQueue,
-  onSwitchJob,
+  onOpenBookHome,
   onLogout = () => {},
   user = null,
   onJobUpdated = () => {},
 }: {
   job: Job
   onOpenReviewQueue: () => void
-  onSwitchJob: () => void
+  onOpenBookHome: () => void
   onLogout?: () => void
   // Current account, when known — drives role-gated UI only. Normal builders
   // never see the internal Support entry.
@@ -786,7 +786,10 @@ export default function CurrentJobWorkspace({
       ) : (
       <header className="ws-header">
         <div className="ws-header-top">
-          <button type="button" className="btn-switch-job" onClick={onSwitchJob}>‹ Switch job</button>
+          {/* The route up to the book level is named after where it goes. "Switch
+              job" described a picker; this is the cover of the book, and Mike
+              gets there the same way from every job. */}
+          <button type="button" className="btn-switch-job" onClick={onOpenBookHome}>‹ The Job Book</button>
           <div className="ws-header-top-right">
             {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
             <div className="ws-header-menu-wrap">

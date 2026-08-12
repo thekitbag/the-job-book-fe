@@ -66,8 +66,8 @@ test.describe('Current job home', () => {
     expect(box!.width).toBeGreaterThan(box!.height)
   })
 
-  test('Switch is visible from the job home', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /switch/i })).toBeVisible()
+  test('the route up to The Job Book is visible from the job home', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /the job book/i })).toBeVisible()
   })
 
   test('Record is visible on home and every section workspace', async ({ page }) => {

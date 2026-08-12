@@ -81,7 +81,7 @@ beforeEach(() => {
 })
 
 function renderWorkspace() {
-  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
+  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} />)
 }
 
 // Photos now live in Job log → Photos (name kept so call sites read the same).

@@ -52,12 +52,12 @@ test.describe('Job status update', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('a planning job stays visible and selectable in Switch', async ({ page }) => {
+  test('a planning job stays visible and selectable on Book Home', async ({ page }) => {
     await openStatusSheet(page)
     await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
     await page.waitForTimeout(500)
 
-    await page.getByRole('button', { name: /switch job/i }).click()
+    await page.getByRole('button', { name: /the job book/i }).click()
     const item = page.getByRole('button', { name: /Garden Room/ })
     await expect(item).toBeVisible()
     await expect(item).toContainText('Planning')
@@ -92,7 +92,7 @@ test.describe('Job status update', () => {
     await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
   })
 
-  test('archiving with confirmation removes the job from Switch and moves to another job', async ({ page }) => {
+  test('archiving with confirmation removes the job from the book and moves to another job', async ({ page }) => {
     await openStatusSheet(page)
     await page.getByRole('button', { name: /archive job…/i }).click()
     await page.getByRole('button', { name: 'Archive job', exact: true }).click()
@@ -102,7 +102,7 @@ test.describe('Job status update', () => {
     await expect(page.locator('.ws-job-title')).toHaveText('Kitchen Extension')
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
 
-    await page.getByRole('button', { name: /switch job/i }).click()
+    await page.getByRole('button', { name: /the job book/i }).click()
     await expect(page.getByRole('button', { name: /Garden Room/ })).toHaveCount(0)
   })
 })

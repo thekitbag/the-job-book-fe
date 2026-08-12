@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
-import JobPickerScreen from '../JobPickerScreen'
+import AllJobsScreen from '../AllJobsScreen'
 import { mailtoHref, telHref } from '../contactLinks'
 import { track } from '../analytics'
 import * as api from '../api'
@@ -99,7 +99,7 @@ beforeEach(() => {
 })
 
 function renderWorkspace() {
-  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
+  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} />)
 }
 
 // The everyday route: a visible, labelled control on the job screen. Founder
@@ -175,16 +175,16 @@ describe('Job details — placement', () => {
     expect(within(sheet).getByText('No site address yet.')).toBeInTheDocument()
   })
 
-  it('Add job asks for a title and job type only — no contact or address fields', () => {
+  it('New job asks for a name, a where and a state only — no contact or site-address fields', () => {
     render(
-      <JobPickerScreen jobs={[JOB]} selectedJobId={JOB.id} online onSelect={vi.fn()} onJobAdded={vi.fn()} onClose={vi.fn()} />,
+      <AllJobsScreen jobs={[JOB]} online onOpenJob={vi.fn()} onJobAdded={vi.fn()} onBack={vi.fn()} />,
     )
-    fireEvent.click(screen.getByRole('button', { name: '+ Add job' }))
-    const form = screen.getByRole('form', { name: 'Add job' })
-    expect(form.querySelector('[name="phone"]')).toBeNull()
-    expect(form.querySelector('[name="email"]')).toBeNull()
-    expect(form.querySelector('[name="siteAddress"]')).toBeNull()
-    expect(within(form).queryByText(/contact|site address/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New job' }))
+    const sheet = screen.getByRole('dialog', { name: 'New job' })
+    expect(sheet.querySelector('[name="phone"]')).toBeNull()
+    expect(sheet.querySelector('[name="email"]')).toBeNull()
+    expect(sheet.querySelector('[name="siteAddress"]')).toBeNull()
+    expect(within(sheet).queryByText(/contact|site address/i)).toBeNull()
   })
 })
 

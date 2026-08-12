@@ -1,4 +1,4 @@
-import type { EditableJobStatus, Job, JobType } from '../../types'
+import type { CreateJobRequest, EditableJobStatus, Job } from '../../types'
 import { ApiError } from '../client'
 import { delay } from './util'
 import { getMockSession, MOCK_MIKE_EMAIL } from './auth'
@@ -15,6 +15,7 @@ const SEED_JOBS: Job[] = [
     createdAt: '2026-06-01T08:00:00Z',
     updatedAt: '2026-06-10T09:00:00Z',
   },
+  // No Where value: All Jobs must be happy showing the name alone.
   {
     id: 'job-pilot-extension-002',
     title: 'Kitchen Extension',
@@ -23,6 +24,54 @@ const SEED_JOBS: Job[] = [
     status: 'started',
     createdAt: '2026-05-20T08:00:00Z',
     updatedAt: '2026-06-08T14:00:00Z',
+  },
+  {
+    id: 'job-pilot-planning-003',
+    title: 'Grant James Roof',
+    jobType: 'other',
+    roughLocationOrLabel: 'Ash Grove',
+    status: 'planning',
+    createdAt: '2026-05-18T08:00:00Z',
+    updatedAt: '2026-06-05T11:00:00Z',
+  },
+  // Long name + long address: the row grammar has to survive both on a 390px
+  // phone without pushing the chevron or the group count off the screen.
+  {
+    id: 'job-pilot-planning-004',
+    title: 'Full re-roof and rear extension at the Hollybush Farmhouse annexe',
+    jobType: 'other',
+    roughLocationOrLabel: 'The Hollybush Farmhouse annexe, Lower Wraxall Lane, Bradford-on-Avon',
+    status: 'planning',
+    createdAt: '2026-05-12T08:00:00Z',
+    updatedAt: '2026-06-02T16:00:00Z',
+  },
+  {
+    id: 'job-pilot-finished-005',
+    title: 'Whitmore Patio',
+    jobType: 'other',
+    roughLocationOrLabel: 'Elm Close',
+    status: 'finished',
+    createdAt: '2026-03-02T08:00:00Z',
+    updatedAt: '2026-05-12T15:00:00Z',
+  },
+  {
+    id: 'job-pilot-finished-006',
+    title: 'Okoro Loft',
+    jobType: 'other',
+    roughLocationOrLabel: null,
+    status: 'finished',
+    createdAt: '2026-02-10T08:00:00Z',
+    updatedAt: '2026-04-30T15:00:00Z',
+  },
+  // Archived: must never appear in Book Home, All Jobs, or the counts.
+  {
+    id: 'job-pilot-archived-007',
+    title: 'Old Shed Rebuild',
+    jobType: 'other',
+    roughLocationOrLabel: 'Yard',
+    status: 'archived',
+    createdAt: '2026-01-05T08:00:00Z',
+    updatedAt: '2026-02-01T09:00:00Z',
   },
 ]
 export const MOCK_JOBS: Job[] = SEED_JOBS.map(job => ({ ...job }))
@@ -54,14 +103,25 @@ export async function mockGetJobs(): Promise<Job[]> {
   return MOCK_JOBS.filter(j => j.status !== 'archived')
 }
 
-export async function mockCreateJob(title: string, jobType?: JobType): Promise<Job> {
+// Mirrors the backend create contract: title required after trimming, Where
+// optional (blank → null, max 160), status only planning/started and
+// defaulting to started. Never touches the selected-job id or any queued
+// recording — creating a job is the caller's cue to switch, not the mock's.
+export async function mockCreateJob(req: CreateJobRequest): Promise<Job> {
   await delay(500)
+  const title = req.title.trim()
+  if (!title) throw new ApiError('Title is required', 400)
+  if (title.length > 80) throw new ApiError('Title too long', 400)
+  const where = (req.roughLocationOrLabel ?? '').trim()
+  if (where.length > 160) throw new ApiError('Where is too long', 400)
+  const status = req.status ?? 'started'
+  if (status !== 'planning' && status !== 'started') throw new ApiError('Invalid status', 400)
   const newJob: Job = {
     id: `job-mock-${Date.now()}`,
-    title: title.trim(),
-    jobType: jobType ?? 'other',
-    roughLocationOrLabel: null,
-    status: 'started',
+    title,
+    jobType: 'other',
+    roughLocationOrLabel: where || null,
+    status,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }

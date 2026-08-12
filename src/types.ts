@@ -48,6 +48,15 @@ export interface Job {
   updatedAt: string
 }
 
+// POST /api/jobs — the lightweight New Job command. Only the three fields the
+// book-home spec allows: a name, an optional where, and the state the job
+// starts in. A job can only be created as work in hand or work being planned.
+export interface CreateJobRequest {
+  title: string
+  roughLocationOrLabel?: string | null
+  status?: 'planning' | 'started'
+}
+
 // All statuses are editable through PATCH /api/jobs/:jobId — archived is an
 // archive action (not a delete), so the frontend must confirm before applying it.
 export type EditableJobStatus = 'planning' | 'started' | 'finished' | 'archived'

@@ -148,12 +148,12 @@ async function enterViewAs() {
 
 describe('Support mode — gating', () => {
   it('a normal user sees no Support entry in the workspace header', async () => {
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} user={PILOT} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} user={PILOT} />)
     expect(screen.queryByRole('link', { name: 'Support' })).toBeNull()
   })
 
   it('an internal user sees the Support entry', async () => {
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} user={INTERNAL} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} user={INTERNAL} />)
     fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
     expect(screen.getByRole('menuitem', { name: 'Support' })).toHaveAttribute('href', '/internal/support')
   })

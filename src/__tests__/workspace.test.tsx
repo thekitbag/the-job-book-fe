@@ -88,7 +88,7 @@ const EMPTY_QUEUE: ReviewQueue = { jobId: JOB.id, generatedAt: '', sections: [],
 
 const noop = () => {}
 function renderWorkspace(props: Partial<React.ComponentProps<typeof CurrentJobWorkspace>> = {}) {
-  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={noop} onSwitchJob={noop} onLogout={noop} {...props} />)
+  return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={noop} onOpenBookHome={noop} onLogout={noop} {...props} />)
 }
 
 async function getRecorderMock() {
@@ -162,9 +162,9 @@ describe('CurrentJobWorkspace — shell', () => {
     expect(screen.queryByText(/variations?/i)).not.toBeInTheDocument()
   })
 
-  it('Switch is always available', () => {
+  it('the route up to The Job Book is always available', () => {
     renderWorkspace()
-    expect(screen.getByRole('button', { name: /switch/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /the job book/i })).toBeInTheDocument()
   })
 
   it('Record is visible on home and every section workspace, and is the ONLY voice action', async () => {
@@ -262,6 +262,27 @@ describe('CurrentJobWorkspace — capture', () => {
     const notes = await getNotesForJob(JOB.id)
     expect(notes).toHaveLength(1)
     expect(notes[0].localState).toBe('saved_local')
+  })
+
+  // Release-critical invariant for the book level: navigating up to The Job
+  // Book and opening a different job must never retarget a note that is
+  // already being recorded. The note belongs to the job that was on screen
+  // when Mike started talking.
+  it('a note in flight keeps the job it was recorded against, even if the workspace switches jobs', async () => {
+    const mockUpload = await getUploadMock()
+    mockUpload.mockImplementation(() => new Promise(() => {}))
+    const OTHER_JOB: Job = { ...JOB, id: 'job-test-002', title: 'Kitchen Extension' }
+
+    const user = userEvent.setup()
+    const { rerender } = renderWorkspace()
+    await user.click(screen.getByRole('button', { name: /start recording/i }))
+
+    // Mike goes up to the book and opens another job while it is still recording.
+    rerender(<CurrentJobWorkspace job={OTHER_JOB} onOpenReviewQueue={noop} onOpenBookHome={noop} onLogout={noop} />)
+    await simulateRecordingComplete(FAKE_RESULT)
+
+    expect(await getNotesForJob(JOB.id)).toHaveLength(1)
+    expect(await getNotesForJob(OTHER_JOB.id)).toHaveLength(0)
   })
 
   it('offline capture survives page reload (note persists in IndexedDB)', async () => {

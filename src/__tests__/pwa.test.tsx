@@ -142,19 +142,19 @@ describe('Workspace — pilot field requirements', () => {
   })
 
   it('shows approved audio-storage explainer copy on first launch', () => {
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
     expect(screen.getByText(
       'We save the recording during the pilot so we can check what was captured and improve the job memory.'
     )).toBeInTheDocument()
   })
 
   it('renders the record button as the default capture entry point', () => {
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
   })
 
   it('shows the current pilot job title', () => {
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
@@ -162,7 +162,7 @@ describe('Workspace — pilot field requirements', () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Saved on phone')).toBeInTheDocument()
@@ -173,7 +173,7 @@ describe('Workspace — pilot field requirements', () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Voice note saved')).toBeInTheDocument()
@@ -185,7 +185,7 @@ describe('Workspace — pilot field requirements', () => {
     const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText('Saved on this phone')).toBeInTheDocument()
@@ -195,7 +195,7 @@ describe('Workspace — pilot field requirements', () => {
   it('shows offline badge in the header when network is unavailable', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     expect(screen.getByText('No signal')).toBeInTheDocument()
   })

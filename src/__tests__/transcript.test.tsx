@@ -74,7 +74,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
@@ -98,7 +98,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
@@ -122,7 +122,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
@@ -140,7 +140,7 @@ describe('transcript visibility', () => {
       transcript: { status: 'waiting', extractionStatus: null },
     }])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/waiting for transcript/i)).toBeInTheDocument()
@@ -160,7 +160,7 @@ describe('transcript visibility', () => {
       transcript: { status: 'transcribing', extractionStatus: null },
     }])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/transcribing/i)).toBeInTheDocument()
@@ -185,7 +185,7 @@ describe('transcript visibility', () => {
       errorCode: 'PROVIDER_ERROR',
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
@@ -204,7 +204,7 @@ describe('transcript visibility', () => {
     })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
@@ -224,7 +224,7 @@ describe('transcript visibility', () => {
     })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
@@ -238,7 +238,7 @@ describe('transcript visibility', () => {
     const note = makeNote({ jobId: JOB.id, localState: 'saved_local', serverNoteId: null })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(screen.getByText(/saved on phone/i)).toBeInTheDocument()
@@ -259,7 +259,7 @@ describe('transcript visibility', () => {
     await saveNote(ready)
     await saveNote(failed)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     // Both notes have final status; failed note always shows its message without a toggle
     await waitFor(() => {
@@ -276,7 +276,7 @@ describe('transcript visibility', () => {
 
     mockGetStatuses.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => {
       expect(mockGetStatuses).toHaveBeenCalledWith(JOB.id)
@@ -301,7 +301,7 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onSwitchJob={() => {}} />)
+    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
 
     await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))

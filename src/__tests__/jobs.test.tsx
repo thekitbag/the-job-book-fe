@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import JobPickerScreen from '../JobPickerScreen'
+import AllJobsScreen from '../AllJobsScreen'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import type { Job, MemoryViewResponse } from '../types'
@@ -79,7 +79,7 @@ beforeEach(() => {
 // ── Workspace selected-job display ─────────────────────────────────────────
 
 function renderWorkspace(job: Job) {
-  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onSwitchJob={vi.fn()} />)
+  return render(<CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} />)
 }
 
 describe('CurrentJobWorkspace — selected job display', () => {
@@ -104,242 +104,122 @@ describe('CurrentJobWorkspace — selected job display', () => {
     expect(screen.queryByText('Other')).not.toBeInTheDocument()
   })
 
-  it('always shows the Switch action and calls onSwitchJob', () => {
-    const onSwitchJob = vi.fn()
-    render(<CurrentJobWorkspace job={JOB_A} onOpenReviewQueue={vi.fn()} onSwitchJob={onSwitchJob} />)
-    const btn = screen.getByRole('button', { name: /switch/i })
-    fireEvent.click(btn)
-    expect(onSwitchJob).toHaveBeenCalledTimes(1)
+  it('always offers the route up to The Job Book', () => {
+    const onOpenBookHome = vi.fn()
+    render(<CurrentJobWorkspace job={JOB_A} onOpenReviewQueue={vi.fn()} onOpenBookHome={onOpenBookHome} />)
+    // The old "Switch job" wording is gone: the route is named after the
+    // place it leads to.
+    expect(screen.queryByRole('button', { name: /switch job/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /the job book/i }))
+    expect(onOpenBookHome).toHaveBeenCalledTimes(1)
   })
 })
 
-// ── JobPickerScreen ────────────────────────────────────────────────────────
+// ── All Jobs index ─────────────────────────────────────────────────────────
 
-describe('JobPickerScreen', () => {
-  it('lists all jobs', () => {
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A, JOB_B]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
+function renderAllJobs(props: Partial<React.ComponentProps<typeof AllJobsScreen>> = {}) {
+  return render(
+    <AllJobsScreen
+      jobs={[JOB_A, JOB_B]}
+      online={true}
+      onOpenJob={vi.fn()}
+      onJobAdded={vi.fn()}
+      onBack={vi.fn()}
+      {...props}
+    />,
+  )
+}
+
+describe('AllJobsScreen', () => {
+  it('lists every job', () => {
+    renderAllJobs()
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
     expect(screen.getByText('Kitchen Extension')).toBeInTheDocument()
   })
 
-  it('marks the currently selected job as selected', () => {
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A, JOB_B]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
-    const selectedBtn = screen.getByRole('button', { name: /garden room/i })
-    expect(selectedBtn).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('calls onSelect with the job when a job row is clicked', () => {
-    const onSelect = vi.fn()
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A, JOB_B]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={onSelect}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
+  it('calls onOpenJob with the job when a row is tapped', () => {
+    const onOpenJob = vi.fn()
+    renderAllJobs({ onOpenJob })
     fireEvent.click(screen.getByRole('button', { name: /kitchen extension/i }))
-    expect(onSelect).toHaveBeenCalledWith(JOB_B)
+    expect(onOpenJob).toHaveBeenCalledWith(JOB_B)
   })
 
-  it('calls onClose when back button is clicked', () => {
-    const onClose = vi.fn()
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={onClose}
-      />
-    )
-    fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(onClose).toHaveBeenCalledTimes(1)
+  it('goes back to The Job Book', () => {
+    const onBack = vi.fn()
+    renderAllJobs({ onBack })
+    fireEvent.click(screen.getByRole('button', { name: /back to the job book/i }))
+    expect(onBack).toHaveBeenCalledTimes(1)
   })
 
-  it('shows Add job button', () => {
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
-    expect(screen.getByRole('button', { name: /add job/i })).toBeInTheDocument()
-  })
-
-  it('shows add job form when Add job is clicked', () => {
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
-    fireEvent.click(screen.getByRole('button', { name: /add job/i }))
-    expect(screen.getByRole('form', { name: /add job/i })).toBeInTheDocument()
+  it('hides the back route in the first-run (no jobs) state', () => {
+    renderAllJobs({ jobs: [], hideBack: true })
+    expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+    // …but New job is still right there.
+    expect(screen.getByRole('button', { name: 'New job' })).toBeInTheDocument()
   })
 })
 
-// ── Add job form ───────────────────────────────────────────────────────────
+// ── New job form ───────────────────────────────────────────────────────────
 
-describe('Add job form', () => {
-  function renderAddForm(online = true) {
-    render(
-      <JobPickerScreen
-        jobs={[]}
-        selectedJobId={null}
-        online={online}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
-    // Navigate into add form
-    fireEvent.click(screen.getByRole('button', { name: /add job/i }))
+describe('New job', () => {
+  function openNewJob(online = true) {
+    renderAllJobs({ jobs: [], online })
+    fireEvent.click(screen.getByRole('button', { name: 'New job' }))
   }
 
-  it('shows Job name field and Job type options', () => {
-    renderAddForm()
+  it('asks for a name, a where, and a state — and nothing else', () => {
+    openNewJob()
     expect(screen.getByLabelText(/job name/i)).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /garden room/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /extension/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /other/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/where \(optional\)/i)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'In progress' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Planning' })).toBeInTheDocument()
+    // No budget, customer, dates, or job-type taxonomy at creation time.
+    expect(screen.queryByRole('radio', { name: /garden room/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/budget|customer|date/i)).not.toBeInTheDocument()
   })
 
   it('does not use project-management language', () => {
-    renderAddForm()
-    expect(screen.queryByText(/project/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/workspace/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/pipeline/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/dashboard/i)).not.toBeInTheDocument()
+    openNewJob()
+    for (const word of [/project/i, /workspace/i, /pipeline/i, /dashboard/i, /portfolio/i]) {
+      expect(screen.queryByText(word)).not.toBeInTheDocument()
+    }
   })
 
-  it('submits title and jobType, then calls onJobAdded with returned job', async () => {
+  it('submits the entered details and hands back the created job', async () => {
     const newJob: Job = { ...JOB_A, id: 'job-new', title: 'New site' }
     mockCreateJob.mockResolvedValue(newJob)
     const onJobAdded = vi.fn()
-    render(
-      <JobPickerScreen
-        jobs={[]}
-        selectedJobId={null}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={onJobAdded}
-        onClose={vi.fn()}
-      />
-    )
-    fireEvent.click(screen.getByRole('button', { name: /add job/i }))
-    fireEvent.change(screen.getByLabelText(/job name/i), { target: { value: 'New site' } })
-    fireEvent.click(screen.getByRole('radio', { name: /extension/i }))
+    renderAllJobs({ jobs: [], onJobAdded })
+    fireEvent.click(screen.getByRole('button', { name: 'New job' }))
+    fireEvent.change(screen.getByLabelText(/job name/i), { target: { value: '  New site  ' } })
+    fireEvent.change(screen.getByLabelText(/where \(optional\)/i), { target: { value: ' Mill Lane ' } })
     fireEvent.click(screen.getByRole('button', { name: /^add job$/i }))
 
     await waitFor(() => {
-      expect(mockCreateJob).toHaveBeenCalledWith('New site', 'extension')
+      expect(mockCreateJob).toHaveBeenCalledWith({ title: 'New site', roughLocationOrLabel: 'Mill Lane', status: 'started' })
     })
     expect(onJobAdded).toHaveBeenCalledWith(newJob)
   })
 
-  it('keeps form values and shows error message on submit failure', async () => {
+  it('keeps form values and shows a retryable error on failure', async () => {
     mockCreateJob.mockRejectedValue(new Error('network'))
-    renderAddForm()
+    openNewJob()
     fireEvent.change(screen.getByLabelText(/job name/i), { target: { value: 'Failed job' } })
     fireEvent.click(screen.getByRole('button', { name: /^add job$/i }))
 
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument()
-    })
-    // Form value preserved
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(screen.getByLabelText(/job name/i)).toHaveValue('Failed job')
+    expect(screen.getByRole('button', { name: /^add job$/i })).toBeEnabled()
   })
 
-  it('submit button is disabled when job name is empty', () => {
-    renderAddForm()
+  it('submit is disabled until the job has a name', () => {
+    openNewJob()
     expect(screen.getByRole('button', { name: /^add job$/i })).toBeDisabled()
   })
 
-  it('shows offline message when trying to add a job while offline', () => {
-    renderAddForm(false)
+  it('says plainly that adding a job needs a connection when offline', () => {
+    openNewJob(false)
     expect(screen.getByText(/adding a job needs a connection/i)).toBeInTheDocument()
-    expect(screen.queryByRole('form', { name: /add job/i })).not.toBeInTheDocument()
-  })
-})
-
-// ── First-run / no-jobs mode ───────────────────────────────────────────────
-
-describe('JobPickerScreen — first-run mode (hideBack + custom title)', () => {
-  it('hides the Back button when hideBack is true', () => {
-    render(
-      <JobPickerScreen
-        jobs={[]}
-        selectedJobId={null}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-        hideBack={true}
-        title="Add first job"
-      />
-    )
-    expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
-  })
-
-  it('shows the custom title instead of "Switch job"', () => {
-    render(
-      <JobPickerScreen
-        jobs={[]}
-        selectedJobId={null}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-        hideBack={true}
-        title="Add first job"
-      />
-    )
-    expect(screen.getByRole('heading', { name: /add first job/i })).toBeInTheDocument()
-    expect(screen.queryByText(/switch job/i)).not.toBeInTheDocument()
-  })
-
-  it('shows Back button and "Switch job" title by default', () => {
-    render(
-      <JobPickerScreen
-        jobs={[JOB_A]}
-        selectedJobId={JOB_A.id}
-        online={true}
-        onSelect={vi.fn()}
-        onJobAdded={vi.fn()}
-        onClose={vi.fn()}
-      />
-    )
-    expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /switch job/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/job name/i)).not.toBeInTheDocument()
   })
 })

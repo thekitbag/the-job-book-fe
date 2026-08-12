@@ -28,8 +28,9 @@ async function gotoApp(page: import('@playwright/test').Page) {
 }
 
 async function addAndEnterNewJob(page: import('@playwright/test').Page, title: string) {
-  await page.getByRole('button', { name: /switch job/i }).click()
-  await page.getByRole('button', { name: /\+ add job/i }).click()
+  await page.getByRole('button', { name: /the job book/i }).click()
+  await page.getByRole('button', { name: /all jobs/i }).click()
+  await page.getByRole('button', { name: 'New job' }).click()
   await page.getByLabel(/job name/i).fill(title)
   await page.getByRole('button', { name: /^add job$/i }).click()
   await page.waitForTimeout(600)

@@ -36,14 +36,14 @@ let lastOnJobUpdated: ((job: { id: string; title: string; status: string }) => v
 let lastRenderedJob: { id: string; title: string; status: string } | null = null
 
 vi.mock('../CurrentJobWorkspace', () => ({
-  default: ({ job, onOpenReviewQueue, onSwitchJob, onLogout, onJobUpdated }: { job: { id: string; title: string; status: string }; onOpenReviewQueue: () => void; onSwitchJob: () => void; onLogout: () => void; onJobUpdated?: (job: { id: string; title: string; status: string }) => void }) => {
+  default: ({ job, onOpenReviewQueue, onOpenBookHome, onLogout, onJobUpdated }: { job: { id: string; title: string; status: string }; onOpenReviewQueue: () => void; onOpenBookHome: () => void; onLogout: () => void; onJobUpdated?: (job: { id: string; title: string; status: string }) => void }) => {
     lastOnJobUpdated = onJobUpdated ?? null
     lastRenderedJob = job
     return (
       <div data-testid="workspace-screen" data-job-id={job.id} data-job-status={job.status}>
         {job.title}
         <button onClick={onOpenReviewQueue}>mock-open-queue</button>
-        <button onClick={onSwitchJob}>mock-switch-job</button>
+        <button onClick={onOpenBookHome}>mock-open-book-home</button>
         <button onClick={onLogout}>mock-logout</button>
         <button onClick={() => onJobUpdated?.({ ...job, status: 'planning' })}>mock-status-update</button>
         <button onClick={() => onJobUpdated?.({ ...job, status: 'archived' })}>mock-archive-job</button>
@@ -58,11 +58,26 @@ vi.mock('../ReviewQueueScreen', () => ({
   ),
 }))
 
-vi.mock('../JobPickerScreen', () => ({
-  default: ({ onJobAdded, onSelect }: { onJobAdded: (j: unknown) => void; onSelect: (j: unknown) => void }) => (
-    <div data-testid="job-picker-screen">
-      <button onClick={() => onJobAdded({ id: 'new-job-001', title: 'New Job', jobType: 'other', roughLocationOrLabel: null, status: 'started', createdAt: '2026-06-10T10:00:00Z', updatedAt: '2026-06-10T10:00:00Z' })}>mock-add-job</button>
-      <button onClick={() => onSelect({ id: 'job-002', title: 'Kitchen Extension', jobType: 'extension', roughLocationOrLabel: null, status: 'started', createdAt: '2026-05-20T08:00:00Z', updatedAt: '2026-06-08T14:00:00Z' })}>mock-select-job-b</button>
+const NEW_JOB = { id: 'new-job-001', title: 'New Job', jobType: 'other', roughLocationOrLabel: null, status: 'started', createdAt: '2026-06-10T10:00:00Z', updatedAt: '2026-06-10T10:00:00Z' }
+const JOB_B_ROW = { id: 'job-002', title: 'Kitchen Extension', jobType: 'extension', roughLocationOrLabel: null, status: 'started', createdAt: '2026-05-20T08:00:00Z', updatedAt: '2026-06-08T14:00:00Z' }
+
+// The book level (Book Home → All Jobs → New job) is covered for real in
+// bookhome.test.tsx; here it is stubbed down to the two things App owns:
+// which job gets selected, and which job gets added.
+vi.mock('../BookHomeScreen', () => ({
+  default: ({ onOpenJob, onOpenAllJobs }: { onOpenJob: (j: unknown) => void; onOpenAllJobs: () => void }) => (
+    <div data-testid="book-home-screen">
+      <button onClick={() => onOpenJob(JOB_B_ROW)}>mock-select-job-b</button>
+      <button onClick={onOpenAllJobs}>mock-open-all-jobs</button>
+    </div>
+  ),
+}))
+
+vi.mock('../AllJobsScreen', () => ({
+  default: ({ onJobAdded, onOpenJob }: { onJobAdded: (j: unknown) => void; onOpenJob: (j: unknown) => void }) => (
+    <div data-testid="all-jobs-screen">
+      <button onClick={() => onJobAdded(NEW_JOB)}>mock-add-job</button>
+      <button onClick={() => onOpenJob(JOB_B_ROW)}>mock-select-job-b</button>
     </div>
   ),
 }))
@@ -147,13 +162,14 @@ describe('App', () => {
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
-  it('shows no protected screen — workspace, review queue, or job picker — when unauthenticated', async () => {
+  it('shows no protected screen — workspace, review queue, or the job index — when unauthenticated', async () => {
     mockGetJobs.mockRejectedValue(new ApiError('Unauthorized', 401))
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('auth-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
     expect(screen.queryByTestId('review-queue-screen')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('job-picker-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('book-home-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('all-jobs-screen')).not.toBeInTheDocument()
   })
 
   it('does not use cached jobs for a 401 — user must re-authenticate', async () => {
@@ -191,30 +207,30 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
 
-  it('shows job picker / add-job prompt when no jobs exist', async () => {
+  it('shows All Jobs / add-job prompt when no jobs exist', async () => {
     mockGetJobs.mockResolvedValue([])
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('all-jobs-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
   })
 
   it('no-jobs state shows no Back button', async () => {
     mockGetJobs.mockResolvedValue([])
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('all-jobs-screen')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
   })
 
   it('creating the first job from zero jobs enters the workspace immediately', async () => {
     mockGetJobs.mockResolvedValue([])
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('all-jobs-screen')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: /mock-add-job/i }))
 
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.getByText('New Job')).toBeInTheDocument()
-    expect(screen.queryByTestId('job-picker-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('all-jobs-screen')).not.toBeInTheDocument()
   })
 
   it('switching job updates the workspace to the new job', async () => {
@@ -222,8 +238,8 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
     expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id)
 
-    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
+    await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
 
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
@@ -237,8 +253,8 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
+    await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
 
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
@@ -258,8 +274,8 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
-    await waitFor(() => screen.getByTestId('job-picker-screen'))
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
+    await waitFor(() => screen.getByTestId('book-home-screen'))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
@@ -369,8 +385,8 @@ describe('App', () => {
     // in-flight PATCH promise from job A that hasn't resolved yet.
     const staleOnJobUpdated = lastOnJobUpdated!
 
-    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
+    await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
@@ -394,14 +410,14 @@ describe('App', () => {
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(JOB_B.id)
   })
 
-  it('archiving the only remaining job falls back to the job picker / empty state', async () => {
+  it('archiving the only remaining job falls back to the empty All Jobs state', async () => {
     mockGetJobs.mockResolvedValue([JOB_A])
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id))
 
     fireEvent.click(screen.getByRole('button', { name: /mock-archive-job/i }))
 
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('all-jobs-screen')).toBeInTheDocument())
     expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBeNull()
   })
@@ -411,8 +427,8 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_A.id))
     const staleOnJobUpdated = lastOnJobUpdated!
 
-    fireEvent.click(screen.getByRole('button', { name: /mock-switch-job/i }))
-    await waitFor(() => expect(screen.getByTestId('job-picker-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
+    await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
