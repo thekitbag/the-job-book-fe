@@ -106,7 +106,7 @@ function renderWorkspace() {
 // testing found the overflow menu too hidden, so this — not "More actions" —
 // is the path the flow tests exercise.
 async function openJobDetails() {
-  fireEvent.click(screen.getAllByRole('button', { name: 'Job details' })[0])
+  fireEvent.click(screen.getByRole('button', { name: 'Job details' }))
   const sheet = await screen.findByRole('dialog', { name: 'Job details' })
   // Wait out the details fetch: the sheet renders immediately with a loading
   // line, and everything a caller wants to click only exists after it resolves.
@@ -141,15 +141,15 @@ describe('Job details — placement', () => {
     expect(screen.getByRole('button', { name: 'Add site address' })).toBeInTheDocument()
   })
 
-  it('is reachable from a section header, without returning to job home', async () => {
+  it('is not repeated in section headers — it belongs to the job, not a lens on it', async () => {
     renderWorkspace()
     await screen.findByRole('navigation', { name: 'Job sections' })
     fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
+    expect(await screen.findByRole('button', { name: '‹ Job home' })).toBeInTheDocument()
 
-    // The section header carries the same labelled control — looking up a
-    // number from Budget costs no navigation.
-    fireEvent.click(screen.getByRole('button', { name: 'Job details' }))
-    expect(await screen.findByRole('dialog', { name: 'Job details' })).toBeInTheDocument()
+    // Budget is one view of the job's money. Its header carries the way back
+    // out and nothing else; Job details is one tap away, on job home.
+    expect(screen.queryByRole('button', { name: 'Job details' })).not.toBeInTheDocument()
   })
 
   it('remains available from the header overflow menu as well', async () => {
@@ -355,7 +355,7 @@ describe('Job details — contacts', () => {
     renderWorkspace()
     // Not the shared helper: on a failed load the sheet never reaches the
     // state that helper waits for.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Job details' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Job details' }))
     expect(await screen.findByText('Couldn’t load job details.')).toBeInTheDocument()
 
     mockGetJobDetails.mockResolvedValue(details({}, [contact()]))

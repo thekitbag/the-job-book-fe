@@ -5727,9 +5727,10 @@ a.row-sheet-opt { text-decoration: none; }
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* Labelled route into Job details: on the job-home status line, and in every
-   section header. Cobalt text, never a pill and never a bare glyph — an
-   unlabelled "⋯" is not somewhere anyone looks for a site address. */
+/* Labelled route into Job details, on the job-home status line beside the
+   status chip. Cobalt text, never a pill and never a bare glyph — an
+   unlabelled "⋯" is not somewhere anyone looks for a site address. It does not
+   appear in section headers: a lens on the job is not the job. */
 .btn-job-details {
   /* Pushed to the right edge of the status line, clear of the status chip's
      cobalt dot, which otherwise butts straight against the label. */
@@ -5752,6 +5753,3 @@ a.row-sheet-opt { text-decoration: none; }
 }
 .btn-job-details:active { opacity: 0.6; }
 .btn-job-details-chev { font-size: 0.9em; }
-/* In a section header it sits in the top row beside the offline badge, where
-   the row is already right-aligned. */
-.ws-header-top-right .btn-job-details { margin-left: 0; }

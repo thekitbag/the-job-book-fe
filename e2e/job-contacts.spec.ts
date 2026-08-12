@@ -25,7 +25,7 @@ async function gotoApp(page: Page) {
 // overflow menu still works, but founder testing showed nobody looks in an
 // unlabelled "⋯" for a phone number.
 async function openJobDetails(page: Page) {
-  await page.getByRole('button', { name: 'Job details' }).first().click()
+  await page.getByRole('button', { name: 'Job details' }).click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
   return sheet
@@ -56,14 +56,14 @@ test.describe('Job details — contacts and site address', () => {
     await expect(page.getByRole('button', { name: 'Add site address' })).toBeVisible()
   })
 
-  test('is reachable from a section header without going back to job home', async ({ page }) => {
+  test('is not repeated in section headers', async ({ page }) => {
     await gotoApp(page)
     await page.getByRole('button', { name: 'Open Budget' }).click()
     await expect(page.getByRole('button', { name: '‹ Job home' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Job details' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add contact' })).toBeVisible()
+    // A section is one lens on the job; its header carries only the way back
+    // out. Job details stays on job home, beside the status chip.
+    await expect(page.getByRole('button', { name: 'Job details' })).toHaveCount(0)
   })
 
   test('remains available from the header overflow menu', async ({ page }) => {
