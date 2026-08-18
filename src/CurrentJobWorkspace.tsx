@@ -819,15 +819,11 @@ export default function CurrentJobWorkspace({
         <header className="ws-header ws-header--section">
           <div className="ws-header-top">
             <button type="button" className="btn-switch-job" onClick={() => setSection('home')}>‹ Job home</button>
-            <div className="ws-header-top-right">
-              {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
-              {/* Same affordance inside every section: looking up a supplier's
-                  number from Budget shouldn't mean navigating back to job home
-                  first. */}
-              <button type="button" className="btn-job-details" onClick={openDetailsSheet}>
-                Job details<span className="btn-job-details-chev" aria-hidden="true">›</span>
-              </button>
-            </div>
+            {/* No Job details control here. A section is one lens on the job —
+                Budget, Money, Labour — and its header carries only the way back
+                out of it. Job details lives with the status chip on job home,
+                where the job describes itself, plus the header menu. */}
+            {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
           </div>
           <div className="ws-header-titles">
             <h1 className="ws-job-title">{SECTION_TITLES[section]}</h1>
