@@ -1938,31 +1938,6 @@ code {
    on every row would turn the list into wallpaper. */
 .book-job-state { font-size: var(--text-md); color: var(--grey-text); flex-shrink: 0; }
 
-/* The one heavy rule on the page: below it, the book stops listing live work
-   and starts offering the archive. */
-.book-finished-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  border: none;
-  border-top: var(--rule-heavy);
-  background: none;
-  padding: 20px 0;
-  min-height: 64px;
-  margin-top: 18px;
-  text-align: left;
-}
-.book-finished-row:active { background: var(--grey-press); }
-.book-finished-label {
-  flex: 1;
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 800;
-  letter-spacing: -0.4px;
-  color: var(--ink);
-}
-.book-finished-count { font-size: var(--text-lg); font-weight: 700; color: var(--ink); }
 
 /* ── All Jobs: one grouped index ── */
 
@@ -5804,10 +5779,6 @@ a.row-sheet-opt { text-decoration: none; }
 .book-money-line { font-size: var(--text-md); overflow-wrap: anywhere; }
 .book-money-amount { font-weight: 700; color: var(--ink); }
 .book-money-words { color: var(--grey-text); }
-
-/* With Money above it, Finished jobs is no longer the first thing under the
-   rule — it takes a hairline instead, so the heavy rule stays unique. */
-.book-finished-row--under { border-top: var(--rule-hair); margin-top: 0; }
 
 /* ── Money page ── */
 

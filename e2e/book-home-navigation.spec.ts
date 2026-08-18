@@ -37,14 +37,15 @@ test.describe('Book Home and job navigation', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('Book Home lists live jobs, counts finished, and has no Record', async ({ page }) => {
+  test('Book Home lists live jobs, omits finished ones, and has no Record', async ({ page }) => {
     await openBookHome(page)
 
     await expect(page.getByRole('button', { name: /Garden Room/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /Grant James Roof/ })).toContainText('Planning')
-    // finished jobs are a count, never rows in the live list
+    // Finished work is not on the cover at all — not as rows, not as a count.
+    // "All jobs ›" above is the one route to it.
     await expect(page.getByRole('button', { name: /Whitmore Patio/ })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /finished jobs 2/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /finished jobs/i })).toHaveCount(0)
 
     // No global Record: recording always belongs to a named job. Money is now a
     // real destination (see cross-job-money.spec.ts); Workshop and "to check"
@@ -80,12 +81,15 @@ test.describe('Book Home and job navigation', () => {
     await expect(page.getByText('Ash Grove')).toBeVisible()
   })
 
-  test('"Finished jobs" from Book Home lands on the Finished group', async ({ page }) => {
+  test('the finished work is reachable through All jobs', async ({ page }) => {
     await openBookHome(page)
-    await page.getByRole('button', { name: /finished jobs 2/i }).click()
+    await page.getByRole('button', { name: 'All jobs', exact: true }).click()
 
+    // Listed under its own heading with its own count — no scroll-to-group
+    // trick now that nothing deep-links into a group.
     const finished = page.getByRole('region', { name: 'Finished' })
-    await expect(finished.getByRole('button', { name: /Okoro Loft/ })).toBeInViewport()
+    await expect(page.getByRole('heading', { name: 'Finished 2' })).toBeVisible()
+    await expect(finished.getByRole('button', { name: /Okoro Loft/ })).toBeVisible()
   })
 
   test('New job creates one In progress job and opens it as the recording destination', async ({ page }) => {

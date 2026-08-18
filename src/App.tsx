@@ -7,7 +7,6 @@ import ReviewQueueScreen from './ReviewQueueScreen'
 import BookHomeScreen from './BookHomeScreen'
 import BookMoneyScreen from './BookMoneyScreen'
 import AllJobsScreen from './AllJobsScreen'
-import type { JobGroupKey } from './jobGroups'
 import type { AuthUser, BookMoneyResponse, Job } from './types'
 import type { JobEntry } from './CurrentJobWorkspace'
 
@@ -60,9 +59,6 @@ export default function App() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('workspace')
-  // Which group All Jobs opens looking at — set only when Book Home's
-  // "Finished jobs" row is the way in.
-  const [allJobsFocus, setAllJobsFocus] = useState<JobGroupKey | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
   // Cross-job Money (GET /api/book/money) — one response behind both the Book
   // Home row and the Money page, loaded at the book level rather than per job.
@@ -331,8 +327,7 @@ export default function App() {
         jobs={jobs}
         money={bookMoney?.bookHome ?? null}
         onOpenJob={handleSelectJob}
-        onOpenAllJobs={() => { setAllJobsFocus(null); setView('allJobs') }}
-        onOpenFinishedJobs={() => { setAllJobsFocus('finished'); setView('allJobs') }}
+        onOpenAllJobs={() => setView('allJobs')}
         onOpenMoney={() => { track('book_money_opened'); loadBookMoney(); setView('bookMoney') }}
       />
     )
@@ -356,7 +351,6 @@ export default function App() {
       <AllJobsScreen
         jobs={jobs}
         online={online}
-        focusGroup={allJobsFocus}
         onOpenJob={handleSelectJob}
         onJobAdded={handleJobAdded}
         onBack={() => setView('bookHome')}

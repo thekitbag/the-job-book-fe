@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import NewJobSheet from './NewJobSheet'
 import { JOB_GROUP_LABELS, indexedJobs, jobsInGroup, type JobGroupKey } from './jobGroups'
 import type { Job } from './types'
@@ -20,7 +20,6 @@ const GROUP_ORDER: JobGroupKey[] = ['started', 'planning', 'finished']
 export default function AllJobsScreen({
   jobs,
   online,
-  focusGroup,
   hideBack = false,
   onOpenJob,
   onJobAdded,
@@ -28,19 +27,12 @@ export default function AllJobsScreen({
 }: {
   jobs: Job[]
   online: boolean
-  // Book Home's "Finished jobs" arrives here already looking at Finished.
-  focusGroup?: JobGroupKey | null
   hideBack?: boolean
   onOpenJob: (job: Job) => void
   onJobAdded: (job: Job) => void
   onBack: () => void
 }) {
   const [newJobOpen, setNewJobOpen] = useState(false)
-  const focusRef = useRef<HTMLElement | null>(null)
-
-  useEffect(() => {
-    if (focusGroup && focusRef.current) focusRef.current.scrollIntoView({ block: 'start' })
-  }, [focusGroup])
 
   const total = indexedJobs(jobs).length
 
@@ -74,7 +66,6 @@ export default function AllJobsScreen({
               key={key}
               className="alljobs-group"
               aria-label={label}
-              ref={key === focusGroup ? focusRef : undefined}
             >
               <h2 className="alljobs-group-head">
                 {label} <span className="alljobs-group-count">{groupJobs.length}</span>

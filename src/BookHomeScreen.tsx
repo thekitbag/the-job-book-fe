@@ -1,4 +1,4 @@
-import { jobsInGroup, liveJobs } from './jobGroups'
+import { liveJobs } from './jobGroups'
 import { moneyFigure } from './memoryScan'
 import type { BookMoneyResponse, Job } from './types'
 
@@ -44,7 +44,6 @@ export default function BookHomeScreen({
   money,
   onOpenJob,
   onOpenAllJobs,
-  onOpenFinishedJobs,
   onOpenMoney,
 }: {
   jobs: Job[]
@@ -55,11 +54,9 @@ export default function BookHomeScreen({
   money: BookMoneyResponse['bookHome'] | null
   onOpenJob: (job: Job) => void
   onOpenAllJobs: () => void
-  onOpenFinishedJobs: () => void
   onOpenMoney: () => void
 }) {
   const live = liveJobs(jobs)
-  const finishedCount = jobsInGroup(jobs, 'finished').length
 
   // One Money row, shown only when the backend says there is something to say.
   // Each line appears only if the backend supplied its label — so no £0, no
@@ -101,8 +98,9 @@ export default function BookHomeScreen({
           ))}
         </ul>
 
-        {/* Across all jobs, under the one heavy rule: below it the book stops
-            being a list of jobs and starts summing them up. */}
+        {/* Across all jobs, under the one heavy rule, and the last thing on the
+            page: below it the book stops listing jobs and starts summing them
+            up, and nothing sends Mike back to jobs afterwards. */}
         {showMoney && (
           <button type="button" className="book-money-row" onClick={onOpenMoney}>
             <span className="book-money-text">
@@ -126,20 +124,13 @@ export default function BookHomeScreen({
           </button>
         )}
 
-        {finishedCount > 0 && (
-          <button
-            type="button"
-            className={`book-finished-row${showMoney ? ' book-finished-row--under' : ''}`}
-            onClick={onOpenFinishedJobs}
-          >
-            <span className="book-finished-label">Finished jobs</span>{' '}
-            <span className="book-finished-count">{finishedCount}</span>
-            <span className="book-chev" aria-hidden="true">›</span>
-          </button>
-        )}
-        {/* When every job is finished the list is simply empty. No explanatory
-            paragraph: "All jobs ›" above is still the route to the finished
-            work and to New job, and it is already on the page. */}
+        {/* No Finished jobs row. It sent Mike from jobs, past Money, back to
+            jobs again — and "All jobs ›" at the top of this page already
+            reaches the finished work, where All Jobs lists it under its own
+            heading with the same count. One route is enough.
+
+            When every job is finished this list is simply empty; the route out
+            is still right there above it. */}
       </div>
     </div>
   )
