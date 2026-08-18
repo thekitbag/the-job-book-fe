@@ -1,8 +1,12 @@
 import type {
-  BookMoneyJobStatus, BookMoneyJobStatusLabel, BookMoneyResponse, OwedToMeJob,
+  BookMoneyCapabilities, BookMoneyJobStatus, BookMoneyJobStatusLabel, BookMoneyResponse, OwedToMeJob,
   SupplierAccountGroup, SupplierAccountLine, SupplierMissingPriceItem, SupplierMissingPriceReason,
 } from '../../types'
 import { MOCK_JOBS } from './jobs'
+import {
+  _resetMockSupplierPaymentsForTesting, mockSettledSourceIds, mockSupplierPaymentHistory,
+} from './supplierPaymentStore'
+import { mockAmountString as amountString, mockDateLabel as dateLabel, mockMoney as money } from './util'
 
 // Mock stand-in for GET /api/book/money.
 //
@@ -51,26 +55,12 @@ const WHITMORE = 'job-pilot-finished-005'
 const OKORO = 'job-pilot-finished-006'
 const ARCHIVED = 'job-pilot-archived-007'
 
-// Money, the way the backend would label it: thousands separated, no pennies
-// on a round figure. Kept local so the mock's labels are the backend's labels.
-function money(amount: number): string {
-  const rounded = Math.round(amount * 100) / 100
-  return `£${rounded.toLocaleString('en-GB', {
-    minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function amountString(amount: number): string {
-  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
-}
+// Money and date labels are the backend's job; in the mock they come from the
+// shared helpers in ./util, so an account total, a receipt total and a job
+// allocation can never be formatted three different ways.
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString()
-}
-
-function dateLabel(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(iso))
 }
 
 function jobFacts(jobId: string): { jobTitle: string; jobStatus: BookMoneyJobStatus; jobStatusLabel: BookMoneyJobStatusLabel } {
@@ -152,6 +142,45 @@ const SCENARIO_SEEDS: Record<string, Seed> = {
     missing: [DEFAULT_SEED.missing[0]],
     owed: [],
   },
+  // Settlement gating — the seed is the default book; what changes is what the
+  // backend says it will let this book do.
+  'book-money-settlement-off': DEFAULT_SEED,
+  'book-money-settlement-unpublished': DEFAULT_SEED,
+  'book-money-settlement-revoked': DEFAULT_SEED,
+}
+
+// Settling an account is gated by backend config (default off) while
+// real-account validation is outstanding. The mock stands in for the states a
+// real deployment can be in:
+//
+//   on          — capability true, writes accepted.
+//   off         — capability false, writes refused. The normal gated deployment.
+//   unpublished — a backend too old to send the field at all. The frontend must
+//                 fail closed here rather than assume the feature is there.
+//   revoked     — capability true but writes refused: the gate switched off
+//                 between the read and the write, which is the only case the
+//                 write-failure handling exists for.
+type SettlementGate = 'on' | 'off' | 'unpublished' | 'revoked'
+
+const SCENARIO_GATE: Record<string, SettlementGate> = {
+  'book-money-settlement-off': 'off',
+  'book-money-settlement-unpublished': 'unpublished',
+  'book-money-settlement-revoked': 'revoked',
+}
+
+let gateOverride: SettlementGate | null = null
+
+export function mockSettlementGate(): SettlementGate {
+  return gateOverride ?? SCENARIO_GATE[mockBookMoneyScenario] ?? 'on'
+}
+
+/**
+ * Test-only: flip the gate WITHOUT resetting the book, so a payment recorded
+ * while settlement was on can be read back after it is switched off. That is the
+ * case the backend is explicit about — reads stay open, writes do not.
+ */
+export function _setMockSettlementGateForTesting(gate: SettlementGate | null): void {
+  gateOverride = gate
 }
 
 // ── Backend-side arithmetic (mock only) ─────────────────────────────────────
@@ -269,7 +298,10 @@ function buildOwed(seeds: SeedOwed[]): OwedToMeJob[] {
 }
 
 function buildResponse(seed: Seed): BookMoneyResponse {
-  const lines = seed.lines.map(buildLine)
+  // A settled cost leaves the account by being absent, exactly as it would from
+  // the backend: nothing edits the source, so Undo simply stops excluding it.
+  const settled = mockSettledSourceIds()
+  const lines = seed.lines.map(buildLine).filter(l => !settled.has(l.sourceMemoryItemId))
   const groups = buildGroups(lines)
   const pricedTotal = lines.reduce((n, l) => n + parseFloat(l.amount), 0)
   const hasPriced = lines.length > 0
@@ -292,12 +324,17 @@ function buildResponse(seed: Seed): BookMoneyResponse {
     ? `${missing.length} ${missing.length === 1 ? 'cost needs' : 'costs need'} a price`
     : null
 
+  const accountPaymentHistory = mockSupplierPaymentHistory()
+  const gate = mockSettlementGate()
+
   return {
     generatedAt: new Date().toISOString(),
     bookHome: {
-      // Open Money when either direction has something positive to say, or when
-      // missing prices are the only useful signal.
-      showMoneyRow: hasPriced || owedJobs.length > 0 || missing.length > 0,
+      // Open Money when either direction has something positive to say, when
+      // missing prices are the only useful signal, or when the only thing left
+      // is what has already been paid — a bare row, never a fake £0 balance.
+      showMoneyRow: hasPriced || owedJobs.length > 0 || missing.length > 0
+        || accountPaymentHistory.length > 0,
       toPayOnAccountsAmount: hasPriced ? amountString(pricedTotal) : null,
       toPayOnAccountsCurrency: hasPriced ? 'GBP' : null,
       toPayOnAccountsLabel: hasPriced ? `${money(pricedTotal)} to pay on accounts` : null,
@@ -328,6 +365,16 @@ function buildResponse(seed: Seed): BookMoneyResponse {
       jobCount: owedJobs.length,
       jobs: owedJobs,
     } : null,
+    accountPaymentHistory,
+    // Omitted entirely for the older-backend case. The cast is the point: this
+    // branch deliberately returns a response that does NOT satisfy the contract,
+    // because standing in for a backend that never sends the field is the only
+    // way to prove the frontend fails closed instead of assuming permission.
+    // "revoked" states true and then refuses the write, which is how a gate
+    // flipped between the read and the write behaves.
+    ...(gate === 'unpublished'
+      ? ({} as { capabilities: BookMoneyCapabilities })
+      : { capabilities: { supplierAccountSettlement: gate === 'on' || gate === 'revoked' } }),
   }
 }
 
@@ -335,6 +382,11 @@ let mockBookMoneyScenario = 'default'
 
 export function _resetMockBookMoneyForTesting(scenario = 'default'): void {
   mockBookMoneyScenario = scenario
+  gateOverride = null
+  // Recorded supplier payments are part of the book's money state, so resetting
+  // the book resets them too — otherwise one test's settlement would silently
+  // shorten the next test's accounts.
+  _resetMockSupplierPaymentsForTesting()
 }
 
 export function mockGetBookMoney(): BookMoneyResponse {

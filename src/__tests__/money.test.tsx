@@ -186,6 +186,50 @@ describe('Money — section', () => {
     expect(screen.getByText('Uncategorised')).toBeInTheDocument()
   })
 
+  // ── Supplier account allocations ──────────────────────────────────────────
+  // One real payment to a merchant, split across the jobs whose costs it
+  // covered. This job sees its own share, once.
+
+  const ALLOCATION: MoneyRow = {
+    id: 'sap-alloc-1', jobId: JOB.id, direction: 'out', kind: 'supplier_account_payment',
+    amount: '3250', currency: 'GBP', amountLabel: '-£3,250',
+    occurredAt: '2026-08-10T12:00:00.000Z', note: null, reference: null,
+    sourceMemoryItemId: null, sourceItemLabel: null, sourceMemoryType: null,
+    sourceBudgetCategoryId: null, sourceBudgetCategoryName: null,
+    supplierAccountPaymentId: 'sap-1', supplierName: 'Sydenhams',
+    sourceMemoryItemIds: ['m1', 'm2'],
+    allocationSourceLabels: ['Roof battens, bundle', 'Timber, 3 packs'],
+    editable: false, removable: false, createdAt: '', updatedAt: '',
+  }
+
+  it('shows a supplier account payment as one row, named by the account', async () => {
+    vi.mocked(getJobMoney).mockResolvedValue(money({
+      moneyOutAmount: '3250', moneyOutCurrency: 'GBP', rows: [ALLOCATION],
+    }))
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openMoney(user)
+
+    const list = screen.getByRole('tabpanel', { name: 'Money' })
+    expect(within(list).getByText('Sydenhams')).toBeInTheDocument()
+    // The costs the share was made of, shown once — the child paid markers
+    // behind them are never rows as well, or Money out would double-count.
+    expect(within(list).getByText('Roof battens, bundle · Timber, 3 packs')).toBeInTheDocument()
+    expect(within(list).getAllByText('-£3,250')).toHaveLength(1)
+  })
+
+  it('offers no single-cost undo on an allocation — the payment is undone whole', async () => {
+    vi.mocked(getJobMoney).mockResolvedValue(money({
+      moneyOutAmount: '3250', moneyOutCurrency: 'GBP', rows: [ALLOCATION],
+    }))
+    const user = userEvent.setup()
+    renderWorkspace()
+    await openMoney(user)
+
+    const list = screen.getByRole('tabpanel', { name: 'Money' })
+    expect(within(list).queryByRole('button', { name: /undo paid|delete|edit/i })).not.toBeInTheDocument()
+  })
+
   it('filters to Money in and Money out', async () => {
     const user = userEvent.setup()
     renderWorkspace()

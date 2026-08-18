@@ -29,6 +29,13 @@ vi.mock('../api', async (importOriginal) => {
     onUnauthorized: vi.fn(),
     ApiError: actual.ApiError,
     getBookMoney: vi.fn(() => Promise.resolve(mock.mockGetBookMoney())),
+    // Settlement goes through the real client against the mock backend, so the
+    // account these tests read is the account a payment would actually change.
+    createSupplierPayment: actual.createSupplierPayment,
+    getSupplierPayment: actual.getSupplierPayment,
+    patchSupplierPaymentDate: actual.patchSupplierPaymentDate,
+    undoSupplierPayment: actual.undoSupplierPayment,
+    isSettlementUnavailable: actual.isSettlementUnavailable,
   }
 })
 
@@ -233,26 +240,29 @@ describe('Cross-job Money (read-only)', () => {
     expect(block.queryByText(/£0/)).not.toBeInTheDocument()
   })
 
-  it('has no selection, mark-paid, settlement or merge controls anywhere', async () => {
+  // Settlement (see supplierSettlement.test.tsx) added exactly one write to this
+  // page: marking selected costs on a NAMED account paid. Everything else the
+  // read-only slice refused is still refused.
+  it('has no settlement controls on the overview, and never a rename or merge', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoMoney(user)
 
-    const assertNoWriteControls = () => {
-      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /select all|mark paid|rename or merge|settle/i })).not.toBeInTheDocument()
-      expect(screen.queryByText(/tick what a payment covers|nothing selected|on the account/i)).not.toBeInTheDocument()
-    }
-    assertNoWriteControls()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /select all|mark .*paid/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/tick what a payment covers|nothing selected|on the account/i)).not.toBeInTheDocument()
 
+    // Not on the overview, and not inside an account either — correcting a
+    // supplier name is a source-item correction, not an account operation.
+    expect(screen.queryByRole('button', { name: /rename or merge/i })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Open Sydenhams,/ }))
     await screen.findByRole('heading', { name: /Sydenhams/ })
-    assertNoWriteControls()
+    expect(screen.queryByRole('button', { name: /rename or merge|reconcile|settle/i })).not.toBeInTheDocument()
   })
 
   // ── Supplier detail ───────────────────────────────────────────────────────
 
-  it('opens a read-only account with its recorded costs, oldest first', async () => {
+  it('opens an account with its recorded costs, oldest first', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoMoney(user)

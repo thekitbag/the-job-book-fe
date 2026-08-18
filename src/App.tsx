@@ -65,6 +65,15 @@ export default function App() {
   // A failure only costs the Money row: the jobs index never depends on it.
   const [bookMoney, setBookMoney] = useState<BookMoneyResponse | null>(null)
   const [bookMoneyState, setBookMoneyState] = useState<'loading' | 'ready' | 'error'>('loading')
+  // Settling a supplier account is gated by backend config while real-account
+  // validation is outstanding. Enablement is the backend's statement, never a
+  // guess from this build's environment, and the frontend fails closed: only an
+  // explicit capability of true offers the controls, so a backend too old to
+  // send the field shows no settlement UI rather than a button that cannot work.
+  // The latch below is the second line — the gate can be switched off between
+  // the read and the write — and holds for the session so Mike is never offered
+  // the same unavailable action twice.
+  const [settlementUnavailable, setSettlementUnavailable] = useState(false)
   // Where a job should open when something outside it sent Mike there — a
   // supplier line (Budget, that item) or an owed row (that job's Money).
   const [jobEntry, setJobEntry] = useState<JobEntry | null>(null)
@@ -340,6 +349,8 @@ export default function App() {
         loadState={bookMoneyState}
         onBack={() => setView('bookHome')}
         onReload={loadBookMoney}
+        settlementAvailable={bookMoney?.capabilities?.supplierAccountSettlement === true && !settlementUnavailable}
+        onSettlementUnavailable={() => setSettlementUnavailable(true)}
         onOpenSource={openSourceItem}
         onOpenJobMoney={openJobMoney}
       />

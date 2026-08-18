@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { createSupplierPayment, getSupplierPayment, isSettlementUnavailable } from './api'
+import { track } from './analytics'
 import { moneyFigure } from './memoryScan'
-import type { BookMoneyResponse, OwedToMeJob, SupplierAccountGroup, SupplierAccountLine, SupplierMissingPriceItem } from './types'
+import SupplierPaymentReceiptSheet from './SupplierPaymentReceipt'
+import type {
+  BookMoneyResponse, OwedToMeJob, SupplierAccountGroup, SupplierAccountLine,
+  SupplierAccountPaymentHistoryRow, SupplierAccountPaymentReceipt, SupplierMissingPriceItem,
+} from './types'
 
 // Money figures are formatted from the backend's amount the way the rest of the
 // app formats money (thousands separated), falling back to the backend's own
@@ -14,15 +20,18 @@ function figure(amount: string | null, currency: string | null, label: string | 
  * Money — the cross-job view, and the only screen in the app that reads across
  * every job at once.
  *
- * It is READ ONLY, deliberately. It answers two questions ("what is still to
- * pay on accounts" and "who still owes me") and then hands Mike back to the job
- * that owns the fact so he can correct it there. There is no select, no
- * Select all, no Mark paid, no settlement footer and no rename/merge: those
- * belong to a settlement slice that has not been specified yet, and a disabled
- * version of a control that does not exist would be a promise, not a feature.
+ * It answers two questions ("what is still to pay on accounts" and "who still
+ * owes me"), lists the supplier payments already recorded, and hands Mike back
+ * to the job that owns a fact so he can correct it there.
  *
- * Every figure, count and label on this page comes from GET /api/book/money.
- * Nothing here adds anything up.
+ * It has exactly one write: settling a named supplier account. Ticking whole
+ * recorded costs and marking them paid records one real payment to one merchant
+ * and splits it across the jobs those costs belong to. It does not reconcile a
+ * bank, match a statement or clear an account, and it never moves a Budget.
+ * There is still no rename/merge and no partial or manual amount — the amount is
+ * whatever the ticked costs come to, derived by the backend from the ids sent.
+ *
+ * Every figure, count and label on this page comes from the backend.
  */
 
 type SourceTarget = { jobId: string; sourceMemoryItemId: string }
@@ -32,6 +41,8 @@ export default function BookMoneyScreen({
   loadState,
   onBack,
   onReload,
+  settlementAvailable,
+  onSettlementUnavailable,
   onOpenSource,
   onOpenJobMoney,
 }: {
@@ -39,6 +50,12 @@ export default function BookMoneyScreen({
   loadState: 'loading' | 'ready' | 'error'
   onBack: () => void
   onReload: () => void
+  // Whether the backend will currently accept a supplier payment. Stated by the
+  // backend and failed closed, never inferred here — see App. Reading Money is
+  // unaffected either way: only the writes on this page are gated, and a receipt
+  // already recorded stays readable.
+  settlementAvailable: boolean
+  onSettlementUnavailable: () => void
   // Opens the source job and focuses the source item where the app can.
   onOpenSource: (target: SourceTarget) => void
   // Opens that job's own Money view.
@@ -47,14 +64,55 @@ export default function BookMoneyScreen({
   // Supplier detail is a place, not a panel: it replaces the overview and comes
   // back with "‹ Money", matching how every other level of the book behaves.
   const [openGroupId, setOpenGroupId] = useState<string | null>(null)
+  const [receipt, setReceipt] = useState<SupplierAccountPaymentReceipt | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const group = data?.toPayOnAccounts?.supplierGroups.find(g => g.groupId === openGroupId) ?? null
 
+  const openReceipt = async (paymentId: string) => {
+    setHistoryError(null)
+    try {
+      setReceipt(await getSupplierPayment(paymentId))
+    } catch {
+      setHistoryError('Couldn’t open that payment. Try again.')
+    }
+  }
+
+  // The receipt lives at this level, not inside the supplier detail: settling
+  // the last cost on an account makes that account disappear from the refreshed
+  // response, and the receipt explaining where it went must outlive it.
+  const receiptSheet = receipt && (
+    <SupplierPaymentReceiptSheet
+      receipt={receipt}
+      settlementAvailable={settlementAvailable}
+      onReceiptChanged={setReceipt}
+      onUndone={() => { setReceipt(null); onReload() }}
+      onSettlementUnavailable={onSettlementUnavailable}
+      onClose={() => setReceipt(null)}
+      onOpenJobMoney={jobId => { setReceipt(null); onOpenJobMoney(jobId) }}
+      onOpenSource={target => { setReceipt(null); onOpenSource(target) }}
+    />
+  )
+
   if (group) {
-    return <SupplierDetail group={group} onBack={() => setOpenGroupId(null)} onOpenSource={onOpenSource} />
+    return (
+      <>
+        <SupplierDetail
+          group={group}
+          settlementAvailable={settlementAvailable}
+          onSettlementUnavailable={onSettlementUnavailable}
+          onBack={() => setOpenGroupId(null)}
+          onOpenSource={onOpenSource}
+          onPaid={paid => { setReceipt(paid); onReload() }}
+          onStaleSelection={onReload}
+        />
+        {receiptSheet}
+      </>
+    )
   }
 
   const toPay = data?.toPayOnAccounts ?? null
   const owed = data?.owedToMe ?? null
+  const history = data?.accountPaymentHistory ?? []
 
   return (
     <div className="book-page">
@@ -149,13 +207,36 @@ export default function BookMoneyScreen({
           </section>
         )}
 
+        {/* Payments already made. Real aggregate supplier payments only — this
+            is not a regrouping of older individually marked-paid costs, and it
+            is the only way back to a receipt once the account it emptied has
+            dropped off the list above. */}
+        {history.length > 0 && (
+          <section className="bm-section" aria-label="Account payment history">
+            <div className="bm-section-head">
+              <div className="bm-section-headline">
+                <h2 className="book-section-label">Account payment history</h2>
+              </div>
+            </div>
+            {historyError && <p className="queue-item-error" role="alert">{historyError}</p>}
+            <ul className="bm-rows">
+              {history.map(row => (
+                <li key={row.id}>
+                  <HistoryRow row={row} onOpen={() => void openReceipt(row.id)} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Directly routed here with nothing outstanding: say that plainly and
             stop. No "all settled", no congratulation — neither is a fact this
             page has established. */}
-        {loadState === 'ready' && !toPay && !owed && (
+        {loadState === 'ready' && !toPay && !owed && history.length === 0 && (
           <p className="bm-empty">Nothing to pay on accounts and nothing recorded as owed to you.</p>
         )}
       </div>
+      {receiptSheet}
     </div>
   )
 }
@@ -172,6 +253,26 @@ function OwedRow({ job, onOpen }: { job: OwedToMeJob; onOpen: () => void }) {
         {context && <span className="bm-row-meta">{context}</span>}
       </span>
       <span className="bm-row-amount">{figure(job.owedAmount, job.currency, job.owedLabel)}</span>
+      <span className="book-chev" aria-hidden="true">›</span>
+    </button>
+  )
+}
+
+function HistoryRow({ row, onOpen }: { row: SupplierAccountPaymentHistoryRow; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      className="bm-row"
+      aria-label={`Open the ${row.totalLabel} payment to ${row.supplierName}`}
+      onClick={onOpen}
+    >
+      <span className="bm-row-main">
+        <span className="bm-row-name">{row.supplierName}</span>
+        <span className="bm-row-meta">
+          {`Paid ${row.paidAtLabel} · ${row.costCount} ${row.costCount === 1 ? 'cost' : 'costs'} · ${row.jobCount === 1 ? '1 job' : `${row.jobCount} jobs`}`}
+        </span>
+      </span>
+      <span className="bm-row-amount">{figure(row.totalAmount, row.currency, row.totalLabel)}</span>
       <span className="book-chev" aria-hidden="true">›</span>
     </button>
   )
@@ -212,13 +313,116 @@ function MissingPriceBlock({ items, onOpenSource }: {
   )
 }
 
-function SupplierDetail({ group, onBack, onOpenSource }: {
+// A stable id per submit attempt. Reused across a retry of the same attempt so
+// that a payment which actually landed before the network gave up comes back as
+// itself rather than being made twice; retired once the payment is recorded.
+function newRequestId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `sap-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function SupplierDetail({
+  group, settlementAvailable, onSettlementUnavailable, onBack, onOpenSource, onPaid, onStaleSelection,
+}: {
   group: SupplierAccountGroup
+  settlementAvailable: boolean
+  onSettlementUnavailable: () => void
   onBack: () => void
   onOpenSource: (target: SourceTarget) => void
+  onPaid: (receipt: SupplierAccountPaymentReceipt) => void
+  onStaleSelection: () => void
 }) {
+  // Settlement is for a named merchant account only. "Supplier needed" is a pile
+  // of costs that have not been attributed to anyone yet — there is no account
+  // to pay, so the detail stays exactly as read-only as it was.
+  const named = group.kind === 'named_supplier' && group.supplierName !== null
+  // …and only where the backend will actually accept the payment. With the
+  // feature off, the account is a plain list of recorded costs again rather
+  // than a tick-and-pay screen whose button cannot work.
+  const settleable = named && settlementAvailable
+
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef<string | null>(null)
+
+  // Selection survives a failed submit, so a stale-selection error leaves Mike
+  // looking at the same task rather than starting again. It is read through the
+  // account's current lines, so an id the refreshed account no longer carries
+  // simply stops counting instead of haunting the summary.
+  const live = useMemo(
+    () => group.lines.filter(l => selected.has(l.sourceMemoryItemId)),
+    [group.lines, selected],
+  )
+
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const selectedTotal = round2(live.reduce((n, l) => n + parseFloat(l.amount), 0))
+  const selectedJobCount = new Set(live.map(l => l.jobId)).size
+  const leftUnpaid = round2(parseFloat(group.totalAmount) - selectedTotal)
+  const allSelected = live.length > 0 && live.length === group.lines.length
+
+  const toggle = (id: string) => {
+    setError(null)
+    requestIdRef.current = null
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllOrClear = () => {
+    setError(null)
+    requestIdRef.current = null
+    setSelected(live.length > 0 ? new Set() : new Set(group.lines.map(l => l.sourceMemoryItemId)))
+  }
+
+  const markPaid = async () => {
+    if (busy || live.length === 0 || !group.supplierName) return
+    setBusy(true)
+    setError(null)
+    // One id for this attempt, kept across retries of it.
+    requestIdRef.current ??= newRequestId()
+    try {
+      const paid = await createSupplierPayment({
+        supplierGroupId: group.groupId,
+        supplierName: group.supplierName,
+        sourceMemoryItemIds: live.map(l => l.sourceMemoryItemId),
+        clientRequestId: requestIdRef.current,
+      })
+      track('supplier_payment_recorded', {
+        payment_id: paid.id,
+        cost_count: paid.costCount,
+        job_count: paid.jobCount,
+      })
+      requestIdRef.current = null
+      setSelected(new Set())
+      // Success is the backend's receipt, never an optimistic list change.
+      onPaid(paid)
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (isSettlementUnavailable(err)) {
+        // The backend has the feature off. Say so plainly and stop offering it,
+        // rather than leaving a button that cannot work.
+        requestIdRef.current = null
+        setSelected(new Set())
+        onSettlementUnavailable()
+      } else if (code === 'SUPPLIER_PAYMENT_STALE_SELECTION') {
+        setError('This account changed. Review the current costs and try again.')
+        requestIdRef.current = null
+        onStaleSelection()
+      } else {
+        setError('Could not record the payment — nothing changed. Try again.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <div className="book-page">
+    <div className={`book-page${settleable ? ' book-page--settling' : ''}`}>
       <header className="book-header book-header--sub">
         <button type="button" className="book-back" onClick={onBack} aria-label="Back to Money">
           <span aria-hidden="true">‹ </span>Money
@@ -226,7 +430,8 @@ function SupplierDetail({ group, onBack, onOpenSource }: {
         <h1 className="book-title book-title--sub">
           {group.displayName} <span className="book-total">{figure(group.totalAmount, group.currency, group.totalLabel)}</span>
         </h1>
-        {/* Design screen 07's header line, without its settlement controls. */}
+        {/* Design screen 07's header line. No "Rename or merge": correcting a
+            supplier name is a source-item correction, not an account operation. */}
         <p className="bm-detail-sub">
           {`To pay · ${group.purchaseCount} ${group.purchaseCount === 1 ? 'purchase' : 'purchases'} · ${group.jobContextLabel}`}
         </p>
@@ -234,21 +439,83 @@ function SupplierDetail({ group, onBack, onOpenSource }: {
 
       <div className="book-body">
         <div className="book-section-head book-section-head--ruled">
-          <h2 className="book-section-label">Recorded costs</h2>
+          <h2 className="book-section-label">{settleable ? 'Tick what a payment covers' : 'Recorded costs'}</h2>
+
+          {settleable && (
+            <button type="button" className="sap-select-all" onClick={selectAllOrClear}>
+              {live.length > 0 ? 'Clear' : 'Select all'}
+            </button>
+          )}
         </div>
+        {/* Reached directly with the feature off: one quiet sentence, no
+            control. Not a disabled button — a greyed-out "Mark paid" would
+            promise something this book cannot currently do. */}
+        {named && !settlementAvailable && (
+          <p className="sap-unavailable" role="status">
+            Recording a payment on an account isn’t switched on yet. The costs below are up to date.
+          </p>
+        )}
         <ul className="bm-rows">
           {group.lines.map(line => (
             <li key={line.id}>
-              <SupplierLineRow line={line} onOpen={() => onOpenSource(line)} />
+              <SupplierLineRow
+                line={line}
+                selectable={settleable}
+                checked={selected.has(line.sourceMemoryItemId)}
+                onToggle={() => toggle(line.sourceMemoryItemId)}
+                onOpen={() => onOpenSource(line)}
+              />
             </li>
           ))}
         </ul>
       </div>
+
+      {settleable && (
+        // Sticky, because the thing Mike is building — a payment — has to stay
+        // visible while he scrolls a long account to tick what it covers.
+        <div className="sap-bar" role="group" aria-label="Record a payment">
+          {error && <p className="sap-bar-error queue-item-error" role="alert">{error}</p>}
+          <p className="sap-bar-line">
+            <span className="sap-bar-selected">
+              {live.length === 0
+                ? 'Nothing selected'
+                : `${live.length} selected · ${selectedJobCount === 1 ? '1 job' : `${selectedJobCount} jobs`}`}
+            </span>
+            <span className="sap-bar-rest">
+              {live.length === 0
+                ? `${figure(group.totalAmount, group.currency, group.totalLabel)} on the account`
+                : allSelected
+                  // Said as what it is — no costs left unpaid on this account —
+                  // and never as "cleared", "settled" or "reconciled", none of
+                  // which this app has any way of knowing.
+                  ? 'No recorded costs left unpaid'
+                  : `${moneyFigure(String(leftUnpaid))} left unpaid`}
+            </span>
+          </p>
+          {/* The exact amount, from the ticked costs. There is no amount field:
+              the payment is worth what it covers, and the backend derives the
+              same figure from the ids sent. */}
+          <button
+            type="button"
+            className="sap-bar-action"
+            disabled={live.length === 0 || busy}
+            onClick={() => void markPaid()}
+          >
+            {busy ? 'Recording…' : live.length === 0 ? 'Mark paid' : `Mark ${moneyFigure(String(selectedTotal))} paid`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function SupplierLineRow({ line, onOpen }: { line: SupplierAccountLine; onOpen: () => void }) {
+function SupplierLineRow({ line, selectable, checked, onToggle, onOpen }: {
+  line: SupplierAccountLine
+  selectable: boolean
+  checked: boolean
+  onToggle: () => void
+  onOpen: () => void
+}) {
   const title = [line.itemLabel, line.quantityLabel].filter(Boolean).join(', ')
   // Date, job, and — when the job is done but the account is not — that the job
   // is finished. Mike pays a merchant long after he leaves site.
@@ -258,13 +525,25 @@ function SupplierLineRow({ line, onOpen }: { line: SupplierAccountLine; onOpen: 
     line.jobStatus === 'finished' ? 'finished job' : null,
   ].filter(Boolean).join(' · ')
   return (
-    <button type="button" className="bm-row" aria-label={`Open ${title} on ${line.jobTitle}`} onClick={onOpen}>
-      <span className="bm-row-main">
-        <span className="bm-row-name">{title}</span>
-        <span className="bm-row-meta">{meta}</span>
-      </span>
-      <span className="bm-row-amount">{figure(line.amount, line.currency, line.amountLabel)}</span>
-      <span className="book-chev" aria-hidden="true">›</span>
-    </button>
+    <div className={`bm-row sap-line${checked ? ' sap-line--checked' : ''}`}>
+      {/* Two separate targets on one row: the box builds the payment, the
+          content opens the cost. Tapping to read what something was must never
+          quietly add it to a payment. */}
+      {selectable && (
+        <label className="sap-check">
+          <input type="checkbox" checked={checked} onChange={onToggle} />
+          <span className="sap-check-box" aria-hidden="true" />
+          <span className="sap-check-label">{`Include ${title}, ${line.amountLabel}`}</span>
+        </label>
+      )}
+      <button type="button" className="sap-line-open" aria-label={`Open ${title} on ${line.jobTitle}`} onClick={onOpen}>
+        <span className="bm-row-main">
+          <span className="bm-row-name">{title}</span>
+          <span className="bm-row-meta">{meta}</span>
+        </span>
+        <span className="bm-row-amount">{figure(line.amount, line.currency, line.amountLabel)}</span>
+        <span className="book-chev" aria-hidden="true">›</span>
+      </button>
+    </div>
   )
 }

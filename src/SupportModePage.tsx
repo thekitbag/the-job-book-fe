@@ -25,6 +25,7 @@ import type {
   JobPhoto,
   MemoryViewItem,
   MemoryViewResponse,
+  MoneyKind,
   ProposedMemory,
   ReviewQueue,
   SupportJob,
@@ -43,10 +44,12 @@ import type {
 
 // ── Small shared bits ────────────────────────────────────────────────────────
 
-const KIND_LABEL_SUPPORT: Record<'customer_payment' | 'refund' | 'cost_paid', string> = {
+const KIND_LABEL_SUPPORT: Record<MoneyKind, string> = {
   customer_payment: 'Customer payment',
   refund: 'Refund',
   cost_paid: 'Paid out',
+  // A job's share of one payment to a supplier account across several jobs.
+  supplier_account_payment: 'Supplier payment',
 }
 
 function formatWhen(iso: string | null): string {

@@ -467,10 +467,16 @@ export default function CurrentJobWorkspace({
         body: amount ? `Added ${formatMoney(parseFloat(amount), 'GBP')} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
       })
     } catch (err: unknown) {
+      // A cost already covered by a supplier account payment is a different
+      // sentence from one already marked paid here: it can only be changed by
+      // undoing that whole payment.
+      const onAccount = (err as { code?: string }).code === 'SUPPLIER_PAYMENT_OWNS_COST'
       const already = err instanceof ApiError && err.status === 400
       toast({
-        title: already ? 'Already marked paid' : 'Could not mark paid',
-        body: already ? 'This cost is already recorded in Money out.' : 'Nothing changed — try again.',
+        title: onAccount ? 'Paid on a supplier account' : already ? 'Already marked paid' : 'Could not mark paid',
+        body: onAccount ? 'Undo that supplier payment in Money to change this.'
+          : already ? 'This cost is already recorded in Money out.'
+          : 'Nothing changed — try again.',
         tone: 'plain',
       })
     } finally {
@@ -485,6 +491,18 @@ export default function CurrentJobWorkspace({
     if (markingPaidId) return
     const row = money.paidRowBySource.get(item.id)
     if (!row) return
+    // This cost was paid as part of one real payment to a supplier account
+    // covering several jobs. Unlinking it here would leave that payment claiming
+    // to cover a cost it no longer covers, so name the payment instead: it is
+    // undone whole, from its receipt in Money.
+    if (row.kind === 'supplier_account_payment') {
+      toast({
+        title: 'Paid on a supplier account',
+        body: `Covered by the ${formatMoney(parseFloat(row.amount), 'GBP')} payment to ${row.supplierName ?? 'the supplier'}. Undo that payment in Money to change this.`,
+        tone: 'plain',
+      })
+      return
+    }
     setMarkingPaidId(item.id)
     try {
       await money.removeEvent(row.id)

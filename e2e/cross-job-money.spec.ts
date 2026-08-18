@@ -41,13 +41,12 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(overflow).toBeLessThanOrEqual(0)
 }
 
-// The controls this slice deliberately does not have. Checked as absent, never
-// as disabled: a greyed-out "Mark paid" would promise settlement that does not
-// exist yet.
-async function expectNoWriteControls(page: Page) {
-  await expect(page.locator('input[type=checkbox]')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /select all|mark paid|rename or merge|settle/i })).toHaveCount(0)
-  await expect(page.getByText(/tick what a payment covers|nothing selected|on the account/i)).toHaveCount(0)
+// The controls this page deliberately still does not have. Settling a named
+// supplier account is the one write it gained (see supplier-settlement.spec.ts);
+// renaming, merging and part-paying remain absent — not disabled, absent, so
+// nothing promises a feature that does not exist.
+async function expectNoAccountEditing(page: Page) {
+  await expect(page.getByRole('button', { name: /rename or merge|reconcile|part pay/i })).toHaveCount(0)
 }
 
 test.describe('Cross-job Money (read-only)', () => {
@@ -64,9 +63,12 @@ test.describe('Cross-job Money (read-only)', () => {
     await row.click()
     await expect(page.getByRole('region', { name: 'To pay on accounts' })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Still to receive' })).toBeVisible()
-    // no tabs, and no write controls anywhere on the page
+    // no tabs, and no settlement controls on the overview — a payment is
+    // recorded inside one named account, never across the whole page
     await expect(page.getByRole('tablist')).toHaveCount(0)
-    await expectNoWriteControls(page)
+    await expect(page.locator('input[type=checkbox]')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /select all|mark .*paid/i })).toHaveCount(0)
+    await expectNoAccountEditing(page)
     await expectNoHorizontalOverflow(page)
   })
 
@@ -128,7 +130,7 @@ test.describe('Cross-job Money (read-only)', () => {
     await expect(page.locator('.bm-total')).toHaveCount(0)
   })
 
-  test('a supplier account is read-only, oldest first, and long names wrap', async ({ page }) => {
+  test('a supplier account lists its costs oldest first, and long names wrap', async ({ page }) => {
     await gotoApp(page)
     await openMoney(page)
 
@@ -143,7 +145,7 @@ test.describe('Cross-job Money (read-only)', () => {
     await page.getByRole('button', { name: /^Open Sydenhams,/ }).click()
     await expect(page.getByRole('heading', { name: /Sydenhams/ })).toBeVisible()
     await expect(page.getByText(/To pay · 4 purchases · 3 jobs/)).toBeVisible()
-    await expectNoWriteControls(page)
+    await expectNoAccountEditing(page)
     await expectNoHorizontalOverflow(page)
 
     // A finished job whose account is still open says so.
