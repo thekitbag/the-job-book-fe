@@ -24,6 +24,10 @@ export { _resetMockPaymentsForTesting } from './api/mock/payments'
 export { getJobMoney, markMoneyOut, deleteMoneyEvent, getSupportJobMoney } from './api/money'
 export { getBookMoney } from './api/bookMoney'
 export { _resetMockBookMoneyForTesting } from './api/mock/bookMoney'
+export {
+  createSupplierPayment, getSupplierPayment, patchSupplierPaymentDate, undoSupplierPayment,
+} from './api/supplierPayments'
+export { _resetMockSupplierPaymentsForTesting } from './api/mock/supplierPaymentStore'
 export { _resetMockMoneyForTesting } from './api/mock/money'
 export { getLabourPeople, createLabourPerson, patchLabourPerson, getSupportJobLabourPeople } from './api/labourPeople'
 export { _resetMockLabourPeopleForTesting } from './api/mock/labourPeople'

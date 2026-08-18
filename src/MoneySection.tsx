@@ -55,6 +55,13 @@ export function useMoney(jobId: string) {
     const map = new Map<string, MoneyRow>()
     for (const r of data?.rows ?? []) {
       if (r.kind === 'cost_paid' && r.sourceMemoryItemId) map.set(r.sourceMemoryItemId, r)
+      // A supplier account payment pays several costs at once. Each of them is
+      // paid in Budget's eyes, and each maps to the one allocation row — which
+      // is what lets the drawer name the payment instead of offering to unlink
+      // a single cost from it.
+      if (r.kind === 'supplier_account_payment') {
+        for (const sourceId of r.sourceMemoryItemIds ?? []) map.set(sourceId, r)
+      }
     }
     return map
   }, [data])
@@ -144,6 +151,7 @@ const KIND_LABEL: Record<MoneyRow['kind'], string> = {
   customer_payment: 'Customer payment',
   refund: 'Refund',
   cost_paid: 'Paid out',
+  supplier_account_payment: 'Supplier payment',
 }
 
 function moneyDayKey(occurredAt: string): string {
@@ -359,7 +367,12 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
               <ul className="money-day-rows">
                 {group.rows.map(row => {
                   const isSourceOut = row.direction === 'out' && row.kind === 'cost_paid'
-                  const title = isSourceOut && row.sourceItemLabel ? row.sourceItemLabel : KIND_LABEL[row.kind]
+                  const isAllocation = row.kind === 'supplier_account_payment'
+                  const title = isAllocation
+                    // This job's share of one real payment to a merchant — named
+                    // by the account it went to, which is how Mike remembers it.
+                    ? (row.supplierName ?? KIND_LABEL[row.kind])
+                    : isSourceOut && row.sourceItemLabel ? row.sourceItemLabel : KIND_LABEL[row.kind]
                   const categoryContext = isSourceOut ? (row.sourceBudgetCategoryName?.trim() || 'Uncategorised') : null
                   return (
                     <li key={row.id} className={`money-row money-row--${row.direction}`}>
@@ -369,6 +382,13 @@ export default function MoneySection({ jobId, money }: { jobId: string; money: M
                       </div>
                       <div className="money-row-meta-line">
                         {categoryContext && <span className="money-row-context">{categoryContext}</span>}
+                        {/* The costs this job's share covered. One row, one
+                            figure: the individual paid markers behind it are
+                            never listed as well, or Money out would count the
+                            same payment twice. */}
+                        {isAllocation && (row.allocationSourceLabels?.length ?? 0) > 0 && (
+                          <span className="money-row-covers">{row.allocationSourceLabels?.join(' · ')}</span>
+                        )}
                         <span className="money-row-when">{formatSavedStamp(row.occurredAt)}</span>
                         {(row.note || row.reference) && (
                           <span className="money-row-meta">

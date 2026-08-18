@@ -1149,7 +1149,10 @@ export interface PatchJobPaymentRequest {
 
 export type MoneyDirection = 'in' | 'out'
 // customer_payment / refund → in; cost_paid → out.
-export type MoneyKind = 'customer_payment' | 'refund' | 'cost_paid'
+// customer_payment / refund → in; cost_paid / supplier_account_payment → out.
+// supplier_account_payment is one job's share of a single real payment made to
+// one supplier account across several jobs — see SupplierAccountPaymentReceipt.
+export type MoneyKind = 'customer_payment' | 'refund' | 'cost_paid' | 'supplier_account_payment'
 
 export interface MoneyRow {
   id: string
@@ -1170,6 +1173,14 @@ export interface MoneyRow {
   // so recategorising the source updates Money without another movement.
   sourceBudgetCategoryId?: string | null
   sourceBudgetCategoryName?: string | null
+  // Set on supplier_account_payment rows only: the aggregate payment this job's
+  // allocation belongs to, the account it paid, and the source costs it covered.
+  // The linked child paid markers never appear as separate rows — the allocation
+  // IS the job's visible money-out for that payment, so nothing double-counts.
+  supplierAccountPaymentId?: string | null
+  supplierName?: string | null
+  sourceMemoryItemIds?: string[]
+  allocationSourceLabels?: string[]
   editable: boolean
   removable: boolean
   createdAt: string
@@ -1388,4 +1399,88 @@ export interface BookMoneyResponse {
     jobCount: number
     jobs: OwedToMeJob[]
   } | null
+
+  // Real aggregate supplier payments only — never older individually marked-paid
+  // costs regrouped to look like one. Empty until this book has settled an
+  // account. Money stays reachable from Book Home when this is all there is.
+  accountPaymentHistory: SupplierAccountPaymentHistoryRow[]
+}
+
+// ── Supplier account settlement ─────────────────────────────────────────────
+// One real payment to one named supplier, covering whole recorded costs across
+// several jobs. It records what a payment covered and how much of it belongs to
+// each job. It is not bank reconciliation, statement matching or account-cleared
+// truth, and it never changes Budget.
+//
+// The backend derives the amount from the selected source costs; the frontend
+// sends ids and never an amount. Undo is the whole payment or nothing.
+
+export interface SupplierPaymentSourceLine {
+  sourceMemoryItemId: string
+  itemLabel: string
+  quantityLabel: string | null
+  amount: string
+  currency: 'GBP'
+  amountLabel: string
+  sourceDate: string | null
+  sourceDateLabel: string | null
+  budgetCategoryId: string | null
+  budgetCategoryName: string | null
+}
+
+export interface SupplierPaymentJobAllocation {
+  jobId: string
+  jobTitle: string
+  jobStatus: BookMoneyJobStatus
+  jobStatusLabel: BookMoneyJobStatusLabel
+  amount: string
+  currency: 'GBP'
+  amountLabel: string // outgoing, e.g. "-£3,250"
+  sourceLines: SupplierPaymentSourceLine[]
+}
+
+export interface SupplierAccountPaymentReceipt {
+  id: string
+  supplierName: string
+  paidAt: string
+  paidAtLabel: string
+  totalAmount: string
+  currency: 'GBP'
+  totalLabel: string
+  costCount: number
+  jobCount: number
+  budgetsUnchanged: true
+  isDeleted: boolean
+  canUndo: boolean
+  canChangeDate: boolean
+  allocations: SupplierPaymentJobAllocation[]
+}
+
+export interface SupplierAccountPaymentHistoryRow {
+  id: string
+  supplierName: string
+  paidAt: string
+  paidAtLabel: string
+  totalAmount: string
+  currency: 'GBP'
+  totalLabel: string
+  costCount: number
+  jobCount: number
+}
+
+// POST /api/book/money/supplier-payments. No amount: the backend derives it
+// from the selected source costs so the receipt can never disagree with them.
+export interface CreateSupplierAccountPaymentRequest {
+  supplierGroupId: string
+  supplierName: string
+  sourceMemoryItemIds: string[]
+  paidAt?: string | null
+  clientRequestId: string // frontend-generated, stable per submit for idempotency
+}
+
+// PATCH /api/book/money/supplier-payments/:id — the date is the only thing a
+// recorded payment can be corrected to. Amount, supplier and membership are not
+// editable: undo the payment, fix the source, record it again.
+export interface PatchSupplierAccountPaymentRequest {
+  paidAt: string
 }

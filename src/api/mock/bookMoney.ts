@@ -3,6 +3,10 @@ import type {
   SupplierAccountGroup, SupplierAccountLine, SupplierMissingPriceItem, SupplierMissingPriceReason,
 } from '../../types'
 import { MOCK_JOBS } from './jobs'
+import {
+  _resetMockSupplierPaymentsForTesting, mockSettledSourceIds, mockSupplierPaymentHistory,
+} from './supplierPaymentStore'
+import { mockAmountString as amountString, mockDateLabel as dateLabel, mockMoney as money } from './util'
 
 // Mock stand-in for GET /api/book/money.
 //
@@ -51,26 +55,12 @@ const WHITMORE = 'job-pilot-finished-005'
 const OKORO = 'job-pilot-finished-006'
 const ARCHIVED = 'job-pilot-archived-007'
 
-// Money, the way the backend would label it: thousands separated, no pennies
-// on a round figure. Kept local so the mock's labels are the backend's labels.
-function money(amount: number): string {
-  const rounded = Math.round(amount * 100) / 100
-  return `£${rounded.toLocaleString('en-GB', {
-    minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function amountString(amount: number): string {
-  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
-}
+// Money and date labels are the backend's job; in the mock they come from the
+// shared helpers in ./util, so an account total, a receipt total and a job
+// allocation can never be formatted three different ways.
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString()
-}
-
-function dateLabel(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(iso))
 }
 
 function jobFacts(jobId: string): { jobTitle: string; jobStatus: BookMoneyJobStatus; jobStatusLabel: BookMoneyJobStatusLabel } {
@@ -269,7 +259,10 @@ function buildOwed(seeds: SeedOwed[]): OwedToMeJob[] {
 }
 
 function buildResponse(seed: Seed): BookMoneyResponse {
-  const lines = seed.lines.map(buildLine)
+  // A settled cost leaves the account by being absent, exactly as it would from
+  // the backend: nothing edits the source, so Undo simply stops excluding it.
+  const settled = mockSettledSourceIds()
+  const lines = seed.lines.map(buildLine).filter(l => !settled.has(l.sourceMemoryItemId))
   const groups = buildGroups(lines)
   const pricedTotal = lines.reduce((n, l) => n + parseFloat(l.amount), 0)
   const hasPriced = lines.length > 0
@@ -292,12 +285,16 @@ function buildResponse(seed: Seed): BookMoneyResponse {
     ? `${missing.length} ${missing.length === 1 ? 'cost needs' : 'costs need'} a price`
     : null
 
+  const accountPaymentHistory = mockSupplierPaymentHistory()
+
   return {
     generatedAt: new Date().toISOString(),
     bookHome: {
-      // Open Money when either direction has something positive to say, or when
-      // missing prices are the only useful signal.
-      showMoneyRow: hasPriced || owedJobs.length > 0 || missing.length > 0,
+      // Open Money when either direction has something positive to say, when
+      // missing prices are the only useful signal, or when the only thing left
+      // is what has already been paid — a bare row, never a fake £0 balance.
+      showMoneyRow: hasPriced || owedJobs.length > 0 || missing.length > 0
+        || accountPaymentHistory.length > 0,
       toPayOnAccountsAmount: hasPriced ? amountString(pricedTotal) : null,
       toPayOnAccountsCurrency: hasPriced ? 'GBP' : null,
       toPayOnAccountsLabel: hasPriced ? `${money(pricedTotal)} to pay on accounts` : null,
@@ -328,6 +325,7 @@ function buildResponse(seed: Seed): BookMoneyResponse {
       jobCount: owedJobs.length,
       jobs: owedJobs,
     } : null,
+    accountPaymentHistory,
   }
 }
 
@@ -335,6 +333,10 @@ let mockBookMoneyScenario = 'default'
 
 export function _resetMockBookMoneyForTesting(scenario = 'default'): void {
   mockBookMoneyScenario = scenario
+  // Recorded supplier payments are part of the book's money state, so resetting
+  // the book resets them too — otherwise one test's settlement would silently
+  // shorten the next test's accounts.
+  _resetMockSupplierPaymentsForTesting()
 }
 
 export function mockGetBookMoney(): BookMoneyResponse {

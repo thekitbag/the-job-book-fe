@@ -3,13 +3,15 @@ import { deriveEachTotal, deriveHourlyTotal, type BudgetPaidMarker } from '../..
 import { ApiError } from '../client'
 import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor } from './state'
 import { mockGetJobPayments } from './payments'
+import { mockActiveSupplierPayments, mockSupplierAllocationRows } from './supplierPaymentStore'
 
 // Stateful mock for Money — the unified actual-movement read model.
 //
-// Money has three row kinds. Customer payments are NOT stored here: they stay
-// in the payments mock and are projected in as money-in rows, exactly as the
-// real backend projects existing JobPayment records. This mock only owns the
-// new money events: cost_paid (money out) and refund (money in).
+// Customer payments are NOT stored here: they stay in the payments mock and are
+// projected in as money-in rows, exactly as the real backend projects existing
+// JobPayment records. Aggregate supplier-account allocations are not stored here
+// either — they are projected in from the supplier-payment store. This mock owns
+// only the job-local money events: cost_paid (money out) and refund (money in).
 //
 // Invariant this mock exists to protect: marking paid changes Money, never
 // Budget — nothing here reads or writes memory/budget spend state.
@@ -187,7 +189,12 @@ export function mockGetJobMoney(jobId: string): JobMoneyResponse {
     updatedAt: p.updatedAt,
   }))
 
-  const rows = [...paymentRows, ...active.map(eventToRow)].sort(
+  // One row per aggregate supplier payment touching this job, worth this job's
+  // covered costs only. The child paid markers behind it are not rows: showing
+  // both would count the same money out twice.
+  const allocationRows = mockSupplierAllocationRows(jobId)
+
+  const rows = [...paymentRows, ...active.map(eventToRow), ...allocationRows].sort(
     (a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.createdAt.localeCompare(a.createdAt),
   )
 
@@ -195,6 +202,7 @@ export function mockGetJobMoney(jobId: string): JobMoneyResponse {
   const paymentsIn = pay.totalPaidAmount !== null ? parseFloat(pay.totalPaidAmount) : 0
   const inNum = paymentsIn + refundIn
   const outNum = active.filter(e => e.kind === 'cost_paid').reduce((n, e) => n + parseFloat(e.amount), 0)
+    + allocationRows.reduce((n, r) => n + parseFloat(r.amount), 0)
 
   const moneyInAmount = rows.some(r => r.direction === 'in') ? round2(inNum) : null
   const moneyOutAmount = rows.some(r => r.direction === 'out') ? round2(outNum) : null
@@ -233,6 +241,17 @@ export function mockPaidMarkersBySource(jobId: string): ReadonlyMap<string, Budg
       })
     }
   }
+  // A cost covered by a supplier account payment is paid in Budget's eyes too —
+  // it just cannot be unpaid one line at a time.
+  for (const payment of mockActiveSupplierPayments()) {
+    for (const line of payment.lines) {
+      if (line.jobId !== jobId) continue
+      paid.set(line.sourceMemoryItemId, {
+        moneyEventId: `sap-alloc-${payment.id}-${jobId}`,
+        paidAt: payment.paidAt,
+      })
+    }
+  }
   return paid
 }
 
@@ -249,7 +268,15 @@ export function mockMarkMoneyOut(jobId: string, req: MarkMoneyOutRequest): JobMo
 
   const line = assertMockPaidEligible(item)
 
-  // One active paid-marker per source item.
+  // One active paid-marker per source item — including the ones held by an
+  // aggregate supplier payment, which own their costs until they are undone.
+  const ownedBySupplierPayment = mockActiveSupplierPayments()
+    .some(p => p.lines.some(l => l.sourceMemoryItemId === item.id))
+  if (ownedBySupplierPayment) {
+    const err = new ApiError('Undo the supplier payment to change this paid state', 400) as ApiError & { code?: string }
+    err.code = 'SUPPLIER_PAYMENT_OWNS_COST'
+    throw err
+  }
   const existing = events(jobId).find(
     e => !e.isDeleted && e.kind === 'cost_paid' && e.sourceMemoryItemId === item.id,
   )
@@ -285,6 +312,18 @@ export function recordMockPaid(jobId: string, item: MemoryViewItem): void {
 }
 
 export function mockDeleteMoneyEvent(jobId: string, moneyEventId: string): void {
+  // An aggregate allocation is not a money event that can be removed on its
+  // own. Name the payment that owns it so the caller can route to its receipt.
+  const owner = mockActiveSupplierPayments().find(p => moneyEventId === `sap-alloc-${p.id}-${jobId}`)
+  if (owner) {
+    const err = new ApiError('Undo the supplier payment to change this paid state', 400) as ApiError & {
+      code?: string
+      supplierAccountPaymentId?: string
+    }
+    err.code = 'SUPPLIER_PAYMENT_OWNS_COST'
+    err.supplierAccountPaymentId = owner.id
+    throw err
+  }
   const e = events(jobId).find(ev => ev.id === moneyEventId && !ev.isDeleted)
   if (!e) {
     const err = new ApiError('Money event not found', 404) as ApiError & { code?: string }
