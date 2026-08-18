@@ -5957,6 +5957,16 @@ a.row-sheet-opt { text-decoration: none; }
    cost target must be visibly separate, and the payment being built must stay
    on screen while a long account is scrolled. */
 
+/* Settlement switched off at the backend: stated once, quietly, above the
+   costs — which are still worth reading. */
+.sap-unavailable {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-sunk);
+  font-size: var(--text-md);
+  color: var(--grey-text);
+}
+
 .sap-select-all {
   border: none;
   background: none;

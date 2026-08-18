@@ -65,6 +65,13 @@ export default function App() {
   // A failure only costs the Money row: the jobs index never depends on it.
   const [bookMoney, setBookMoney] = useState<BookMoneyResponse | null>(null)
   const [bookMoneyState, setBookMoneyState] = useState<'loading' | 'ready' | 'error'>('loading')
+  // Settling a supplier account is gated by backend config while real-account
+  // validation is outstanding. Enablement is the backend's statement, never a
+  // guess from this build's environment: the capability on GET /api/book/money
+  // when the backend publishes one, and otherwise a write that comes back
+  // saying the feature is off. Latched for the session so Mike is not offered
+  // the same unavailable action twice.
+  const [settlementUnavailable, setSettlementUnavailable] = useState(false)
   // Where a job should open when something outside it sent Mike there — a
   // supplier line (Budget, that item) or an owed row (that job's Money).
   const [jobEntry, setJobEntry] = useState<JobEntry | null>(null)
@@ -340,6 +347,8 @@ export default function App() {
         loadState={bookMoneyState}
         onBack={() => setView('bookHome')}
         onReload={loadBookMoney}
+        settlementAvailable={bookMoney?.capabilities?.supplierAccountSettlement !== false && !settlementUnavailable}
+        onSettlementUnavailable={() => setSettlementUnavailable(true)}
         onOpenSource={openSourceItem}
         onOpenJobMoney={openJobMoney}
       />

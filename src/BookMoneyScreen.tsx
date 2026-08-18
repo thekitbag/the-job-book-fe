@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { createSupplierPayment, getSupplierPayment } from './api'
+import { createSupplierPayment, getSupplierPayment, isSettlementUnavailable } from './api'
 import { track } from './analytics'
 import { moneyFigure } from './memoryScan'
 import SupplierPaymentReceiptSheet from './SupplierPaymentReceipt'
@@ -41,6 +41,8 @@ export default function BookMoneyScreen({
   loadState,
   onBack,
   onReload,
+  settlementAvailable,
+  onSettlementUnavailable,
   onOpenSource,
   onOpenJobMoney,
 }: {
@@ -48,6 +50,11 @@ export default function BookMoneyScreen({
   loadState: 'loading' | 'ready' | 'error'
   onBack: () => void
   onReload: () => void
+  // Whether the backend will currently accept a supplier payment. Stated by the
+  // backend, never inferred here — see App. Reading Money is unaffected either
+  // way: only the one write on this page is gated.
+  settlementAvailable: boolean
+  onSettlementUnavailable: () => void
   // Opens the source job and focuses the source item where the app can.
   onOpenSource: (target: SourceTarget) => void
   // Opens that job's own Money view.
@@ -88,6 +95,8 @@ export default function BookMoneyScreen({
       <>
         <SupplierDetail
           group={group}
+          settlementAvailable={settlementAvailable}
+          onSettlementUnavailable={onSettlementUnavailable}
           onBack={() => setOpenGroupId(null)}
           onOpenSource={onOpenSource}
           onPaid={paid => { setReceipt(paid); onReload() }}
@@ -310,8 +319,12 @@ function newRequestId(): string {
     : `sap-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-function SupplierDetail({ group, onBack, onOpenSource, onPaid, onStaleSelection }: {
+function SupplierDetail({
+  group, settlementAvailable, onSettlementUnavailable, onBack, onOpenSource, onPaid, onStaleSelection,
+}: {
   group: SupplierAccountGroup
+  settlementAvailable: boolean
+  onSettlementUnavailable: () => void
   onBack: () => void
   onOpenSource: (target: SourceTarget) => void
   onPaid: (receipt: SupplierAccountPaymentReceipt) => void
@@ -320,7 +333,11 @@ function SupplierDetail({ group, onBack, onOpenSource, onPaid, onStaleSelection 
   // Settlement is for a named merchant account only. "Supplier needed" is a pile
   // of costs that have not been attributed to anyone yet — there is no account
   // to pay, so the detail stays exactly as read-only as it was.
-  const settleable = group.kind === 'named_supplier' && group.supplierName !== null
+  const named = group.kind === 'named_supplier' && group.supplierName !== null
+  // …and only where the backend will actually accept the payment. With the
+  // feature off, the account is a plain list of recorded costs again rather
+  // than a tick-and-pay screen whose button cannot work.
+  const settleable = named && settlementAvailable
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -383,7 +400,13 @@ function SupplierDetail({ group, onBack, onOpenSource, onPaid, onStaleSelection 
       onPaid(paid)
     } catch (err) {
       const code = (err as { code?: string }).code
-      if (code === 'SUPPLIER_PAYMENT_STALE_SELECTION') {
+      if (isSettlementUnavailable(err, { route: true })) {
+        // The backend has the feature off. Say so plainly and stop offering it,
+        // rather than leaving a button that cannot work.
+        requestIdRef.current = null
+        setSelected(new Set())
+        onSettlementUnavailable()
+      } else if (code === 'SUPPLIER_PAYMENT_STALE_SELECTION') {
         setError('This account changed. Review the current costs and try again.')
         requestIdRef.current = null
         onStaleSelection()
@@ -414,12 +437,21 @@ function SupplierDetail({ group, onBack, onOpenSource, onPaid, onStaleSelection 
       <div className="book-body">
         <div className="book-section-head book-section-head--ruled">
           <h2 className="book-section-label">{settleable ? 'Tick what a payment covers' : 'Recorded costs'}</h2>
+
           {settleable && (
             <button type="button" className="sap-select-all" onClick={selectAllOrClear}>
               {live.length > 0 ? 'Clear' : 'Select all'}
             </button>
           )}
         </div>
+        {/* Reached directly with the feature off: one quiet sentence, no
+            control. Not a disabled button — a greyed-out "Mark paid" would
+            promise something this book cannot currently do. */}
+        {named && !settlementAvailable && (
+          <p className="sap-unavailable" role="status">
+            Recording a payment on an account isn’t switched on yet. The costs below are up to date.
+          </p>
+        )}
         <ul className="bm-rows">
           {group.lines.map(line => (
             <li key={line.id}>

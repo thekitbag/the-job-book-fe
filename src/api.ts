@@ -26,6 +26,7 @@ export { getBookMoney } from './api/bookMoney'
 export { _resetMockBookMoneyForTesting } from './api/mock/bookMoney'
 export {
   createSupplierPayment, getSupplierPayment, patchSupplierPaymentDate, undoSupplierPayment,
+  isSettlementUnavailable,
 } from './api/supplierPayments'
 export { _resetMockSupplierPaymentsForTesting } from './api/mock/supplierPaymentStore'
 export { _resetMockMoneyForTesting } from './api/mock/money'

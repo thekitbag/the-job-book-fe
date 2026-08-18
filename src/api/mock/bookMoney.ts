@@ -142,6 +142,25 @@ const SCENARIO_SEEDS: Record<string, Seed> = {
     missing: [DEFAULT_SEED.missing[0]],
     owed: [],
   },
+  // Settlement gating — the seed is the default book; what changes is what the
+  // backend says it will let this book do.
+  'book-money-settlement-off': DEFAULT_SEED,
+  'book-money-settlement-unpublished': DEFAULT_SEED,
+}
+
+// Settling an account is gated by backend config while real-account validation
+// is outstanding. The mock stands in for the three states a deployment can be
+// in: on, off and stated, and off without a published capability — the last of
+// which the frontend can only discover by trying to write.
+type SettlementGate = 'on' | 'off' | 'unpublished'
+
+const SCENARIO_GATE: Record<string, SettlementGate> = {
+  'book-money-settlement-off': 'off',
+  'book-money-settlement-unpublished': 'unpublished',
+}
+
+export function mockSettlementGate(): SettlementGate {
+  return SCENARIO_GATE[mockBookMoneyScenario] ?? 'on'
 }
 
 // ── Backend-side arithmetic (mock only) ─────────────────────────────────────
@@ -286,6 +305,7 @@ function buildResponse(seed: Seed): BookMoneyResponse {
     : null
 
   const accountPaymentHistory = mockSupplierPaymentHistory()
+  const gate = mockSettlementGate()
 
   return {
     generatedAt: new Date().toISOString(),
@@ -326,6 +346,9 @@ function buildResponse(seed: Seed): BookMoneyResponse {
       jobs: owedJobs,
     } : null,
     accountPaymentHistory,
+    // Omitted entirely when the backend has published no capability, so the
+    // frontend is exercised against a response that simply does not say.
+    ...(gate === 'unpublished' ? {} : { capabilities: { supplierAccountSettlement: gate === 'on' } }),
   }
 }
 

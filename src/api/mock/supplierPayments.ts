@@ -3,7 +3,7 @@ import type {
   SupplierAccountPaymentReceipt,
 } from '../../types'
 import { ApiError } from '../client'
-import { mockGetBookMoney } from './bookMoney'
+import { mockGetBookMoney, mockSettlementGate } from './bookMoney'
 import {
   mockBuildReceipt, mockFindSupplierPayment, mockFindSupplierPaymentByRequestId,
   mockRecordSupplierPayment, mockSetSupplierPaymentDate, mockSoftDeleteSupplierPayment,
@@ -46,9 +46,18 @@ function resolvePaidAt(paidAt: string | null | undefined): string {
   return iso
 }
 
+// A gated deployment refuses every settlement write, whether or not it has
+// published a capability for the frontend to read first.
+function assertSettlementOn(): void {
+  if (mockSettlementGate() !== 'on') {
+    fail('Recording supplier payments is not switched on', 503, 'SUPPLIER_SETTLEMENT_UNAVAILABLE')
+  }
+}
+
 export function mockCreateSupplierPayment(
   req: CreateSupplierAccountPaymentRequest,
 ): SupplierAccountPaymentReceipt {
+  assertSettlementOn()
   // Idempotency first: a retry after an uncertain network answer must return the
   // payment already made, never make a second one.
   const existing = mockFindSupplierPaymentByRequestId(req.clientRequestId)
@@ -109,6 +118,7 @@ export function mockPatchSupplierPaymentDate(
   paymentId: string,
   req: PatchSupplierAccountPaymentRequest,
 ): SupplierAccountPaymentReceipt {
+  assertSettlementOn()
   const payment = mockFindSupplierPayment(paymentId)
   if (!payment) fail('Payment not found', 404, 'SUPPLIER_PAYMENT_NOT_FOUND')
   // Date only. Amount, supplier, covered costs and allocations are untouched —
@@ -118,6 +128,7 @@ export function mockPatchSupplierPaymentDate(
 }
 
 export function mockUndoSupplierPayment(paymentId: string): void {
+  assertSettlementOn()
   const payment = mockFindSupplierPayment(paymentId)
   if (!payment) fail('Payment not found', 404, 'SUPPLIER_PAYMENT_NOT_FOUND')
   // Soft-delete the aggregate and every covered cost is unsettled with it: the

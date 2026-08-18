@@ -1404,6 +1404,18 @@ export interface BookMoneyResponse {
   // costs regrouped to look like one. Empty until this book has settled an
   // account. Money stays reachable from Book Home when this is all there is.
   accountPaymentHistory: SupplierAccountPaymentHistoryRow[]
+
+  // What the backend will currently let this book do. Settlement is gated by
+  // backend config while real-account validation is outstanding, so enablement
+  // is a fact the backend states — never one the frontend infers from its own
+  // build or environment.
+  //
+  // Absent means the backend has not published a capability. The frontend then
+  // leaves the controls as they are and relies on the write path to fail safely,
+  // rather than guessing in either direction.
+  capabilities?: {
+    supplierAccountSettlement?: boolean
+  } | null
 }
 
 // ── Supplier account settlement ─────────────────────────────────────────────

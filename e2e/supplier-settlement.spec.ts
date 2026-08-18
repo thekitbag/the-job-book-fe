@@ -20,6 +20,12 @@ async function gotoApp(page: Page) {
   }
 }
 
+async function seed(page: Page, scenario: string) {
+  await page.addInitScript(value => {
+    localStorage.setItem('job-book-e2e-seed', value as string)
+  }, scenario)
+}
+
 async function openMoney(page: Page) {
   await page.getByRole('button', { name: /the job book/i }).click()
   await expect(page.getByRole('heading', { name: 'The Job Book' })).toBeVisible()
@@ -163,6 +169,47 @@ test.describe('Supplier account settlement', () => {
     await expect(tick(page, 'Sand, 4 tonne')).toBeVisible()
     await page.getByRole('button', { name: /back to money/i }).click()
     await expect(page.getByRole('region', { name: 'Account payment history' })).toHaveCount(0)
+  })
+
+  // Settlement is switched on by backend config while real-account validation is
+  // outstanding. Reading Money must survive it being off.
+
+  test('no settlement controls when the backend says the feature is off', async ({ page }) => {
+    await seed(page, 'book-money-settlement-off')
+    await gotoApp(page)
+    await openMoney(page)
+    await openAccount(page, 'Sydenhams')
+
+    await expect(page.locator('input[type=checkbox]')).toHaveCount(0)
+    await expect(bar(page)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /select all|mark .*paid/i })).toHaveCount(0)
+    await expect(page.getByRole('status'))
+      .toContainText('Recording a payment on an account isn’t switched on yet.')
+
+    // The account itself still reads exactly as it did before settlement existed.
+    await expect(page.getByText('Recorded costs')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /£3,860/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Open Fence posts/ })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('a write that reports the feature unavailable withdraws the controls', async ({ page }) => {
+    // No published capability: the frontend can only find out by trying.
+    await seed(page, 'book-money-settlement-unpublished')
+    await gotoApp(page)
+    await openMoney(page)
+    await openAccount(page, 'Sydenhams')
+
+    await page.getByRole('checkbox', { name: /^Include Timber, 3 packs/ }).click()
+    await bar(page).getByRole('button', { name: /^Mark .* paid$/ }).click()
+
+    await expect(page.getByRole('status'))
+      .toContainText('Recording a payment on an account isn’t switched on yet.')
+    await expect(page.locator('input[type=checkbox]')).toHaveCount(0)
+    await expect(bar(page)).toHaveCount(0)
+    // Nothing was recorded, so nothing left the account.
+    await expect(page.getByRole('heading', { name: /£3,860/ })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
   })
 
   test('Supplier needed and missing-price costs cannot be settled', async ({ page }) => {

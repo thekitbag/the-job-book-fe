@@ -35,6 +35,7 @@ vi.mock('../api', async (importOriginal) => {
     getSupplierPayment: actual.getSupplierPayment,
     patchSupplierPaymentDate: actual.patchSupplierPaymentDate,
     undoSupplierPayment: actual.undoSupplierPayment,
+    isSettlementUnavailable: actual.isSettlementUnavailable,
   }
 })
 

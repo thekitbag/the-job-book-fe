@@ -43,6 +43,7 @@ vi.mock('../api', async (importOriginal) => {
     patchSupplierPaymentDate: vi.fn(async (id: string, req: { paidAt: string }) =>
       backend.mockPatchSupplierPaymentDate(id, req)),
     undoSupplierPayment: vi.fn(async (id: string) => { backend.mockUndoSupplierPayment(id) }),
+    isSettlementUnavailable: actual.isSettlementUnavailable,
   }
 })
 
@@ -80,8 +81,8 @@ const WHITMORE = 'job-pilot-finished-005'
 // of them a finished job, which is the whole point of settling across jobs.
 const ACCOUNT = 'Sydenhams'
 
-async function launch() {
-  _resetMockBookMoneyForTesting()
+async function launch(scenario = 'default') {
+  _resetMockBookMoneyForTesting(scenario)
   render(<App />)
   await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
 }
@@ -483,6 +484,70 @@ describe('Supplier account settlement across jobs', () => {
     expect({ ...after, paidAt: '', paidAtLabel: '' }).toEqual({ ...before, paidAt: '', paidAtLabel: '' })
     expect(mockGetJobMoney(KITCHEN).rows.find(r => r.kind === 'supplier_account_payment')!.occurredAt.slice(0, 10))
       .toBe('2026-08-10')
+  })
+
+  // ── Backend gating ────────────────────────────────────────────────────────
+  // Settlement is switched on by backend config while real-account validation is
+  // outstanding. Whether it is on is the backend's statement, never a guess from
+  // this build — and Money must stay readable either way.
+
+  it('offers no settlement when the backend says the feature is off', async () => {
+    const user = userEvent.setup()
+    await launch('book-money-settlement-off')
+    await gotoMoney(user)
+    await openAccount(user)
+
+    // Not a disabled button — absent, with one sentence saying why.
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Record a payment' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /select all|mark .*paid/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('status'))
+      .toHaveTextContent('Recording a payment on an account isn’t switched on yet.')
+
+    // Reading the account is untouched.
+    expect(screen.getByText('Recorded costs')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /£3,860/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Open .+ on / })).toHaveLength(4)
+  })
+
+  it('stops offering settlement when a write says the feature is unavailable', async () => {
+    const user = userEvent.setup()
+    // The backend publishes no capability, so the only way to find out is to try.
+    await launch('book-money-settlement-unpublished')
+    await gotoMoney(user)
+    await openAccount(user)
+
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeInTheDocument()
+    await user.click(tick('Timber, 3 packs'))
+    await user.click(within(bar()).getByRole('button', { name: /^Mark .* paid$/ }))
+
+    // No broken flow and no half-payment: the controls go, the explanation
+    // arrives, and nothing was recorded.
+    expect(await screen.findByRole('status'))
+      .toHaveTextContent('Recording a payment on an account isn’t switched on yet.')
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Record a payment' })).not.toBeInTheDocument()
+    expect(bookMoney().accountPaymentHistory).toHaveLength(0)
+
+    // And it is not offered again on the next account opened.
+    await user.click(screen.getByRole('button', { name: /back to money/i }))
+    await openAccount(user, 'Jewson')
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('keeps cross-job Money fully readable with settlement off', async () => {
+    const user = userEvent.setup()
+    await launch('book-money-settlement-off')
+    await gotoMoney(user)
+
+    expect(screen.getByRole('region', { name: 'To pay on accounts' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Still to receive' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Costs with no price yet' })).toBeInTheDocument()
+
+    // Source navigation, the whole point of the read-only page, still works.
+    await openAccount(user, 'Jewson')
+    await user.click(screen.getByRole('button', { name: /^Open Hardcore, 8 bags on Garden Room/ }))
+    expect(await screen.findByTestId('workspace-screen')).toHaveAttribute('data-focus-item', 'mem-view-001')
   })
 
   it('an allocation opens the job it belongs to', async () => {
