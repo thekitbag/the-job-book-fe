@@ -149,9 +149,11 @@ describe('Cross-job Money (read-only)', () => {
     await user.click(row)
     await screen.findByRole('heading', { name: /^Money/ })
     const toPay = within(screen.getByRole('region', { name: 'To pay on accounts' }))
-    const owed = within(screen.getByRole('region', { name: 'Owed to me' }))
+    const owed = within(screen.getByRole('region', { name: 'Still to receive' }))
     expect(toPay.getByText(data.toPayOnAccounts!.totalLabel!)).toBeInTheDocument()
-    expect(owed.getByText(data.owedToMe!.totalLabel)).toBeInTheDocument()
+    // The owed total carries its job count on the same line ("£12,850 · 2 jobs").
+    expect(owed.getByRole('heading', { name: 'Still to receive' }).parentElement)
+      .toHaveTextContent(`${data.owedToMe!.totalLabel} · ${data.owedToMe!.jobCount} jobs`)
     // the row's labels are those same totals, spelled out
     expect(data.bookHome.toPayOnAccountsLabel).toContain(data.toPayOnAccounts!.totalLabel!)
     expect(data.bookHome.owedToMeLabel).toContain(data.owedToMe!.totalLabel)
@@ -166,7 +168,7 @@ describe('Cross-job Money (read-only)', () => {
 
     expect(screen.getByText('Across all jobs')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'To pay on accounts' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Owed to me' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Still to receive' })).toBeInTheDocument()
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab')).not.toBeInTheDocument()
   })
@@ -177,7 +179,7 @@ describe('Cross-job Money (read-only)', () => {
     await gotoMoney(user)
 
     expect(screen.getByRole('region', { name: 'To pay on accounts' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Owed to me' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Still to receive' })).not.toBeInTheDocument()
     expect(screen.queryByText(/£0/)).not.toBeInTheDocument()
   })
 
@@ -347,7 +349,7 @@ describe('Cross-job Money (read-only)', () => {
     await launch()
     await gotoMoney(user)
 
-    const owed = within(screen.getByRole('region', { name: 'Owed to me' }))
+    const owed = within(screen.getByRole('region', { name: 'Still to receive' }))
     expect(owed.getByRole('button', { name: /Open Money for Kitchen Extension/ })).toBeInTheDocument()
     expect(owed.queryByRole('button', { name: /Open Money for Garden Room/ })).not.toBeInTheDocument()
     expect(owed.queryByRole('button', { name: /Open Money for Grant James Roof/ })).not.toBeInTheDocument()

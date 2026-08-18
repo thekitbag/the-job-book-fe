@@ -57,13 +57,13 @@ test.describe('Cross-job Money (read-only)', () => {
 
     const row = page.getByRole('button', { name: /^Money/ })
     await expect(row).toContainText('Across all jobs')
-    await expect(row).toContainText('owed to me')
+    await expect(row).toContainText('still to receive')
     await expect(row).toContainText('to pay on accounts')
     await expectNoHorizontalOverflow(page)
 
     await row.click()
     await expect(page.getByRole('region', { name: 'To pay on accounts' })).toBeVisible()
-    await expect(page.getByRole('region', { name: 'Owed to me' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Still to receive' })).toBeVisible()
     // no tabs, and no write controls anywhere on the page
     await expect(page.getByRole('tablist')).toHaveCount(0)
     await expectNoWriteControls(page)
@@ -76,15 +76,16 @@ test.describe('Cross-job Money (read-only)', () => {
 
     await expect(page.getByRole('button', { name: /^Money/ })).toContainText('to pay on accounts')
     const lines = await page.locator('.book-money-line').allTextContents()
-    const owedRow = lines.find(l => /owed to me/.test(l))!
+    const owedRow = lines.find(l => /still to receive/.test(l))!
     const payRow = lines.find(l => /to pay on accounts/.test(l))!
 
     await page.getByRole('button', { name: /^Money/ }).click()
     const payTotal = await page.getByRole('region', { name: 'To pay on accounts' }).locator('.bm-total').textContent()
-    const owedTotal = await page.getByRole('region', { name: 'Owed to me' }).locator('.bm-total').textContent()
+    // The owed total's line also carries the job count — compare the figure.
+    const owedTotal = (await page.getByRole('region', { name: 'Still to receive' }).locator('.bm-total').textContent())!.split(' · ')[0]
 
     expect(payRow).toContain(payTotal!.trim())
-    expect(owedRow).toContain(owedTotal!.trim())
+    expect(owedRow).toContain(owedTotal.trim())
   })
 
   test('one direction alone renders alone', async ({ page }) => {
@@ -94,11 +95,11 @@ test.describe('Cross-job Money (read-only)', () => {
 
     const row = page.getByRole('button', { name: /^Money/ })
     await expect(row).toContainText('to pay on accounts')
-    await expect(row).not.toContainText('owed to me')
+    await expect(row).not.toContainText('still to receive')
 
     await row.click()
     await expect(page.getByRole('region', { name: 'To pay on accounts' })).toBeVisible()
-    await expect(page.getByRole('region', { name: 'Owed to me' })).toHaveCount(0)
+    await expect(page.getByRole('region', { name: 'Still to receive' })).toHaveCount(0)
     await expect(page.getByText('£0')).toHaveCount(0)
   })
 

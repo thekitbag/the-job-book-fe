@@ -5960,3 +5960,14 @@ a.row-sheet-opt { text-decoration: none; }
   font-size: var(--text-md);
   color: var(--grey-text);
 }
+
+/* "£12,850 · 2 jobs" — the count rides on the figure's line, muted and at body
+   size so it reads as a footnote to the total, not a second figure. */
+.bm-total-count {
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--grey-text);
+  white-space: nowrap;
+}

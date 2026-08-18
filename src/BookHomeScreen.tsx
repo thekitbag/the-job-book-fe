@@ -112,7 +112,7 @@ export default function BookHomeScreen({
             <span className="book-money-figures">
               {hasOwed && (
                 <span className="book-money-line">
-                  <MoneyLine amount={money!.owedToMeAmount} currency={money!.owedToMeCurrency} words="owed to me" fallback={money!.owedToMeLabel!} />
+                  <MoneyLine amount={money!.owedToMeAmount} currency={money!.owedToMeCurrency} words="still to receive" fallback={money!.owedToMeLabel!} />
                 </span>
               )}
               {hasToPay && (

@@ -303,7 +303,8 @@ function buildResponse(seed: Seed): BookMoneyResponse {
       toPayOnAccountsLabel: hasPriced ? `${money(pricedTotal)} to pay on accounts` : null,
       owedToMeAmount: owedJobs.length > 0 ? amountString(owedTotal) : null,
       owedToMeCurrency: owedJobs.length > 0 ? 'GBP' : null,
-      owedToMeLabel: owedJobs.length > 0 ? `${money(owedTotal)} owed to me` : null,
+      // Field names stay the API's; the words are the product's.
+      owedToMeLabel: owedJobs.length > 0 ? `${money(owedTotal)} still to receive` : null,
       missingPriceCount: missing.length,
       missingPriceLabel: missingLabel,
     },

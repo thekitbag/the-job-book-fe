@@ -125,13 +125,18 @@ export default function BookMoneyScreen({
         )}
 
         {owed && (
-          <section className="bm-section" aria-label="Owed to me">
+          // "Still to receive", not "Owed to me": what Mike is waiting on, said
+          // the way he says it. The count rides on the figure's line here — it
+          // is two words, and the direction reads as one statement.
+          <section className="bm-section" aria-label="Still to receive">
             <div className="bm-section-head">
               <div className="bm-section-headline">
-                <h2 className="book-section-label">Owed to me</h2>
-                <p className="bm-total">{figure(owed.totalAmount, owed.currency, owed.totalLabel)}</p>
+                <h2 className="book-section-label">Still to receive</h2>
+                <p className="bm-total">
+                  {figure(owed.totalAmount, owed.currency, owed.totalLabel)}
+                  <span className="bm-total-count"> · {owed.jobCount === 1 ? '1 job' : `${owed.jobCount} jobs`}</span>
+                </p>
               </div>
-              <p className="bm-section-meta">{owed.jobCount === 1 ? '1 job' : `${owed.jobCount} jobs`}</p>
             </div>
 
             <ul className="bm-rows">
