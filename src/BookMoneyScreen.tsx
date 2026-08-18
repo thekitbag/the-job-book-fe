@@ -51,8 +51,9 @@ export default function BookMoneyScreen({
   onBack: () => void
   onReload: () => void
   // Whether the backend will currently accept a supplier payment. Stated by the
-  // backend, never inferred here — see App. Reading Money is unaffected either
-  // way: only the one write on this page is gated.
+  // backend and failed closed, never inferred here — see App. Reading Money is
+  // unaffected either way: only the writes on this page are gated, and a receipt
+  // already recorded stays readable.
   settlementAvailable: boolean
   onSettlementUnavailable: () => void
   // Opens the source job and focuses the source item where the app can.
@@ -82,8 +83,10 @@ export default function BookMoneyScreen({
   const receiptSheet = receipt && (
     <SupplierPaymentReceiptSheet
       receipt={receipt}
+      settlementAvailable={settlementAvailable}
       onReceiptChanged={setReceipt}
       onUndone={() => { setReceipt(null); onReload() }}
+      onSettlementUnavailable={onSettlementUnavailable}
       onClose={() => setReceipt(null)}
       onOpenJobMoney={jobId => { setReceipt(null); onOpenJobMoney(jobId) }}
       onOpenSource={target => { setReceipt(null); onOpenSource(target) }}
@@ -400,7 +403,7 @@ function SupplierDetail({
       onPaid(paid)
     } catch (err) {
       const code = (err as { code?: string }).code
-      if (isSettlementUnavailable(err, { route: true })) {
+      if (isSettlementUnavailable(err)) {
         // The backend has the feature off. Say so plainly and stop offering it,
         // rather than leaving a button that cannot work.
         requestIdRef.current = null

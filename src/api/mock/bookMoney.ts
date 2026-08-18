@@ -1,5 +1,5 @@
 import type {
-  BookMoneyJobStatus, BookMoneyJobStatusLabel, BookMoneyResponse, OwedToMeJob,
+  BookMoneyCapabilities, BookMoneyJobStatus, BookMoneyJobStatusLabel, BookMoneyResponse, OwedToMeJob,
   SupplierAccountGroup, SupplierAccountLine, SupplierMissingPriceItem, SupplierMissingPriceReason,
 } from '../../types'
 import { MOCK_JOBS } from './jobs'
@@ -146,21 +146,41 @@ const SCENARIO_SEEDS: Record<string, Seed> = {
   // backend says it will let this book do.
   'book-money-settlement-off': DEFAULT_SEED,
   'book-money-settlement-unpublished': DEFAULT_SEED,
+  'book-money-settlement-revoked': DEFAULT_SEED,
 }
 
-// Settling an account is gated by backend config while real-account validation
-// is outstanding. The mock stands in for the three states a deployment can be
-// in: on, off and stated, and off without a published capability — the last of
-// which the frontend can only discover by trying to write.
-type SettlementGate = 'on' | 'off' | 'unpublished'
+// Settling an account is gated by backend config (default off) while
+// real-account validation is outstanding. The mock stands in for the states a
+// real deployment can be in:
+//
+//   on          — capability true, writes accepted.
+//   off         — capability false, writes refused. The normal gated deployment.
+//   unpublished — a backend too old to send the field at all. The frontend must
+//                 fail closed here rather than assume the feature is there.
+//   revoked     — capability true but writes refused: the gate switched off
+//                 between the read and the write, which is the only case the
+//                 write-failure handling exists for.
+type SettlementGate = 'on' | 'off' | 'unpublished' | 'revoked'
 
 const SCENARIO_GATE: Record<string, SettlementGate> = {
   'book-money-settlement-off': 'off',
   'book-money-settlement-unpublished': 'unpublished',
+  'book-money-settlement-revoked': 'revoked',
 }
 
+let gateOverride: SettlementGate | null = null
+
 export function mockSettlementGate(): SettlementGate {
-  return SCENARIO_GATE[mockBookMoneyScenario] ?? 'on'
+  return gateOverride ?? SCENARIO_GATE[mockBookMoneyScenario] ?? 'on'
+}
+
+/**
+ * Test-only: flip the gate WITHOUT resetting the book, so a payment recorded
+ * while settlement was on can be read back after it is switched off. That is the
+ * case the backend is explicit about — reads stay open, writes do not.
+ */
+export function _setMockSettlementGateForTesting(gate: SettlementGate | null): void {
+  gateOverride = gate
 }
 
 // ── Backend-side arithmetic (mock only) ─────────────────────────────────────
@@ -346,9 +366,15 @@ function buildResponse(seed: Seed): BookMoneyResponse {
       jobs: owedJobs,
     } : null,
     accountPaymentHistory,
-    // Omitted entirely when the backend has published no capability, so the
-    // frontend is exercised against a response that simply does not say.
-    ...(gate === 'unpublished' ? {} : { capabilities: { supplierAccountSettlement: gate === 'on' } }),
+    // Omitted entirely for the older-backend case. The cast is the point: this
+    // branch deliberately returns a response that does NOT satisfy the contract,
+    // because standing in for a backend that never sends the field is the only
+    // way to prove the frontend fails closed instead of assuming permission.
+    // "revoked" states true and then refuses the write, which is how a gate
+    // flipped between the read and the write behaves.
+    ...(gate === 'unpublished'
+      ? ({} as { capabilities: BookMoneyCapabilities })
+      : { capabilities: { supplierAccountSettlement: gate === 'on' || gate === 'revoked' } }),
   }
 }
 
@@ -356,6 +382,7 @@ let mockBookMoneyScenario = 'default'
 
 export function _resetMockBookMoneyForTesting(scenario = 'default'): void {
   mockBookMoneyScenario = scenario
+  gateOverride = null
   // Recorded supplier payments are part of the book's money state, so resetting
   // the book resets them too — otherwise one test's settlement would silently
   // shorten the next test's accounts.

@@ -21,33 +21,22 @@ import {
 // the backend has answered.
 
 /**
- * Does this failure mean settlement is switched off rather than that this
+ * Does this failure mean settlement is switched off, rather than that this
  * particular payment was wrong?
  *
- * Settlement is gated by backend config while real-account validation is
- * outstanding, and the gate's exact shape is not yet fixed in the contract, so
- * this recognises the honest signals a gated deployment can give: a stated
- * feature code, "not implemented"/"unavailable" statuses, or — for create only —
- * the route simply not being mounted. A 404 on a specific payment id is a real
- * not-found and is never read as a gate.
+ * `capabilities.supplierAccountSettlement` is the primary answer and is read
+ * before anything is offered. This is the second line: the gate can be turned
+ * off between the read and the write, and a deployment can be mid-restart.
  *
- * The point is narrow: never show Mike a broken payment flow because a server
- * he cannot see has the feature turned off.
+ * Matched on the code alone, never the status. The backend answers 403, which
+ * is also the status for an ordinary ownership refusal — treating every 403 as
+ * "feature off" would silently withdraw the whole flow the first time Mike
+ * touched something that was not his.
  */
-const UNAVAILABLE_CODES = new Set([
-  'SUPPLIER_SETTLEMENT_UNAVAILABLE',
-  'SUPPLIER_SETTLEMENT_DISABLED',
-  'FEATURE_UNAVAILABLE',
-  'FEATURE_DISABLED',
-  'NOT_IMPLEMENTED',
-])
+export const SETTLEMENT_DISABLED_CODE = 'SUPPLIER_SETTLEMENT_DISABLED'
 
-export function isSettlementUnavailable(err: unknown, opts: { route?: boolean } = {}): boolean {
-  const e = err as { code?: string; status?: number }
-  if (e?.code && UNAVAILABLE_CODES.has(e.code)) return true
-  if (e?.status === 501 || e?.status === 503) return true
-  // Only where a 404 can only mean "no such endpoint", never "no such payment".
-  return opts.route === true && e?.status === 404
+export function isSettlementUnavailable(err: unknown): boolean {
+  return (err as { code?: string })?.code === SETTLEMENT_DISABLED_CODE
 }
 
 async function parseError(res: Response, fallback: string): Promise<never> {

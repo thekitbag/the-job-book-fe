@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { patchSupplierPaymentDate, undoSupplierPayment } from './api'
+import { isSettlementUnavailable, patchSupplierPaymentDate, undoSupplierPayment } from './api'
 import { track } from './analytics'
 import BottomSheet from './BottomSheet'
 import { moneyFigure } from './memoryScan'
@@ -35,15 +35,22 @@ function todayISO(): string {
 
 export default function SupplierPaymentReceiptSheet({
   receipt,
+  settlementAvailable,
   onReceiptChanged,
   onUndone,
+  onSettlementUnavailable,
   onClose,
   onOpenJobMoney,
   onOpenSource,
 }: {
   receipt: SupplierAccountPaymentReceipt
+  // Reads stay open when settlement is switched off, so a receipt recorded while
+  // the feature was on is still reachable and still readable. Its two writes are
+  // not: canUndo/canChangeDate describe the payment, not the deployment's gate.
+  settlementAvailable: boolean
   onReceiptChanged: (receipt: SupplierAccountPaymentReceipt) => void
   onUndone: () => void
+  onSettlementUnavailable: () => void
   onClose: () => void
   onOpenJobMoney: (jobId: string) => void
   onOpenSource: (target: { jobId: string; sourceMemoryItemId: string }) => void
@@ -64,8 +71,14 @@ export default function SupplierPaymentReceiptSheet({
       track('supplier_payment_date_changed', { payment_id: receipt.id })
       onReceiptChanged(updated)
       setSub('summary')
-    } catch {
-      setError('Could not change the date — check it and try again')
+    } catch (err) {
+      if (isSettlementUnavailable(err)) {
+        onSettlementUnavailable()
+        setSub('summary')
+        setError('Changing a payment isn’t switched on at the moment.')
+      } else {
+        setError('Could not change the date — check it and try again')
+      }
     } finally {
       setBusy(false)
     }
@@ -82,8 +95,14 @@ export default function SupplierPaymentReceiptSheet({
         job_count: receipt.jobCount,
       })
       onUndone()
-    } catch {
-      setError('Could not undo the payment — nothing changed. Try again.')
+    } catch (err) {
+      if (isSettlementUnavailable(err)) {
+        onSettlementUnavailable()
+        setSub('summary')
+        setError('Undoing a payment isn’t switched on at the moment. Nothing changed.')
+      } else {
+        setError('Could not undo the payment — nothing changed. Try again.')
+      }
       setBusy(false)
     }
   }
@@ -197,7 +216,7 @@ export default function SupplierPaymentReceiptSheet({
         {error && <p className="queue-item-error" role="alert">{error}</p>}
 
         <div className="sap-receipt-actions">
-          {receipt.canUndo && (
+          {receipt.canUndo && settlementAvailable && (
             <button type="button" className="sap-receipt-action sap-receipt-action--undo" onClick={() => { setError(null); setSub('confirm-undo') }}>
               <span className="sap-receipt-action-main">
                 <span className="sap-receipt-action-label">Undo this payment</span>
@@ -208,7 +227,7 @@ export default function SupplierPaymentReceiptSheet({
               <span className="book-chev" aria-hidden="true">›</span>
             </button>
           )}
-          {receipt.canChangeDate && (
+          {receipt.canChangeDate && settlementAvailable && (
             <button type="button" className="sap-receipt-action" onClick={() => { setError(null); setDateDraft(receipt.paidAt.slice(0, 10)); setSub('change-date') }}>
               <span className="sap-receipt-action-main">
                 <span className="sap-receipt-action-label">Change payment date</span>

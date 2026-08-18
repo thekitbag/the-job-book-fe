@@ -46,11 +46,15 @@ function resolvePaidAt(paidAt: string | null | undefined): string {
   return iso
 }
 
-// A gated deployment refuses every settlement write, whether or not it has
-// published a capability for the frontend to read first.
+// Every settlement write passes through here first, mirroring the backend, whose
+// gate lives in the service so no route can reach a write around it. The code
+// and status are the backend's exact ones: 403 SUPPLIER_SETTLEMENT_DISABLED.
+//
+// Reads are deliberately NOT gated: a receipt recorded while the feature was on
+// must not become unreachable when it is turned off.
 function assertSettlementOn(): void {
   if (mockSettlementGate() !== 'on') {
-    fail('Recording supplier payments is not switched on', 503, 'SUPPLIER_SETTLEMENT_UNAVAILABLE')
+    fail('Supplier account settlement is not enabled', 403, 'SUPPLIER_SETTLEMENT_DISABLED')
   }
 }
 

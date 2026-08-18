@@ -3,7 +3,9 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { getJobs } from '../api'
-import { _resetMockBookMoneyForTesting, mockGetBookMoney } from '../api/mock/bookMoney'
+import {
+  _resetMockBookMoneyForTesting, _setMockSettlementGateForTesting, mockGetBookMoney,
+} from '../api/mock/bookMoney'
 import { mockBudgetSummary } from '../api/mock/budget'
 import { mockGetJobMoney } from '../api/mock/money'
 import { MOCK_JOBS } from '../api/mock/jobs'
@@ -510,10 +512,25 @@ describe('Supplier account settlement across jobs', () => {
     expect(screen.getAllByRole('button', { name: /^Open .+ on / })).toHaveLength(4)
   })
 
-  it('stops offering settlement when a write says the feature is unavailable', async () => {
+  it('fails closed when the backend is too old to publish the capability', async () => {
     const user = userEvent.setup()
-    // The backend publishes no capability, so the only way to find out is to try.
     await launch('book-money-settlement-unpublished')
+    await gotoMoney(user)
+    await openAccount(user)
+
+    // No field means no settlement. Silence is not permission — an older backend
+    // would 404 the write, and offering the button would be a lie either way.
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Record a payment' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /select all|mark .*paid/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Recorded costs')).toBeInTheDocument()
+  })
+
+  it('withdraws the controls when the gate is switched off between read and write', async () => {
+    const user = userEvent.setup()
+    // The capability said yes; by the time the payment is sent, it is off. This
+    // is the only case the write-failure handling exists for.
+    await launch('book-money-settlement-revoked')
     await gotoMoney(user)
     await openAccount(user)
 
@@ -533,6 +550,35 @@ describe('Supplier account settlement across jobs', () => {
     await user.click(screen.getByRole('button', { name: /back to money/i }))
     await openAccount(user, 'Jewson')
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('keeps an existing receipt readable after settlement is switched off', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+    await settle(user, ['Timber, 3 packs', 'Fence posts, 20'])
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await user.click(screen.getByRole('button', { name: /back to money/i }))
+
+    // The deployment turns settlement off after the payment was recorded; going
+    // out to Book Home and back in re-reads the capability.
+    _setMockSettlementGateForTesting('off')
+    await user.click(screen.getByRole('button', { name: /back to the job book/i }))
+    await screen.findByRole('heading', { name: 'The Job Book' })
+    await user.click(await screen.findByRole('button', { name: /^Money/ }))
+    await screen.findByRole('heading', { name: /^Money/ })
+
+    // Reads stay open: the history row and its receipt are still reachable.
+    const history = within(await screen.findByRole('region', { name: 'Account payment history' }))
+    await user.click(history.getByRole('button', { name: /payment to Sydenhams$/ }))
+    const dialog = within(await screen.findByRole('dialog', { name: /to Sydenhams$/ }))
+    expect(dialog.getByText(/^Covers 2 recorded costs/)).toBeInTheDocument()
+
+    // Its two writes are not offered, because the backend would refuse them.
+    expect(dialog.queryByRole('button', { name: /^Undo this payment/ })).not.toBeInTheDocument()
+    expect(dialog.queryByRole('button', { name: /^Change payment date/ })).not.toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Done' })).toBeInTheDocument()
   })
 
   it('keeps cross-job Money fully readable with settlement off', async () => {

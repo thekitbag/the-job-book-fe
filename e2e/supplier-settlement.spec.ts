@@ -193,9 +193,21 @@ test.describe('Supplier account settlement', () => {
     await expectNoHorizontalOverflow(page)
   })
 
-  test('a write that reports the feature unavailable withdraws the controls', async ({ page }) => {
-    // No published capability: the frontend can only find out by trying.
+  test('fails closed when the backend publishes no capability', async ({ page }) => {
     await seed(page, 'book-money-settlement-unpublished')
+    await gotoApp(page)
+    await openMoney(page)
+    await openAccount(page, 'Sydenhams')
+
+    // Silence is not permission.
+    await expect(page.locator('input[type=checkbox]')).toHaveCount(0)
+    await expect(bar(page)).toHaveCount(0)
+    await expect(page.getByText('Recorded costs')).toBeVisible()
+  })
+
+  test('a write refused mid-session withdraws the controls', async ({ page }) => {
+    // The capability said yes; the gate went off before the payment was sent.
+    await seed(page, 'book-money-settlement-revoked')
     await gotoApp(page)
     await openMoney(page)
     await openAccount(page, 'Sydenhams')
