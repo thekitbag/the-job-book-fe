@@ -22,6 +22,8 @@ export {
 } from './api/payments'
 export { _resetMockPaymentsForTesting } from './api/mock/payments'
 export { getJobMoney, markMoneyOut, deleteMoneyEvent, getSupportJobMoney } from './api/money'
+export { getBookMoney } from './api/bookMoney'
+export { _resetMockBookMoneyForTesting } from './api/mock/bookMoney'
 export { _resetMockMoneyForTesting } from './api/mock/money'
 export { getLabourPeople, createLabourPerson, patchLabourPerson, getSupportJobLabourPeople } from './api/labourPeople'
 export { _resetMockLabourPeopleForTesting } from './api/mock/labourPeople'

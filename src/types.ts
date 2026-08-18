@@ -1270,3 +1270,122 @@ export interface PatchJobContactRequest {
   email?: string | null
   note?: string | null
 }
+
+// ── Cross-job Money (read-only) ──────────────────────────────────────────────
+// GET /api/book/money — one backend read model behind both the Book Home Money
+// row and the Money overview, so the two can never disagree. The backend owns
+// every total, count and inclusion rule; the frontend renders what it is given
+// and routes back to the source job/item. No writes exist in this slice.
+
+export type BookMoneyJobStatus = 'planning' | 'started' | 'finished'
+export type BookMoneyJobStatusLabel = 'Planning' | 'In progress' | 'Finished'
+
+export interface SupplierAccountLine {
+  id: string
+  sourceMemoryItemId: string
+  jobId: string
+  jobTitle: string
+  jobStatus: BookMoneyJobStatus
+  jobStatusLabel: BookMoneyJobStatusLabel
+  itemLabel: string
+  quantityLabel: string | null
+  amount: string
+  currency: 'GBP'
+  amountLabel: string
+  sourceDate: string | null
+  sourceDateLabel: string | null
+  supplierName: string | null
+  budgetCategoryId: string | null
+  budgetCategoryName: string | null
+}
+
+// Eligible for an account but not for a total: no price, an untrusted one, a
+// currency this slice can't add up, or an unsafe total. Visible, never £0.
+export type SupplierMissingPriceReason = 'missing_price' | 'untrusted_price' | 'unsupported_currency' | 'unsafe_total'
+
+export interface SupplierMissingPriceItem {
+  id: string
+  sourceMemoryItemId: string
+  jobId: string
+  jobTitle: string
+  jobStatus: BookMoneyJobStatus
+  jobStatusLabel: BookMoneyJobStatusLabel
+  itemLabel: string
+  quantityLabel: string | null
+  supplierName: string | null
+  sourceDate: string | null
+  sourceDateLabel: string | null
+  reason: SupplierMissingPriceReason
+  reasonLabel: string // e.g. "can't be in the £6,088"
+}
+
+export interface SupplierAccountGroup {
+  groupId: string // opaque; never a supplier database id
+  supplierName: string | null
+  displayName: string // supplier name, or "Supplier needed"
+  kind: 'named_supplier' | 'supplier_needed'
+  totalAmount: string
+  currency: 'GBP'
+  totalLabel: string
+  purchaseCount: number
+  distinctJobCount: number
+  jobContextLabel: string // e.g. "5 jobs", or the job name when there is one
+  lines: SupplierAccountLine[]
+}
+
+export interface OwedToMeJob {
+  jobId: string
+  jobTitle: string
+  jobStatus: BookMoneyJobStatus
+  jobStatusLabel: BookMoneyJobStatusLabel
+  roughLocationOrLabel: string | null
+  owedAmount: string
+  currency: 'GBP'
+  owedLabel: string
+  customerTotalAmount: string
+  customerTotalLabel: string
+  moneyInAmount: string
+  moneyInLabel: string
+  contextLabel: string | null
+}
+
+export interface BookMoneyResponse {
+  generatedAt: string
+
+  // Book Home's one Money row. Derived by the backend from the same included
+  // facts as the overview below — the frontend never re-derives it.
+  bookHome: {
+    showMoneyRow: boolean
+    toPayOnAccountsAmount: string | null
+    toPayOnAccountsCurrency: 'GBP' | null
+    toPayOnAccountsLabel: string | null
+    owedToMeAmount: string | null
+    owedToMeCurrency: 'GBP' | null
+    owedToMeLabel: string | null
+    missingPriceCount: number
+    missingPriceLabel: string | null
+  }
+
+  // null when the direction has nothing to show — the section is omitted, not
+  // rendered as £0. toPayOnAccounts may exist with a null total when the only
+  // eligible costs are missing-price ones.
+  toPayOnAccounts: {
+    totalAmount: string | null
+    currency: 'GBP' | null
+    totalLabel: string | null
+    pricedCostCount: number
+    namedSupplierCount: number
+    unnamedSupplierGroupCount: number
+    summaryLabel: string
+    supplierGroups: SupplierAccountGroup[]
+    missingPriceItems: SupplierMissingPriceItem[]
+  } | null
+
+  owedToMe: {
+    totalAmount: string
+    currency: 'GBP'
+    totalLabel: string
+    jobCount: number
+    jobs: OwedToMeJob[]
+  } | null
+}

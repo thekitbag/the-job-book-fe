@@ -400,6 +400,12 @@ export function useJobMemory(job: Job, opts: UseJobMemoryOptions = {}) {
     setExpandedCats(p => ({ ...p, [categoryId]: !p[categoryId] }))
   }, [])
 
+  // Open a category outright (rather than flip it): used when something outside
+  // the job — a cross-job Money line — needs the item inside it to be on screen.
+  const expandCat = useCallback((categoryId: string) => {
+    setExpandedCats(p => (p[categoryId] ? p : { ...p, [categoryId]: true }))
+  }, [])
+
   // ── Derivations ───────────────────────────────────────────────────────────
   // Backend-authoritative summaries (fall back to local derivation for an older
   // API without labour/total fields).
@@ -608,7 +614,7 @@ export function useJobMemory(job: Job, opts: UseJobMemoryOptions = {}) {
     sectionItems, includedIds, exclusionReason, hasMemory,
     costCheckItems, notCountedItems, resolveCostBasis, addPrice,
     // budget CRUD state + handlers
-    expandedCats, toggleCat,
+    expandedCats, toggleCat, expandCat,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
     openMenuCatId, setOpenMenuCatId,

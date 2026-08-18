@@ -183,6 +183,9 @@ export interface MemoryCardProps {
   //            sheet opened by tapping the row, instead of five links competing
   //            for attention on the item itself (Materials).
   variant?: 'card' | 'row' | 'sheet'
+  // Sheet variant only: open this row's action drawer on arrival, for the one
+  // item a cross-job route sent Mike here to correct.
+  autoOpen?: boolean
 }
 
 export default function MemoryCard({
@@ -206,6 +209,7 @@ export default function MemoryCard({
   onReturn,
   markPaid,
   variant = 'card',
+  autoOpen = false,
 }: MemoryCardProps) {
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
   const excludedCopy = excludedReason
@@ -216,7 +220,10 @@ export default function MemoryCard({
   const [picking, setPicking] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [showSource, setShowSource] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  // autoOpen: this card is the item another screen sent Mike here to correct,
+  // so its drawer is already open when he arrives — the correction is the
+  // reason he tapped, and making him find the row again would waste the trip.
+  const [drawerOpen, setDrawerOpen] = useState(autoOpen)
   const [returning, setReturning] = useState(false)
   const dateLabel = DATED_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
   const name = itemName(item)

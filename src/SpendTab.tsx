@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MemoryCard from './MemoryCard'
 import EmptyState from './EmptyState'
 import LabourBudgetControl from './LabourBudgetControl'
@@ -169,11 +169,18 @@ function KnownSpendHero({ total, totals, onShowBreakdown }: {
   )
 }
 
-export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?: MarkPaidControls }) {
+export default function SpendTab({ mem, markPaid, focusItemId = null }: {
+  mem: JobMemory
+  markPaid?: MarkPaidControls
+  // The one item a cross-job Money line sent Mike here to look at: its
+  // category is opened and its action drawer with it, so he lands on the
+  // correction rather than on a screen where he has to find it again.
+  focusItemId?: string | null
+}) {
   const {
     totalKnownCost, refunds, budgetSummary, refreshError, refetch,
     sectionItems, includedIds, exclusionReason, cardProps,
-    budgetCategories, expandedCats, toggleCat, labourSpendGroup, handleSetLabourBudget,
+    budgetCategories, expandedCats, toggleCat, expandCat, labourSpendGroup, handleSetLabourBudget,
     editingBudgetId, setEditingBudgetId, savingCatId,
     addingCategory, setAddingCategory, savingNewCategory, budgetError,
     openMenuCatId, setOpenMenuCatId,
@@ -217,6 +224,16 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
   const labourGroupItems = (labourSpendGroup?.rows ?? [])
     .map(r => allItemsById.get(r.memoryItemId))
     .filter((i): i is MemoryViewItem => !!i)
+
+  // A focused item is only rendered if the block holding it is open, so open
+  // it. Uncategorised rows are always visible and need nothing.
+  const focusItem = focusItemId ? allItemsById.get(focusItemId) : undefined
+  const focusCategoryId = focusItem
+    ? (labourRowIds.has(focusItem.id) ? LABOUR_GROUP_KEY : focusItem.budgetCategoryId)
+    : null
+  useEffect(() => {
+    if (focusCategoryId) expandCat(focusCategoryId)
+  }, [focusCategoryId, expandCat])
 
   // The section header states how much is sitting outside a category — the
   // point of the section, in one figure.
@@ -308,7 +325,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
         {notes.length > 0 && open && <>
           <PaymentBreakdown summary={cs} />
           <div className="cat-notes">{notes.map(item => (
-            <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={paymentControlsForRow(markPaid, paymentRows.get(item.id))} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+            <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={paymentControlsForRow(markPaid, paymentRows.get(item.id))} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
           ))}</div>
         </>}
       </section>
@@ -416,7 +433,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
                     <PaymentBreakdown summary={labourSpendGroup} />
                     <div className="cat-notes">{labourGroupItems.map(item => {
                       const row = labourSpendGroup.rows.find(candidate => candidate.memoryItemId === item.id)
-                      return <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={paymentControlsForRow(markPaid, row)} />
+                      return <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={paymentControlsForRow(markPaid, row)} />
                     })}</div>
                   </>}
                 </>
@@ -443,7 +460,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
                 <p className="labour-historical-title">Existing cost in this category</p>
                 <div className="cat-notes">
                   {historicalLabourCategoryItems.map(item => (
-                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" markPaid={markPaid} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
+                    <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={markPaid} excludedReason={includedIds.has(item.id) ? null : (exclusionReason.get(item.id) ?? 'cost_worth_checking')} />
                   ))}
                 </div>
               </div>
@@ -471,7 +488,7 @@ export default function SpendTab({ mem, markPaid }: { mem: JobMemory; markPaid?:
             <span className="uncat-count">{uncatItems.length} · {formatMoney(uncatTotal, 'GBP')}</span>
           </div>
           <div className="uncat-rows">
-            {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} variant="sheet" markPaid={markPaid} />)}
+            {uncatItems.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, true)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={markPaid} />)}
           </div>
         </section>
       )}

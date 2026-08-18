@@ -22,6 +22,9 @@ vi.mock('../api', async (importOriginal) => {
     logout: vi.fn(() => Promise.resolve()),
     getCurrentUser: vi.fn(() => Promise.resolve({ id: 'u1', email: 'mike@test', name: 'Mike', role: 'PILOT' })),
     onUnauthorized: vi.fn(),
+    // Cross-job Money has its own suite (bookmoney.test.tsx). Here the backend
+    // says there is nothing to show, which is what proves the row is omitted.
+    getBookMoney: vi.fn(() => Promise.resolve({ bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null })),
     ApiError: actual.ApiError,
   }
 })
@@ -120,7 +123,7 @@ describe('Book Home and job navigation', () => {
     expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
   })
 
-  it('lists in-progress and planning jobs under "Jobs on the book", with finished jobs only as a count', async () => {
+  it('lists in-progress and planning jobs under "Jobs on the book", and finished jobs not at all', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoBookHome(user)
@@ -132,7 +135,9 @@ describe('Book Home and job navigation', () => {
     }
     expect(list.queryByRole('button', { name: /Whitmore patio/ })).not.toBeInTheDocument()
     expect(list.queryByRole('button', { name: /Okoro loft/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /finished jobs 2/i })).toBeInTheDocument()
+    // Not even as a count: finished work lives behind "All jobs ›", and a
+    // second jobs row below Money sent Mike back where he had just been.
+    expect(screen.queryByRole('button', { name: /finished jobs/i })).not.toBeInTheDocument()
   })
 
   it('marks planning rows "Planning" and never repeats "In progress" on ordinary rows', async () => {
@@ -144,10 +149,12 @@ describe('Book Home and job navigation', () => {
     expect(screen.queryByText('In progress')).not.toBeInTheDocument()
   })
 
-  it('shows no Money, Workshop or "to check" rows in this slice', async () => {
+  it('shows no Money row when the backend has nothing to show, and no Workshop or "to check" rows', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoBookHome(user)
+    // Money is backend-gated: with showMoneyRow false there is no row, and no
+    // £0 or "nothing owed" stand-in for it either.
     expect(screen.queryByText(/money/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/workshop/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/to check/i)).not.toBeInTheDocument()
@@ -218,14 +225,12 @@ describe('Book Home and job navigation', () => {
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(OKORO.id)
   })
 
-  it('"Finished jobs" on Book Home opens All Jobs on the Finished group', async () => {
+  it('reaches the finished work through All jobs, which lists it under its own heading', async () => {
     const user = userEvent.setup()
     await launch()
-    await gotoBookHome(user)
+    await gotoAllJobs(user)
 
-    await user.click(screen.getByRole('button', { name: /finished jobs 2/i }))
-
-    await screen.findByRole('heading', { name: /^All jobs/ })
+    expect(screen.getByRole('heading', { name: 'Finished 2' })).toBeInTheDocument()
     expect(group(/finished/i).getByRole('button', { name: /Okoro loft/ })).toBeInTheDocument()
   })
 
