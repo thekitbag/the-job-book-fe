@@ -500,6 +500,67 @@ function buildMockSections(): MemoryViewSection[] {
     ]
 }
 
+// Leftover-only fixtures for jobs beyond the pilot seed.
+//
+// Workshop material comes from real jobs, so the mock needs real leftovers on
+// more than one job — including two Finished ones. A leftover on a Finished job
+// must still be movable, and moving it must not reopen the job, so the fixture
+// exists mainly to make that provable by hand as well as in tests.
+//
+// Deliberately leftovers only: these jobs have no bought/cost fixture, so
+// nothing here can shift a Budget or Money figure anywhere in the app.
+const EXTRA_LEFTOVER_FIXTURES: Record<string, { id: string; materialName: string; quantity: string | null; unit: string | null; locationOrUse: string | null }[]> = {
+  // Kitchen Extension (in progress) — the leftovers the seeded Workshop was
+  // filled from, so tapping "Open Kitchen Extension" from Workshop lands on the
+  // actual source row rather than an empty Left over tab.
+  'job-pilot-extension-002': [
+    { id: 'mem-kitchen-left-1', materialName: 'OSB', quantity: 'about 3', unit: 'sheets', locationOrUse: null },
+    { id: 'mem-kitchen-left-2', materialName: 'Screws, 5.0×80', quantity: 'half a box', unit: null, locationOrUse: null },
+    { id: 'mem-kitchen-left-3', materialName: 'Membrane', quantity: 'part of a roll', unit: null, locationOrUse: 'in the van' },
+  ],
+  // Whitmore Patio (finished) — one already in the Workshop, one corrected as
+  // never there, and one still unmoved so the Finished-job move can be walked.
+  'job-pilot-finished-005': [
+    { id: 'mem-whitmore-left-1', materialName: 'Fence posts', quantity: '4 or 5', unit: null, locationOrUse: null },
+    { id: 'mem-whitmore-left-2', materialName: 'Gravel boards', quantity: 'a couple', unit: null, locationOrUse: 'stacked by the shed' },
+    { id: 'mem-whitmore-left-3', materialName: 'Cement board', quantity: 'a sheet', unit: null, locationOrUse: null },
+  ],
+  // Okoro Loft (finished) — the used-up terminal outcome.
+  'job-pilot-finished-006': [
+    { id: 'mem-okoro-left-1', materialName: 'Decking boards', quantity: '7 or 8', unit: null, locationOrUse: null },
+  ],
+}
+
+function buildExtraLeftoverSections(jobId: string): MemoryViewSection[] {
+  const fixture = EXTRA_LEFTOVER_FIXTURES[jobId]
+  if (!fixture) return []
+  return [{
+    key: 'leftovers',
+    label: 'Leftovers',
+    items: fixture.map(f => ({
+      id: f.id,
+      memoryType: 'leftover_material',
+      summary: `${f.materialName} left over`,
+      materialName: f.materialName,
+      quantity: f.quantity,
+      unit: f.unit,
+      supplierName: null,
+      deliveryTiming: null,
+      locationOrUse: f.locationOrUse,
+      costAmount: null,
+      costCurrency: null,
+      costQualifier: null,
+      totalCostAmount: null,
+      uncertaintyFlags: [],
+      sourceCandidateFactId: null,
+      reviewDecisionId: null,
+      createdAt: '2026-06-13T10:00:00.000Z',
+      updatedAt: '2026-06-13T10:00:00.000Z',
+      source: null,
+    })),
+  }]
+}
+
 // Per-job mutable memory state so a post-edit refetch reflects the edit, the way
 // a real backend would. Module-level, so it resets on every full page load
 // (each Playwright test starts with page.goto) — no cross-test leakage.
@@ -548,7 +609,7 @@ function rebaseMockDates(sections: MemoryViewSection[]): void {
 export function mockSectionsFor(jobId: string): MemoryViewSection[] {
   if (!mockMemoryByJob) mockMemoryByJob = new Map()
   if (!mockMemoryByJob.has(jobId)) {
-    const sections = jobId === MOCK_SEED_JOB_ID ? buildMockSections() : []
+    const sections = jobId === MOCK_SEED_JOB_ID ? buildMockSections() : buildExtraLeftoverSections(jobId)
     rebaseMockDates(sections)
     mockMemoryByJob.set(jobId, sections)
   }

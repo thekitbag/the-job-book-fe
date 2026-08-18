@@ -25,6 +25,13 @@ vi.mock('../api', async (importOriginal) => {
     // Cross-job Money has its own suite (bookmoney.test.tsx). Here the backend
     // says there is nothing to show, which is what proves the row is omitted.
     getBookMoney: vi.fn(() => Promise.resolve({ bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null })),
+    // Workshop has its own suite (workshop.test.tsx). Here it is the empty
+    // destination: the row exists, with no count and no preview.
+    getWorkshop: vi.fn(() => Promise.resolve({
+      generatedAt: '2026-08-18T09:00:00.000Z',
+      bookHome: { showWorkshopRow: true, availableCount: 0, availableLabel: null, previewItems: [] },
+      availableItems: [],
+    })),
     ApiError: actual.ApiError,
   }
 })
@@ -149,15 +156,27 @@ describe('Book Home and job navigation', () => {
     expect(screen.queryByText('In progress')).not.toBeInTheDocument()
   })
 
-  it('shows no Money row when the backend has nothing to show, and no Workshop or "to check" rows', async () => {
+  it('shows no Money row when the backend has nothing to show, and no "to check" row', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoBookHome(user)
     // Money is backend-gated: with showMoneyRow false there is no row, and no
     // £0 or "nothing owed" stand-in for it either.
     expect(screen.queryByText(/money/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/workshop/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/to check/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the Workshop row when the workshop is empty, with no count and no explanation', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoBookHome(user)
+    // Workshop is a destination now, so the route stays learnable even with
+    // nothing in there — but an empty workshop says nothing about stock: no
+    // "0 things", no explanation of how leftovers get there, no Record.
+    expect(screen.getByRole('button', { name: /Workshop/ })).toBeInTheDocument()
+    expect(screen.queryByText(/0 things/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^0$/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
   })
 
   it('tapping a job on Book Home opens that Job Home and selects it for recording', async () => {

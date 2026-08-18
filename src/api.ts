@@ -25,6 +25,12 @@ export { getJobMoney, markMoneyOut, deleteMoneyEvent, getSupportJobMoney } from 
 export { getBookMoney } from './api/bookMoney'
 export { _resetMockBookMoneyForTesting } from './api/mock/bookMoney'
 export {
+  getWorkshop, moveLeftoverToWorkshop, createWorkshopItem, patchWorkshopItem,
+  undoWorkshopMove, markWorkshopItemUsedUp, markWorkshopItemWasntThere, putBackWorkshopItem,
+  isAlreadyInWorkshop,
+} from './api/workshop'
+export { _resetMockWorkshopForTesting } from './api/mock/workshop'
+export {
   createSupplierPayment, getSupplierPayment, patchSupplierPaymentDate, undoSupplierPayment,
   isSettlementUnavailable,
 } from './api/supplierPayments'

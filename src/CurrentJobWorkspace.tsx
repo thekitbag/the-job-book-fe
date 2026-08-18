@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ApiError, getDraftFacts, getJobPhotos, getJobReceipts, getReviewQueue, patchJob } from './api'
+import { ApiError, getDraftFacts, getJobPhotos, getJobReceipts, getReviewQueue, isAlreadyInWorkshop, moveLeftoverToWorkshop, patchJob, putBackWorkshopItem } from './api'
 import { saveNote, getNotesForJob } from './db'
 import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
@@ -18,9 +18,11 @@ import JobDetailsSheet from './JobDetailsSheet'
 import MoneySection, { useMoney } from './MoneySection'
 import { useToast } from './Toast'
 import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
+import MoveToWorkshopResult from './MoveToWorkshopResult'
+import type { WorkshopSourceControls } from './workshopSource'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, JobReceipt, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost } from './types'
+import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, JobReceipt, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost, WorkshopItem } from './types'
 
 const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
@@ -325,6 +327,7 @@ export default function CurrentJobWorkspace({
   entry = null,
   onOpenReviewQueue,
   onOpenBookHome,
+  onOpenWorkshop = () => {},
   onLogout = () => {},
   user = null,
   onJobUpdated = () => {},
@@ -334,6 +337,11 @@ export default function CurrentJobWorkspace({
   entry?: JobEntry | null
   onOpenReviewQueue: () => void
   onOpenBookHome: () => void
+  // "See in the Workshop", after a leftover has been moved there. Optional for
+  // the same reason onLogout is: a test rendering one lens in isolation has no
+  // book level to navigate to, and the result sheet's other two routes (Undo,
+  // Done) work without it.
+  onOpenWorkshop?: () => void
   onLogout?: () => void
   // Current account, when known — drives role-gated UI only. Normal builders
   // never see the internal Support entry.
@@ -419,17 +427,31 @@ export default function CurrentJobWorkspace({
     // moment later would read as the app changing its mind.
     if (!memData) return null
     const item = memData.sections.flatMap(s => s.items).find(i => i.id === entry.focusItemId)
+    // A leftover is Materials' business whatever else is true of it — it carries
+    // no Budget cost of its own, and Workshop is the one place that sends Mike
+    // to one. Checked before the Budget rules below so a leftover can never be
+    // routed to a lens that doesn't list it.
+    if (item?.memoryType === 'leftover_material') return 'materials'
     // The item is gone, or Budget shows it: Budget is the right place either
     // way — it is where a cross-job cost is explained.
     if (!item || item.budgetCategoryId || includedIds.has(item.id)) return 'spend'
     return item.memoryType === 'ordered_material' ? 'materials' : 'spend'
   }, [entry, job.id, memData, includedIds])
 
+  // Which Materials tab the entry item actually lives on. Bought is the default
+  // for everything the old cross-job Money routes send here; a leftover has its
+  // own tab, and landing on Bought would leave Mike hunting for the row he
+  // tapped in the Workshop.
+  const entryMaterialsTab = useMemo<MaterialsTab>(() => {
+    const item = memData?.sections.flatMap(s => s.items).find(i => i.id === entry?.focusItemId)
+    return item?.memoryType === 'leftover_material' ? 'leftover' : 'bought'
+  }, [memData, entry])
+
   useEffect(() => {
     if (!entryTarget) return
-    if (entryTarget === 'materials') setMaterialsTab('bought')
+    if (entryTarget === 'materials') setMaterialsTab(entryMaterialsTab)
     setSection(entryTarget)
-  }, [entry, entryTarget])
+  }, [entry, entryTarget, entryMaterialsTab])
   // Source item currently being marked paid, so its drawer control shows a
   // busy state and a double-tap can't fire two markers.
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
@@ -527,6 +549,60 @@ export default function CurrentJobWorkspace({
   // Mark-paid capability handed to the Budget/Labour drawers. Eligibility leans
   // on mem.includedIds — the authoritative "counts in Budget" set — so only a
   // trusted, safe, GBP, active cost item is ever offered, plus not-already-paid.
+  // ── Workshop, from inside the job ──────────────────────────────────────────
+  // Moving a confirmed leftover into the Workshop classifies a memory that
+  // already exists. Nothing here reloads Budget or Money, because nothing here
+  // can change them: the request carries no amount and the response carries no
+  // cost. What it does reload is the memory view, so the leftover's row picks up
+  // its new state without Mike having to leave and come back.
+  const [workshopPendingId, setWorkshopPendingId] = useState<string | null>(null)
+  const [moveResult, setMoveResult] = useState<WorkshopItem | null>(null)
+  const memRefetch = mem.refetch
+
+  const handleMoveToWorkshop = useCallback(async (item: MemoryViewItem) => {
+    if (workshopPendingId) return
+    setWorkshopPendingId(item.id)
+    try {
+      const res = await moveLeftoverToWorkshop(job.id, item.id)
+      track('workshop_move_recorded', { job_id: job.id, job_status: job.status })
+      await memRefetch()
+      setMoveResult(res.workshopItem)
+    } catch (err: unknown) {
+      // A second move of the same leftover is not really a failure from Mike's
+      // side — the material is where he wanted it — so it is said plainly and
+      // the row is refreshed to show the state he was evidently not seeing.
+      if (isAlreadyInWorkshop(err)) {
+        await memRefetch()
+        toast({ title: 'Already in the Workshop', body: 'This leftover is in there once already. Nothing changed.', tone: 'plain' })
+      } else {
+        toast({ title: 'Could not move it', body: 'Nothing changed — it is still just a leftover on this job. Try again.', tone: 'plain' })
+      }
+    } finally {
+      setWorkshopPendingId(null)
+    }
+  }, [job.id, job.status, workshopPendingId, memRefetch, toast])
+
+  const handlePutBackInWorkshop = useCallback(async (item: MemoryViewItem) => {
+    if (workshopPendingId || !item.workshopItemId) return
+    setWorkshopPendingId(item.id)
+    try {
+      await putBackWorkshopItem(item.workshopItemId)
+      track('workshop_put_back', { job_id: job.id })
+      await memRefetch()
+      toast({ title: 'Back in the Workshop', body: 'The same item is available again, with the amount it had before.', tone: 'plain' })
+    } catch {
+      toast({ title: 'Could not put it back', body: 'Nothing changed. Try again.', tone: 'plain' })
+    } finally {
+      setWorkshopPendingId(null)
+    }
+  }, [job.id, workshopPendingId, memRefetch, toast])
+
+  const workshop = useMemo<WorkshopSourceControls>(() => ({
+    onMoveToWorkshop: (item) => { void handleMoveToWorkshop(item) },
+    onPutBackInWorkshop: (item) => { void handlePutBackInWorkshop(item) },
+    pendingItemId: workshopPendingId,
+  }), [handleMoveToWorkshop, handlePutBackInWorkshop, workshopPendingId])
+
   const markPaid = useMemo<MarkPaidControls>(() => ({
     isPaid: (item) => money.paidRowBySource.has(item.id),
     canMarkPaid: (item) =>
@@ -1001,6 +1077,18 @@ export default function CurrentJobWorkspace({
         <JobDetailsSheet jobId={job.id} jobTitle={job.title} onClose={() => setDetailsSheetOpen(false)} />
       )}
 
+      {/* The move result. It replaces the item drawer rather than stacking on
+          it, and both ways out of it — into the Workshop, or straight back out
+          of the move — are one tap. */}
+      {moveResult && (
+        <MoveToWorkshopResult
+          workshopItem={moveResult}
+          onSeeInWorkshop={() => { setMoveResult(null); onOpenWorkshop() }}
+          onUndone={() => { setMoveResult(null); void mem.refetch() }}
+          onClose={() => setMoveResult(null)}
+        />
+      )}
+
       <div className="ws-body">
         {/* App-level notices belong on job home only. They are about recording
             and installing, neither of which a section screen is for — and the
@@ -1096,6 +1184,8 @@ export default function CurrentJobWorkspace({
                   sectionKeys={['leftovers']}
                   ariaLabel="Left over materials"
                   sectionAdds={{ leftovers: { kind: 'leftover', label: 'Add leftover' } }}
+                  focusItemId={focusItemId}
+                  workshop={workshop}
                 />
               ) : (
                 // Deliberately no direct add: a return starts from the Left over

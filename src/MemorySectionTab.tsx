@@ -4,6 +4,7 @@ import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
 import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
 import type { MarkPaidControls } from './markPaid'
+import type { WorkshopSourceControls } from './workshopSource'
 import type { BudgetCategory, CreateMemoryItemRequest, MemoryViewItem } from './types'
 
 // "2 items left over" / "3 items bought" — the section kicker states how many,
@@ -51,6 +52,7 @@ export default function MemorySectionTab({
   emptyText,
   footer,
   markPaid,
+  workshop,
   onAddMemoryItem,
   budgetCategories = [],
   focusItemId = null,
@@ -65,6 +67,8 @@ export default function MemorySectionTab({
   sectionAdds?: Partial<Record<string, SectionAdd>>
   // Budget cost items only (e.g. Materials → Bought): mark-as-paid capability.
   markPaid?: MarkPaidControls
+  // Left over items only (Materials → Left over): the Workshop capability.
+  workshop?: WorkshopSourceControls
   onAddMemoryItem?: (req: CreateMemoryItemRequest) => Promise<MemoryViewItem>
   budgetCategories?: BudgetCategory[]
   // Empty copy for a lens with no add action of its own (e.g. Returned, which
@@ -116,7 +120,7 @@ export default function MemorySectionTab({
                 ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} categories={budgetCategories} onAdd={addItem} actionHidden={s.items.length === 0} />
                 : <h2 className="mem-section-heading">{countLabel}</h2>}
               {s.items.length > 0
-                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={markPaid} />)
+                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={markPaid} workshop={workshop} />)
                 : s.add
                   ? <EmptyState
                       title={empty?.title ?? 'Nothing logged yet'}

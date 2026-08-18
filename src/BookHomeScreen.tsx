@@ -1,6 +1,6 @@
 import { liveJobs } from './jobGroups'
 import { moneyFigure } from './memoryScan'
-import type { BookMoneyResponse, Job } from './types'
+import type { BookMoneyResponse, Job, WorkshopResponse } from './types'
 
 /**
  * "£6,088 to pay on accounts" — one sentence, two weights: the figure carries,
@@ -42,9 +42,11 @@ function MoneyLine({ amount, currency, words, fallback }: {
 export default function BookHomeScreen({
   jobs,
   money,
+  workshop,
   onOpenJob,
   onOpenAllJobs,
   onOpenMoney,
+  onOpenWorkshop,
 }: {
   jobs: Job[]
   // The backend's Book Home summary, or null while it loads / if it failed.
@@ -52,9 +54,15 @@ export default function BookHomeScreen({
   // does no money arithmetic of its own, so the row can never disagree with
   // the Money overview it opens.
   money: BookMoneyResponse['bookHome'] | null
+  // The backend's Workshop summary, or null while it loads / if it failed. The
+  // count and the preview are the backend's first three available items — this
+  // screen never counts or picks its own, so the cover cannot promise something
+  // the Workshop page then fails to list.
+  workshop: WorkshopResponse['bookHome'] | null
   onOpenJob: (job: Job) => void
   onOpenAllJobs: () => void
   onOpenMoney: () => void
+  onOpenWorkshop: () => void
 }) {
   const live = liveJobs(jobs)
 
@@ -122,6 +130,40 @@ export default function BookHomeScreen({
             </span>
             <span className="book-chev" aria-hidden="true">›</span>
           </button>
+        )}
+
+        {/* Workshop — the other thing that is true across every job: material
+            Mike may still have. A destination row, kept even when there is
+            nothing in there, because a route that comes and goes is a route he
+            cannot learn. Empty means bare: no 0, no explanation, no Record. */}
+        {workshop?.showWorkshopRow && (
+          <>
+            <button type="button" className="book-money-row book-workshop-row" onClick={onOpenWorkshop}>
+              <span className="book-money-text">
+                <span className="book-money-name">Workshop</span>
+              </span>
+              {workshop.availableLabel && (
+                <span className="book-workshop-count">{workshop.availableLabel}</span>
+              )}
+              <span className="book-chev" aria-hidden="true">›</span>
+            </button>
+            {/* The preview is provenance and rough words, nothing else. It is
+                not a second list to act on — tapping anywhere on the block goes
+                to the same place the row does. */}
+            {workshop.previewItems.length > 0 && (
+              <ul className="book-workshop-preview">
+                {workshop.previewItems.map(item => (
+                  <li key={item.id} className="book-workshop-preview-row">
+                    <span className="book-workshop-preview-name">
+                      {item.materialName}
+                      <span className="book-workshop-preview-source"> · {item.sourceLabel}</span>
+                    </span>
+                    {item.roughAmount && <span className="book-workshop-preview-amount">{item.roughAmount}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
 
         {/* No Finished jobs row. It sent Mike from jobs, past Money, back to

@@ -39,6 +39,13 @@ vi.mock('../api', async (importOriginal) => {
     onUnauthorized: vi.fn(),
     ApiError: actual.ApiError,
     getBookMoney: vi.fn(() => Promise.resolve(mock.mockGetBookMoney())),
+    // Workshop has its own suite (workshop.test.tsx). Here it is the empty
+    // destination: the row exists, with no count and no preview.
+    getWorkshop: vi.fn(() => Promise.resolve({
+      generatedAt: '2026-08-18T09:00:00.000Z',
+      bookHome: { showWorkshopRow: true, availableCount: 0, availableLabel: null, previewItems: [] },
+      availableItems: [],
+    })),
     createSupplierPayment: vi.fn(async (req: Parameters<typeof backend.mockCreateSupplierPayment>[0]) =>
       backend.mockCreateSupplierPayment(req)),
     getSupplierPayment: vi.fn(async (id: string) => backend.mockGetSupplierPayment(id)),

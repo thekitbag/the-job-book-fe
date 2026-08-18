@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getBookMoney, getCurrentUser, getJobs, logout, onUnauthorized, ApiError } from './api'
+import { getBookMoney, getCurrentUser, getJobs, getWorkshop, logout, onUnauthorized, ApiError } from './api'
 import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
@@ -7,7 +7,8 @@ import ReviewQueueScreen from './ReviewQueueScreen'
 import BookHomeScreen from './BookHomeScreen'
 import BookMoneyScreen from './BookMoneyScreen'
 import AllJobsScreen from './AllJobsScreen'
-import type { AuthUser, BookMoneyResponse, Job } from './types'
+import WorkshopScreen from './WorkshopScreen'
+import type { AuthUser, BookMoneyResponse, Job, WorkshopResponse } from './types'
 import type { JobEntry } from './CurrentJobWorkspace'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
@@ -47,7 +48,7 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
 // The app still launches into the last selected Job Home. Book Home is the
 // level above it, reached from a job — never the default screen.
-type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'bookMoney'
+type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'bookMoney' | 'workshop'
 
 export default function App() {
   // A password-reset link must work even for a browser that still has a valid
@@ -65,6 +66,12 @@ export default function App() {
   // A failure only costs the Money row: the jobs index never depends on it.
   const [bookMoney, setBookMoney] = useState<BookMoneyResponse | null>(null)
   const [bookMoneyState, setBookMoneyState] = useState<'loading' | 'ready' | 'error'>('loading')
+  // Cross-job Workshop (GET /api/workshop) — one response behind both the Book
+  // Home row and the Workshop page, for the same reason Money has one: the
+  // count on the cover and the list inside it must be the same read. Loaded at
+  // the book level, and a failure only costs the Workshop row.
+  const [workshopData, setWorkshopData] = useState<WorkshopResponse | null>(null)
+  const [workshopState, setWorkshopState] = useState<'loading' | 'ready' | 'error'>('loading')
   // Settling a supplier account is gated by backend config while real-account
   // validation is outstanding. Enablement is the backend's statement, never a
   // guess from this build's environment, and the frontend fails closed: only an
@@ -168,10 +175,28 @@ export default function App() {
       .catch(() => setBookMoneyState('error'))
   }, [])
 
+  // Workshop is availability memory changed from two places — the Workshop page
+  // itself and any job's leftover — so it is re-read on every arrival at the
+  // book level rather than cached. A leftover moved in a moment ago is already
+  // on the cover by the time Mike gets back to it.
+  const loadWorkshop = useCallback(() => {
+    setWorkshopState(prev => (prev === 'ready' ? 'ready' : 'loading'))
+    getWorkshop()
+      .then(res => { setWorkshopData(res); setWorkshopState('ready') })
+      .catch(() => setWorkshopState('error'))
+  }, [])
+
   const openBookHome = useCallback(() => {
     loadBookMoney()
+    loadWorkshop()
     setView('bookHome')
-  }, [loadBookMoney])
+  }, [loadBookMoney, loadWorkshop])
+
+  const openWorkshop = useCallback(() => {
+    track('workshop_opened')
+    loadWorkshop()
+    setView('workshop')
+  }, [loadWorkshop])
 
   // A job edit (title rename, status change) must update everywhere the job
   // is shown or cached: the workspace header, the job list, and the offline
@@ -236,6 +261,18 @@ export default function App() {
     track('book_money_source_opened', { job_id: job.id })
     // Which lens shows this item is the job's call, not Money's — see JobEntry.
     handleSelectJob(job, 'switch', { jobId: job.id, focusItemId: target.sourceMemoryItemId })
+  }
+
+  // Workshop hands Mike back to the job the material came from, at the leftover
+  // itself. Same rule as Money's source routing: the job must be one of his
+  // current jobs, and if it isn't, staying put beats opening the wrong job.
+  function openWorkshopSource(target: { jobId: string; sourceMemoryItemId: string | null }) {
+    const job = jobs.find(j => j.id === target.jobId)
+    if (!job) return
+    handleSelectJob(job, 'switch', {
+      jobId: job.id,
+      focusItemId: target.sourceMemoryItemId ?? undefined,
+    })
   }
 
   function openJobMoney(jobId: string) {
@@ -335,9 +372,11 @@ export default function App() {
       <BookHomeScreen
         jobs={jobs}
         money={bookMoney?.bookHome ?? null}
+        workshop={workshopData?.bookHome ?? null}
         onOpenJob={handleSelectJob}
         onOpenAllJobs={() => setView('allJobs')}
         onOpenMoney={() => { track('book_money_opened'); loadBookMoney(); setView('bookMoney') }}
+        onOpenWorkshop={openWorkshop}
       />
     )
   }
@@ -353,6 +392,18 @@ export default function App() {
         onSettlementUnavailable={() => setSettlementUnavailable(true)}
         onOpenSource={openSourceItem}
         onOpenJobMoney={openJobMoney}
+      />
+    )
+  }
+
+  if (view === 'workshop') {
+    return (
+      <WorkshopScreen
+        data={workshopData}
+        loadState={workshopState}
+        onBack={openBookHome}
+        onReload={loadWorkshop}
+        onOpenSourceItem={openWorkshopSource}
       />
     )
   }
@@ -379,6 +430,7 @@ export default function App() {
       entry={jobEntry && jobEntry.jobId === selectedJob.id ? jobEntry : null}
       onOpenReviewQueue={() => setView('reviewQueue')}
       onOpenBookHome={openBookHome}
+      onOpenWorkshop={openWorkshop}
       onLogout={handleLogout}
       user={currentUser}
       onJobUpdated={handleJobUpdated}

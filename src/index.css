@@ -6168,3 +6168,242 @@ a.row-sheet-opt { text-decoration: none; }
 
 .sap-sub-copy { margin: 0 0 10px; font-size: var(--text-md); color: var(--ink); }
 .sap-sub-copy--quiet { color: var(--grey-text); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Workshop — availability memory across jobs
+   The same book-level furniture as Money (ink band, hairline rows, a route
+   back into the job that owns the fact), with one deliberate difference:
+   nothing here is right-aligned as a figure. A rough amount is Mike's words,
+   so it is set in the text face rather than the numeric one, and an absent
+   amount simply leaves the column empty — never a 0.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Book Home: the Workshop row + its preview ── */
+
+/* It follows Money under the same heavy rule, so it takes a hairline of its
+   own rather than a second heavy one — one break between jobs and totals. */
+.book-workshop-row {
+  align-items: baseline;
+  border-top: var(--rule-hair);
+  margin-top: 0;
+  min-height: 56px;
+  padding: 16px 0 10px;
+}
+.book-workshop-count {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--cobalt);
+  flex-shrink: 0;
+}
+
+/* A sunk block, not a list of rows: it previews what is in there and is not
+   itself tappable, so it must not look like three more routes. */
+.book-workshop-preview {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 2px 14px;
+  background: var(--surface-sunk);
+}
+.book-workshop-preview-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 10px 0;
+  border-bottom: var(--rule-hair);
+}
+.book-workshop-preview-row:last-child { border-bottom: none; }
+.book-workshop-preview-name {
+  flex: 1 1 auto;
+  min-width: 50%;
+  font-size: var(--text-md);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* Provenance is context for the material, so it recedes behind it. */
+.book-workshop-preview-source { color: var(--grey-text); }
+.book-workshop-preview-amount {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--ink);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 46%;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* ── The Workshop page ── */
+
+.ws-count { font-size: var(--text-xl); }
+
+.ws-rows { list-style: none; margin: 0; padding: 0; }
+
+.ws-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  border: none;
+  border-bottom: var(--rule-hair);
+  background: none;
+  padding: 16px 0;
+  min-height: 64px;
+  text-align: left;
+}
+.ws-row:active { background: var(--grey-press); }
+
+/* The material is the row's identity, so it keeps the larger share of the
+   line. Without a floor here a long rough amount ("about 2 and a bit packs")
+   wins the flex negotiation and breaks the name down a three-line column. */
+.ws-row-main { flex: 1 1 auto; min-width: 50%; }
+.ws-row-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* "Kitchen Extension · today · finished job". Wraps rather than truncates:
+   two jobs with similar names are the whole point of provenance. */
+.ws-row-meta {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+  overflow-wrap: anywhere;
+}
+/* Words, not a figure — no tabular numerals, because "part of a roll" is not
+   a number and must never be set as though it were one. */
+.ws-row-amount {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 46%;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* ── Empty ── */
+/* Two lines and a rule. No explanation of how leftovers arrive, no preview of
+   the voice-led stock check, no Record action. */
+.ws-empty { border-top: var(--rule-heavy); margin-top: 32px; }
+.ws-empty-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+  margin: 22px 0 0;
+}
+.ws-empty-add {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  border-top: var(--rule-hair);
+  border-bottom: var(--rule-hair);
+  background: none;
+  margin-top: 18px;
+  padding: 16px 0;
+  min-height: 56px;
+  font: inherit;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--cobalt);
+  text-align: left;
+}
+.ws-empty-add:active { background: var(--grey-press); }
+
+/* ── The item sheet ── */
+
+.ws-sheet-kicker {
+  margin: 0 0 2px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--grey-text);
+}
+/* "You reckoned … about 3 sheets" — the label admits it is a belief, and the
+   amount carries the weight without ever being called stock. */
+.ws-sheet-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 6px;
+}
+.ws-sheet-amount-label { font-size: var(--text-md); color: var(--grey-text); flex-shrink: 0; }
+.ws-sheet-amount-value {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+/* A source-linked material is corrected on its job, so it is shown here as
+   the fact it is rather than a disabled field pretending to be editable. */
+.ws-form-static {
+  margin: 0 0 14px;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* "OSB · about 3 sheets" — what the action just did, in one line. */
+.ws-result-line {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* ── Two-line drawer options ── */
+/* An action whose consequence has to be stated before it is tapped: the label
+   keeps its weight, the consequence sits under it in one quiet line. The
+   nested spans override .row-sheet-opt span's cobalt, which is meant for the
+   trailing chevron alone. */
+/* Scoped through .row-sheet-opt so they outrank `.row-sheet-opt span`, which
+   paints the trailing chevron cobalt and would otherwise turn a whole two-line
+   action into a link. */
+.row-sheet-opt--stacked { align-items: flex-start; }
+.row-sheet-opt .row-sheet-opt-main { flex: 1; min-width: 0; color: inherit; }
+.row-sheet-opt .row-sheet-opt-label { display: block; color: inherit; overflow-wrap: anywhere; }
+.row-sheet-opt .row-sheet-opt-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--grey-text);
+  overflow-wrap: anywhere;
+}
+/* The one action the drawer is really offering. */
+.row-sheet-opt--primary { color: var(--cobalt); }
+
+/* ── Workshop state on the source leftover row ── */
+/* A bordered chip in words. Never opacity: a used-up leftover is a fact Mike
+   recorded, not a greyed-out record — and the job still keeps its cost. */
+.mem-row-workshop-chip {
+  display: inline-block;
+  /* The row's text column is a stretching flex column, so the chip has to opt
+     out of it or it spans the whole width and reads as a banner. */
+  align-self: flex-start;
+  width: fit-content;
+  margin: 3px 0 1px;
+  padding: 3px 8px;
+  border: 1px solid var(--ink);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink);
+}

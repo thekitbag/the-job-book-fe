@@ -418,6 +418,26 @@ export interface MemoryViewItem {
   returnedFromMemoryItemId?: string | null
   // true for items added directly (not voice-extracted). Optional until backend ships it.
   isManual?: boolean
+  // ── Workshop (availability memory) ───────────────────────────────────────
+  // A confirmed leftover keeps living here, on its own job, and gains a current
+  // Workshop state. These are additive read-model fields owned by the backend:
+  // absent on an older API, which simply means no Workshop has been offered yet.
+  //
+  // Deliberately NOT a second copy of the material: the amount below travels
+  // with the linked Workshop item, so the source row and the Workshop row can
+  // never state two different rough amounts for the same physical stuff.
+  workshopState?: SourceWorkshopState
+  workshopItemId?: string | null
+  // The linked Workshop item's current rough wording. Preferred over
+  // quantity/unit for display while the material is linked: the source row and
+  // the Workshop row state one current amount between them, and this is it.
+  // The recorded quantity is left intact underneath — the leftover is still the
+  // memory it always was.
+  workshopRoughAmount?: string | null
+  workshopEnteredAt?: string | null
+  workshopEnteredLabel?: string | null
+  workshopResolvedAt?: string | null
+  workshopResolvedLabel?: string | null
   createdAt: string
   updatedAt: string
   source: MemoryViewSource | null
@@ -1498,4 +1518,111 @@ export interface CreateSupplierAccountPaymentRequest {
 // editable: undo the payment, fix the source, record it again.
 export interface PatchSupplierAccountPaymentRequest {
   paidAt: string
+}
+
+// ── Workshop (availability memory across jobs) ───────────────────────────────
+//
+// Workshop answers "what do I think we may still have, and which job did it
+// come from" — not "what does an inventory system guarantee is in stock". Every
+// type below is availability memory. None of it carries a price, a supplier, a
+// Budget category, a location or a unit, because none of those exist in this
+// model: moving, editing, using up, correcting or undoing Workshop material
+// never touches Budget, Money, cost, paid state, job status or source evidence.
+
+/** Where a source leftover currently stands with respect to the Workshop. */
+export type SourceWorkshopState = 'not_moved' | 'in_workshop' | 'used_up' | 'wasnt_there'
+
+/**
+ * The Workshop item's own lifecycle. Only 'available' items are listed, counted
+ * or previewed; the terminal states stay reachable so a mistaken outcome can be
+ * put back without creating a second item for the same material.
+ */
+export type WorkshopItemState = 'available' | 'used_up' | 'wasnt_there' | 'moved_back'
+
+export type WorkshopItemSourceKind = 'leftover' | 'manual'
+
+export interface WorkshopItem {
+  id: string
+  materialName: string
+  /**
+   * Free text, and left exactly as Mike said it: "about 3 sheets", "half a box",
+   * "4 or 5". Never parsed, normalised, totalled or compared. null is a valid
+   * answer and must never render as 0 or as a missing-data warning.
+   */
+  roughAmount: string | null
+  sourceKind: WorkshopItemSourceKind
+  state: WorkshopItemState
+  enteredWorkshopAt: string
+  enteredWorkshopLabel: string
+  resolvedAt: string | null
+  resolvedLabel: string | null
+  sourceJobId: string | null
+  sourceJobTitle: string | null
+  // A Workshop item outlives its source job being archived, so the status is
+  // whatever that job now is — labelled honestly rather than hidden. Left open
+  // rather than pinned to a union: the frontend branches on 'finished' alone
+  // and renders every other label as the backend's own words.
+  sourceJobStatus: string | null
+  sourceJobStatusLabel: string | null
+  sourceMemoryItemId: string | null
+  sourceItemLabel: string | null
+  /** "Kitchen Extension" / "Added by hand" — provenance in one printable string. */
+  sourceLabel?: string
+}
+
+export interface WorkshopPreviewItem {
+  id: string
+  materialName: string
+  roughAmount: string | null
+  /** The source job's name, or "Added by hand". The backend's words. */
+  sourceLabel: string
+}
+
+export interface WorkshopBookHomeSummary {
+  /** True in this slice even when empty: Workshop is now a usable destination. */
+  showWorkshopRow: boolean
+  availableCount: number
+  /** "6 things" — null when empty, so an empty row can never show a 0. */
+  availableLabel: string | null
+  /** Up to three, in the same order as availableItems. */
+  previewItems: WorkshopPreviewItem[]
+}
+
+// GET /api/workshop
+export interface WorkshopResponse {
+  generatedAt: string
+  bookHome: WorkshopBookHomeSummary
+  /** Only state 'available', newest enteredWorkshopAt first. */
+  availableItems: WorkshopItem[]
+}
+
+// POST /api/jobs/:jobId/memory-items/:memoryItemId/workshop
+export interface MoveLeftoverToWorkshopRequest {
+  /** Omitted → the backend defaults to the source leftover's display amount. */
+  roughAmount?: string | null
+}
+
+export interface WorkshopMoveResponse {
+  workshopItem: WorkshopItem
+  /** The source leftover, still in its job, now carrying its Workshop state. */
+  sourceItem: MemoryViewItem
+}
+
+// POST /api/workshop/items
+export interface CreateManualWorkshopItemRequest {
+  materialName: string
+  roughAmount?: string | null
+}
+
+// PATCH /api/workshop/items/:workshopItemId
+export interface PatchWorkshopItemRequest {
+  materialName?: string
+  roughAmount?: string | null
+}
+
+/** Undo move / used up / wasn't there / put back. sourceItem is null when the
+ *  item was added by hand and so has no source row to update. */
+export interface WorkshopActionResponse {
+  workshopItem: WorkshopItem
+  sourceItem: MemoryViewItem | null
 }

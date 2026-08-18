@@ -28,6 +28,13 @@ vi.mock('../api', async (importOriginal) => {
     // The book level asks for cross-job Money; these tests are about job
     // switching, so it answers with nothing to show.
     getBookMoney: vi.fn(() => Promise.resolve({ bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null })),
+    // Workshop has its own suite (workshop.test.tsx). Here it is the empty
+    // destination: the row exists, with no count and no preview.
+    getWorkshop: vi.fn(() => Promise.resolve({
+      generatedAt: '2026-08-18T09:00:00.000Z',
+      bookHome: { showWorkshopRow: true, availableCount: 0, availableLabel: null, previewItems: [] },
+      availableItems: [],
+    })),
     ApiError: actual.ApiError,
   }
 })
