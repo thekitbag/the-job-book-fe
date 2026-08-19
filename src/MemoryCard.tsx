@@ -7,6 +7,7 @@ import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
 import { CATEGORY_ASSIGNABLE_TYPES, costDetailRows, deriveEachTotal, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
 import type { MarkPaidControls } from './markPaid'
+import { WORKSHOP_CHIP_LABEL, workshopState, workshopStateDetail, type WorkshopSourceControls } from './workshopSource'
 import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
 
 // Types shown with a structured type label + detail rows (not a prose summary).
@@ -175,6 +176,9 @@ export interface MemoryCardProps {
   // Budget cost items only (sheet variant): mark-as-paid capability, when the
   // surrounding tab wires Money. Absent everywhere else.
   markPaid?: MarkPaidControls
+  // Left over items only (sheet variant): move to / put back in the Workshop,
+  // when the surrounding tab wires it. Absent everywhere else.
+  workshop?: WorkshopSourceControls
   // 'row' is the compact item scale used where rows must not be confusable with
   // the category bands above them (Spend → not in a category yet): a smaller
   // name, one primary action, everything else behind the row's "…".
@@ -208,6 +212,7 @@ export default function MemoryCard({
   onMove,
   onReturn,
   markPaid,
+  workshop,
   variant = 'card',
   autoOpen = false,
 }: MemoryCardProps) {
@@ -228,10 +233,16 @@ export default function MemoryCard({
   const dateLabel = DATED_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
   const name = itemName(item)
   const price = itemPrice(item)
-  const move = MOVE_TARGET[item.memoryType]
+  // Material believed to be in the Workshop is no longer stock sitting on this
+  // job, so the two actions that claim it is — reclassifying it as Used, and
+  // taking it back to the merchant — are withheld until it comes back out. That
+  // keeps the job and the Workshop from stating contradictory things about the
+  // same physical pile; both actions return the moment the move is undone.
+  const inWorkshop = workshopState(item) !== 'not_moved'
+  const move = inWorkshop ? undefined : MOVE_TARGET[item.memoryType]
   // Returning is a real job event, so it is only offered where one can happen:
   // a Left over item Mike still has. Delete stays for mistakes.
-  const canReturn = item.memoryType === 'leftover_material'
+  const canReturn = item.memoryType === 'leftover_material' && !inWorkshop
 
   if (isEditing) {
     return (
@@ -266,14 +277,24 @@ export default function MemoryCard({
     const meta = (isLabour
       ? [item.labourPerson, item.labourHours ? `${item.labourHours}h` : null, rateLabel]
       : [
-          [item.quantity, item.unit].filter(Boolean).join(' ') || null,
+          // While a leftover is linked to the Workshop, the Workshop's current
+          // wording is the current amount — one memory, one amount, wherever
+          // Mike is looking at it.
+          (inWorkshop ? item.workshopRoughAmount : null)
+            ?? ([item.quantity, item.unit].filter(Boolean).join(' ') || null),
           item.supplierName ? `from ${item.supplierName}` : null,
           // Where a leftover actually is ("in the van") is the point of recording it.
           item.locationOrUse,
           refund ? `${refund} refund` : null,
         ]
-    ).concat(dateLabel ? [dateLabel] : []).filter(Boolean).join(' · ')
+    ).concat(dateLabel ? [dateLabel] : [])
+      // Where the material now stands with the Workshop, dated: "in the
+      // workshop since 6 Aug", "used up 12 Aug". The state itself is a chip
+      // above; this is the when.
+      .concat([workshopStateDetail(item)])
+      .filter(Boolean).join(' · ')
     const label = name ?? item.summary
+    const workshopChip = WORKSHOP_CHIP_LABEL[workshopState(item)]
     // Uncategorised cost entries can be filed to a category from the drawer.
     // Already-categorised items deliberately do NOT get this shortcut: changing
     // an existing category is a correction, and corrections live in Fix memory.
@@ -292,6 +313,10 @@ export default function MemoryCard({
                   into a payments line. Budget inclusion is unaffected. */}
               {isPaid && <span className="mem-row-paid-tag">Paid</span>}
             </span>
+            {/* Workshop state in words on its own line, never by fading the row:
+                a used-up leftover is still something Mike recorded, and the job
+                still keeps every cost it ever counted for it. */}
+            {workshopChip && <span className="mem-row-workshop-chip">{workshopChip}</span>}
             {meta && <span className="mem-row-tap-meta">{meta}</span>}
           </span>
           {price && <span className="mem-row-tap-price">{price}</span>}
@@ -333,6 +358,7 @@ export default function MemoryCard({
           assigningCategory={assigningCategory}
           onReturnStart={canReturn ? () => { setDrawerOpen(false); setReturning(true) } : undefined}
           markPaid={markPaid}
+          workshop={workshop}
           move={move}
           onMove={onMove}
           mutating={mutating}

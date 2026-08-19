@@ -52,15 +52,18 @@ test.describe('Job status update', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('a planning job stays visible and selectable on Book Home', async ({ page }) => {
+  test('a planning job stays visible and selectable in the jobs index', async ({ page }) => {
     await openStatusSheet(page)
     await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
     await page.waitForTimeout(500)
 
+    // Book Home counts the states; the index behind its Jobs row is where the
+    // job itself now shows, under the group its new status puts it in.
     await page.getByRole('button', { name: /the job book/i }).click()
-    const item = page.getByRole('button', { name: /Garden Room/ })
-    await expect(item).toBeVisible()
-    await expect(item).toContainText('Planning')
+    await expect(page.getByRole('button', { name: /^Jobs/ })).toContainText('3 planning')
+    await page.getByRole('button', { name: /^Jobs/ }).click()
+    const planning = page.getByRole('region', { name: 'Planning' })
+    await expect(planning.getByRole('button', { name: /Garden Room/ })).toBeVisible()
   })
 
   test('changing status to Finished keeps the job selected', async ({ page }) => {

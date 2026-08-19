@@ -5,6 +5,7 @@ import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
 import { safeRefund } from './memoryScan'
 import type { MarkPaidControls } from './markPaid'
+import { canMoveToWorkshop, canPutBackInWorkshop, type WorkshopSourceControls } from './workshopSource'
 import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem } from './types'
 
 const SPEND_TYPES = new Set<string>(['ordered_material', 'labour'])
@@ -43,6 +44,7 @@ export default function ItemActionDrawer({
   assigningCategory,
   onReturnStart,
   markPaid,
+  workshop,
   move,
   onMove,
   canEdit = true,
@@ -67,6 +69,9 @@ export default function ItemActionDrawer({
   onReturnStart?: () => void
   // Budget cost items only: mark the item paid (records Money out, not Budget).
   markPaid?: MarkPaidControls
+  // Confirmed leftovers only: move this material into the cross-job Workshop,
+  // or put back a mistaken terminal outcome.
+  workshop?: WorkshopSourceControls
   move?: { type: MemoryType; label: string }
   onMove: (type: MemoryType) => void
   canEdit?: boolean
@@ -146,6 +151,41 @@ export default function ItemActionDrawer({
             {canPickCategory && (
               <button type="button" className="row-sheet-opt" disabled={assigningCategory} onClick={() => setSub('category')}>
                 Choose category <span aria-hidden="true">›</span>
+              </button>
+            )}
+            {/* Moving a leftover to the Workshop is a classification of a
+                memory that already exists, so it is offered wherever that
+                leftover is — including on a Finished job, which it neither
+                reopens nor changes the status of. The consequence line is the
+                one routine place the money answer needs stating; nothing after
+                the move repeats it. */}
+            {workshop && canMoveToWorkshop(item) && (
+              <button
+                type="button"
+                className="row-sheet-opt row-sheet-opt--primary row-sheet-opt--stacked"
+                disabled={workshop.pendingItemId === item.id}
+                onClick={() => { workshop.onMoveToWorkshop(item); onClose() }}
+              >
+                <span className="row-sheet-opt-main">
+                  <span className="row-sheet-opt-label">
+                    {workshop.pendingItemId === item.id ? 'Moving…' : 'Move to the Workshop'}
+                  </span>
+                  <span className="row-sheet-opt-sub">No new cost. Budget and Money stay as they are.</span>
+                </span>
+                <span aria-hidden="true">›</span>
+              </button>
+            )}
+            {/* A used-up or never-there outcome stays correctable from the job
+                it came from. It reactivates the same Workshop item — there is
+                no path here that creates a second one. */}
+            {workshop && canPutBackInWorkshop(item) && (
+              <button
+                type="button"
+                className="row-sheet-opt"
+                disabled={workshop.pendingItemId === item.id}
+                onClick={() => { workshop.onPutBackInWorkshop(item); onClose() }}
+              >
+                {workshop.pendingItemId === item.id ? 'Putting back…' : 'Put back in the Workshop'} <span aria-hidden="true">›</span>
               </button>
             )}
             {onReturnStart && (

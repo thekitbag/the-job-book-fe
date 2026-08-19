@@ -5,6 +5,7 @@ import { MOCK_JOBS } from './jobs'
 import { mockFindLabourPerson } from './labourPeople'
 import { assertMockPaidEligible, recordMockPaid, recordMockRefund } from './money'
 import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
+import { mockDecorateWorkshopState } from './workshop'
 
 export function mockMemoryView(jobId: string): MemoryViewResponse {
   const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
@@ -13,7 +14,13 @@ export function mockMemoryView(jobId: string): MemoryViewResponse {
     job,
     generatedAt: new Date().toISOString(),
     // Deep-ish copy so callers cannot mutate the stored fixture in place.
-    sections: sections.map(s => ({ ...s, items: s.items.map(it => ({ ...it })) })),
+    // Leftovers additionally carry their current Workshop state, which the real
+    // backend serves as read-model fields on the same items — the source job is
+    // where a leftover's Workshop state is answered, not a second fetch.
+    sections: sections.map(s => ({
+      ...s,
+      items: s.items.map(it => mockDecorateWorkshopState(jobId, { ...it })),
+    })),
     stillToCheck: {
       count: 2,
       items: [
