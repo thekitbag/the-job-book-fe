@@ -145,7 +145,7 @@ test.describe('Cross-job Money (read-only)', () => {
 
     await page.getByRole('button', { name: /^Open Sydenhams,/ }).click()
     await expect(page.getByRole('heading', { name: /Sydenhams/ })).toBeVisible()
-    await expect(page.getByText(/To pay · 4 purchases · 3 jobs/)).toBeVisible()
+    await expect(page.getByText(/To pay · 6 purchases · 3 jobs/)).toBeVisible()
     await expectNoAccountEditing(page)
     await expectNoHorizontalOverflow(page)
 

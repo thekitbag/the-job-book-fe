@@ -6115,6 +6115,12 @@ a.row-sheet-opt { text-decoration: none; }
 }
 .sap-source-row:active { background: var(--grey-press); }
 .sap-source-name { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--grey-text); overflow-wrap: anywhere; }
+/* The purchase date leads its line in ink, so two near-identical items are
+   told apart by the one thing that differs. It stays lighter than the payment
+   date in the receipt header — that is the only "Paid" date here, and it keeps
+   the heavier treatment. */
+.sap-source-date { color: var(--ink); font-weight: 700; }
+.sap-source-sep { color: var(--grey-hairline); }
 .sap-source-amount { font-size: var(--text-sm); color: var(--grey-text); flex-shrink: 0; }
 
 .sap-receipt-actions { border-top: var(--rule-heavy); }

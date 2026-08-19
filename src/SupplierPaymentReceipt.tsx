@@ -3,7 +3,7 @@ import { isSettlementUnavailable, patchSupplierPaymentDate, undoSupplierPayment 
 import { track } from './analytics'
 import BottomSheet from './BottomSheet'
 import { moneyFigure } from './memoryScan'
-import type { SupplierAccountPaymentReceipt } from './types'
+import type { SupplierAccountPaymentReceipt, SupplierPaymentSourceLine } from './types'
 
 /**
  * The allocation receipt: what one real supplier payment covered, and how much
@@ -23,6 +23,27 @@ type Sub = 'summary' | 'confirm-undo' | 'change-date'
 
 function figure(amount: string, label: string): string {
   return moneyFigure(amount, 'GBP') ?? label
+}
+
+/**
+ * When the purchase happened, in the backend's words.
+ *
+ * Two dates live on this receipt and they mean different things: the payment
+ * date at the top (when money left the bank) and these, one per cost (when each
+ * purchase happened). Nothing here derives one from the other — a cost with no
+ * recorded date says so, rather than borrowing the payment's date and quietly
+ * inventing evidence Mike would then try to match against a statement.
+ *
+ * `sourceDateLabel` is the backend's to give. A date with no label is formatted
+ * here the way money amounts are — formatting, not invention — and a genuinely
+ * absent date falls back to the fixed wording.
+ */
+const NO_SOURCE_DATE = 'Date not recorded'
+
+function sourceDateLabel(line: SupplierPaymentSourceLine): string {
+  if (line.sourceDateLabel) return line.sourceDateLabel
+  if (!line.sourceDate) return NO_SOURCE_DATE
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(line.sourceDate))
 }
 
 // Today in the user's own calendar, for the date input's ceiling: a payment
@@ -193,15 +214,29 @@ export default function SupplierPaymentReceiptSheet({
               <ul className="sap-source-lines">
                 {allocation.sourceLines.map(line => {
                   const title = [line.itemLabel, line.quantityLabel].filter(Boolean).join(', ')
+                  const when = sourceDateLabel(line)
                   return (
                   <li key={line.sourceMemoryItemId}>
                     <button
                       type="button"
                       className="sap-source-row"
-                      aria-label={`Open ${title} on ${allocation.jobTitle}`}
+                      // The date trails the name so the accessible label keeps
+                      // the same "Open <item> on <job>" opening as every other
+                      // source row in the app, while still carrying the one
+                      // thing that distinguishes two identical-looking costs.
+                      aria-label={`Open ${title} on ${allocation.jobTitle}, ${when}`}
                       onClick={() => onOpenSource({ jobId: allocation.jobId, sourceMemoryItemId: line.sourceMemoryItemId })}
                     >
-                      <span className="sap-source-name">{title}</span>
+                      <span className="sap-source-name">
+                        {/* When the purchase happened, leading the line — it is
+                            what tells two near-identical timber buys apart.
+                            Never prefixed "Paid": these costs were not paid on
+                            these dates, they were paid together, once, on the
+                            date at the top of this receipt. */}
+                        <span className="sap-source-date">{when}</span>
+                        <span className="sap-source-sep" aria-hidden="true"> · </span>
+                        {title}
+                      </span>
                       <span className="sap-source-amount">{line.amountLabel}</span>
                       <span className="book-chev" aria-hidden="true">›</span>
                     </button>
