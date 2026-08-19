@@ -133,25 +133,34 @@ describe('Workshop across jobs', () => {
     return user.click(screen.getByRole('button', { name: `Open ${name}` }))
   }
 
-  it('shows the count and a preview of the first three available items on Book Home', async () => {
+  it('shows the count and a taste of what is in there on Book Home', async () => {
     const user = userEvent.setup()
     await launch()
     await gotoBookHome(user)
 
     const expected = mockGetWorkshop().bookHome
-    expect(screen.getByRole('button', { name: new RegExp(`^Workshop.*${expected.availableLabel}`) })).toBeInTheDocument()
-    // The preview is the backend's first three, not a separate pick. Scoped to
-    // the preview block, since a source job's name also appears in the job list
-    // above — which is the point: the preview names jobs Mike already knows.
+    const row = screen.getByRole('button', { name: /^Workshop/ })
+    expect(row).toHaveTextContent(expected.availableLabel!)
+    // The summary names the backend's first three, then says how many more —
+    // so the cover cannot name something the Workshop page fails to list.
     expect(expected.previewItems).toHaveLength(3)
-    const preview = document.querySelector('.book-workshop-preview') as HTMLElement
-    const rows = within(preview).getAllByRole('listitem')
-    expect(rows).toHaveLength(3)
-    expected.previewItems.forEach((item, i) => {
-      expect(rows[i]).toHaveTextContent(item.materialName)
-      expect(rows[i]).toHaveTextContent(item.sourceLabel)
-      if (item.roughAmount) expect(rows[i]).toHaveTextContent(item.roughAmount)
-    })
+    for (const item of expected.previewItems) {
+      expect(row).toHaveTextContent(item.materialName)
+    }
+    expect(row).toHaveTextContent(`+${expected.availableCount - 3} more`)
+  })
+
+  it('names the material and nothing else in the Book Home summary', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoBookHome(user)
+
+    const row = screen.getByRole('button', { name: /^Workshop/ })
+    // Provenance and rough amounts belong on the Workshop page. The cover is an
+    // invitation to look, not a second place to read the same detail.
+    expect(row).not.toHaveTextContent('about 3 sheets')
+    expect(row).not.toHaveTextContent(KITCHEN.title)
+    expect(row).not.toHaveTextContent('Added by hand')
   })
 
   it('keeps a bare Workshop row when the workshop is empty, with no zero and no Record', async () => {

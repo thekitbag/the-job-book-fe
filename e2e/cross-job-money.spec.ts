@@ -77,7 +77,7 @@ test.describe('Cross-job Money (read-only)', () => {
     await openBookHome(page)
 
     await expect(page.getByRole('button', { name: /^Money/ })).toContainText('to pay on accounts')
-    const lines = await page.locator('.book-money-line').allTextContents()
+    const lines = await page.locator('.book-dest-line').allTextContents()
     const owedRow = lines.find(l => /still to receive/.test(l))!
     const payRow = lines.find(l => /to pay on accounts/.test(l))!
 
@@ -112,8 +112,9 @@ test.describe('Cross-job Money (read-only)', () => {
 
     await expect(page.getByRole('button', { name: /^Money/ })).toHaveCount(0)
     await expect(page.getByText(/£0|nothing owed|nothing to pay|settled/i)).toHaveCount(0)
-    // the jobs index is untouched by Money having nothing to say
-    await expect(page.getByRole('button', { name: /Garden Room/ })).toBeVisible()
+    // the other destinations are untouched by Money having nothing to say
+    await expect(page.getByRole('button', { name: /^Jobs/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Workshop/ })).toBeVisible()
   })
 
   test('a cost with no price is the whole reason to open Money', async ({ page }) => {

@@ -31,3 +31,24 @@ export function liveJobs(jobs: Job[]): Job[] {
 export function indexedJobs(jobs: Job[]): Job[] {
   return [...liveJobs(jobs), ...jobsInGroup(jobs, 'finished')]
 }
+
+/**
+ * How the book counts itself: work in hand, work being planned, work done.
+ *
+ * Book Home states these rather than listing the jobs themselves, so the count
+ * and the All Jobs index it opens have to come from the same filter — which is
+ * why this lives here next to the grouping rather than in the screen.
+ */
+export interface JobCounts {
+  onTheGo: number
+  planning: number
+  finished: number
+}
+
+export function jobCounts(jobs: Job[]): JobCounts {
+  return {
+    onTheGo: jobsInGroup(jobs, 'started').length,
+    planning: jobsInGroup(jobs, 'planning').length,
+    finished: jobsInGroup(jobs, 'finished').length,
+  }
+}

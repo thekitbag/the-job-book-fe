@@ -74,10 +74,11 @@ const JOB_B_ROW = { id: 'job-002', title: 'Kitchen Extension', jobType: 'extensi
 // The book level (Book Home → All Jobs → New job) is covered for real in
 // bookhome.test.tsx; here it is stubbed down to the two things App owns:
 // which job gets selected, and which job gets added.
+// Book Home is three destination rows now and opens no job itself — the job
+// index behind its Jobs row is what does that.
 vi.mock('../BookHomeScreen', () => ({
-  default: ({ onOpenJob, onOpenAllJobs }: { onOpenJob: (j: unknown) => void; onOpenAllJobs: () => void }) => (
+  default: ({ onOpenAllJobs }: { onOpenAllJobs: () => void }) => (
     <div data-testid="book-home-screen">
-      <button onClick={() => onOpenJob(JOB_B_ROW)}>mock-select-job-b</button>
       <button onClick={onOpenAllJobs}>mock-open-all-jobs</button>
     </div>
   ),
@@ -250,6 +251,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
     await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-all-jobs/i }))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
 
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
@@ -265,6 +267,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
     await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-all-jobs/i }))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
 
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
@@ -286,6 +289,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
     await waitFor(() => screen.getByTestId('book-home-screen'))
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-all-jobs/i }))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
@@ -397,6 +401,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
     await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-all-jobs/i }))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 
@@ -439,6 +444,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mock-open-book-home/i }))
     await waitFor(() => expect(screen.getByTestId('book-home-screen')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mock-open-all-jobs/i }))
     fireEvent.click(screen.getByRole('button', { name: /mock-select-job-b/i }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', JOB_B.id))
 

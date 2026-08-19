@@ -23,7 +23,7 @@ async function openBookHome(page: Page) {
 
 async function openAllJobs(page: Page) {
   await openBookHome(page)
-  await page.getByRole('button', { name: 'All jobs', exact: true }).click()
+  await page.getByRole('button', { name: /^Jobs/ }).click()
   await expect(page.getByRole('heading', { name: /^All jobs/ })).toBeVisible()
 }
 
@@ -37,27 +37,31 @@ test.describe('Book Home and job navigation', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('Book Home lists live jobs, omits finished ones, and has no Record', async ({ page }) => {
+  test('Book Home is three destination rows and names no job', async ({ page }) => {
     await openBookHome(page)
 
-    await expect(page.getByRole('button', { name: /Garden Room/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Grant James Roof/ })).toContainText('Planning')
-    // Finished work is not on the cover at all — not as rows, not as a count.
-    // "All jobs ›" above is the one route to it.
-    await expect(page.getByRole('button', { name: /Whitmore Patio/ })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /finished jobs/i })).toHaveCount(0)
+    // The cover counts the work; it does not list it. Opening a job happens on
+    // the index behind the Jobs row.
+    const jobs = page.getByRole('button', { name: /^Jobs/ })
+    await expect(jobs).toContainText('2 in progress')
+    await expect(jobs).toContainText('2 planning · 2 finished')
+    await expect(page.getByRole('button', { name: /^Money/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Workshop/ })).toBeVisible()
 
-    // No global Record: recording always belongs to a named job. Money is now a
-    // real destination (see cross-job-money.spec.ts); Workshop and "to check"
-    // are still design-pack futures with nothing behind them.
+    for (const title of ['Garden Room', 'Kitchen Extension', 'Grant James Roof', 'Whitmore Patio']) {
+      await expect(page.getByRole('button', { name: new RegExp(title) })).toHaveCount(0)
+    }
+
+    // No global Record: recording always belongs to a named job. The design's
+    // cross-job "things to check" count has no source yet, so it is absent
+    // rather than derived here.
     await expect(page.getByRole('button', { name: /record/i })).toHaveCount(0)
-    await expect(page.getByText(/workshop/i)).toHaveCount(0)
     await expect(page.getByText(/to check/i)).toHaveCount(0)
   })
 
-  test('opening another job from Book Home changes the Record destination', async ({ page }) => {
+  test('opening another job through the Jobs row changes the Record destination', async ({ page }) => {
     await expect(page.locator('.ws-record-sub')).toContainText('Garden Room')
-    await openBookHome(page)
+    await openAllJobs(page)
     await page.getByRole('button', { name: /Kitchen Extension/ }).click()
 
     await expect(page.locator('.ws-job-title')).toHaveText('Kitchen Extension')
@@ -82,8 +86,7 @@ test.describe('Book Home and job navigation', () => {
   })
 
   test('the finished work is reachable through All jobs', async ({ page }) => {
-    await openBookHome(page)
-    await page.getByRole('button', { name: 'All jobs', exact: true }).click()
+    await openAllJobs(page)
 
     // Listed under its own heading with its own count — no scroll-to-group
     // trick now that nothing deep-links into a group.
@@ -141,13 +144,12 @@ test.describe('Book Home and job navigation', () => {
 
     await expect(page.getByRole('heading', { name: 'All jobs 6' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Never Created/ })).toHaveCount(0)
-    await page.getByRole('button', { name: /back to the job book/i }).click()
     await page.getByRole('button', { name: /Garden Room/ }).click()
     await expect(page.locator('.ws-job-title')).toHaveText('Garden Room')
   })
 
   test('browser Back does not trap the app or switch to the wrong job', async ({ page }) => {
-    await openBookHome(page)
+    await openAllJobs(page)
     await page.getByRole('button', { name: /Kitchen Extension/ }).click()
     await expect(page.locator('.ws-job-title')).toHaveText('Kitchen Extension')
 

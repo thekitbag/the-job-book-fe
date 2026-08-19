@@ -43,16 +43,12 @@ async function openWorkshop(page: Page) {
   await expect(page.getByRole('heading', { name: /^Workshop/ })).toBeVisible()
 }
 
+// Every job is opened from the index behind Book Home's Jobs row — the cover
+// itself no longer names one.
 async function openJob(page: Page, title: string) {
   await openBookHome(page)
-  const inList = page.getByRole('button', { name: new RegExp(`^${title}`) })
-  if (await inList.count()) {
-    await inList.first().click()
-  } else {
-    // Finished jobs live behind All jobs, under their own heading.
-    await page.getByRole('button', { name: 'All jobs', exact: true }).click()
-    await page.getByRole('button', { name: new RegExp(`^${title}`) }).first().click()
-  }
+  await page.getByRole('button', { name: /^Jobs/ }).click()
+  await page.getByRole('button', { name: new RegExp(`^${title}`) }).first().click()
   await expect(page.getByRole('button', { name: /the job book/i })).toBeVisible()
 }
 
@@ -86,11 +82,13 @@ test.describe('Workshop', () => {
     await gotoApp(page)
     await openBookHome(page)
 
-    await expect(page.getByRole('button', { name: /^Workshop.*6 things/ })).toBeVisible()
-    const preview = page.locator('.book-workshop-preview')
-    await expect(preview.getByRole('listitem')).toHaveCount(3)
-    await expect(preview).toContainText('OSB')
-    await expect(preview).toContainText('about 3 sheets')
+    const row = page.getByRole('button', { name: /^Workshop/ })
+    await expect(row).toContainText('6 things')
+    // A taste of what is in there: the first three materials, then how many
+    // more. Provenance and rough amounts stay on the Workshop page.
+    await expect(row).toContainText('OSB')
+    await expect(row).toContainText('+3 more')
+    await expect(row).not.toContainText('about 3 sheets')
     await expectNoHorizontalOverflow(page)
   })
 
@@ -102,7 +100,7 @@ test.describe('Workshop', () => {
     const row = page.getByRole('button', { name: /^Workshop/ })
     await expect(row).toBeVisible()
     await expect(row).not.toContainText('0')
-    await expect(page.locator('.book-workshop-preview')).toHaveCount(0)
+    await expect(row).not.toContainText('more')
 
     await openWorkshop(page)
     await expect(page.getByText('Nothing in the workshop yet')).toBeVisible()
@@ -182,7 +180,7 @@ test.describe('Workshop', () => {
 
     // The job is still finished.
     await openBookHome(page)
-    await page.getByRole('button', { name: 'All jobs', exact: true }).click()
+    await page.getByRole('button', { name: /^Jobs/ }).click()
     const finished = page.getByRole('region', { name: 'Finished' })
     await expect(finished.getByRole('button', { name: new RegExp(WHITMORE) })).toBeVisible()
   })

@@ -373,7 +373,6 @@ export default function App() {
         jobs={jobs}
         money={bookMoney?.bookHome ?? null}
         workshop={workshopData?.bookHome ?? null}
-        onOpenJob={handleSelectJob}
         onOpenAllJobs={() => setView('allJobs')}
         onOpenMoney={() => { track('book_money_opened'); loadBookMoney(); setView('bookMoney') }}
         onOpenWorkshop={openWorkshop}

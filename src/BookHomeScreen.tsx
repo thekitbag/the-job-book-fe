@@ -1,15 +1,34 @@
-import { liveJobs } from './jobGroups'
+import type { ReactNode } from 'react'
+import { jobCounts } from './jobGroups'
 import { moneyFigure } from './memoryScan'
 import type { BookMoneyResponse, Job, WorkshopResponse } from './types'
 
 /**
+ * Book Home — the cover of The Job Book, one level above a single job.
+ *
+ * Three destinations, and nothing else: Jobs, Money, Workshop. It used to list
+ * the live jobs by name, which made the cover grow with the business and put a
+ * job list immediately above a page that is itself a job list. Now it says how
+ * much of each thing there is and hands over to the page that owns it.
+ *
+ * It is still not a dashboard. No Record bar — recording always happens inside
+ * a named job — and no row invents a figure: each one either has something the
+ * backend said, or says nothing at all rather than a 0.
+ *
+ * Coming here never changes which job is selected for recording. Only opening
+ * a job does that, and that now happens on All Jobs.
+ */
+
+/**
  * "£6,088 to pay on accounts" — one sentence, two weights: the figure carries,
- * the words explain.
+ * the words explain. The same grammar as "3 in progress" and "6 things", which
+ * is what makes the three rows read as peers rather than as three different
+ * ideas.
  *
  * The figure is formatted here from the backend's amount, the way every money
  * figure in the app is (`£6,088`, not the backend label's bare `£6088`); the
- * words are the direction's fixed copy. Formatting only — whether a direction
- * appears at all, and what it totals, remains entirely the backend's call.
+ * words are fixed copy. Formatting only — whether a line appears at all, and
+ * what it totals, remains entirely the backend's call.
  */
 function MoneyLine({ amount, currency, words, fallback }: {
   amount: string | null
@@ -18,32 +37,78 @@ function MoneyLine({ amount, currency, words, fallback }: {
   fallback: string
 }) {
   const figure = moneyFigure(amount, currency ?? 'GBP')
-  if (!figure) return <span className="book-money-words">{fallback}</span>
+  if (!figure) return <span className="book-dest-words">{fallback}</span>
   return (
     <>
-      <span className="book-money-amount">{figure}</span>
-      <span className="book-money-words"> {words}</span>
+      <span className="book-dest-figure">{figure}</span>
+      <span className="book-dest-words"> {words}</span>
     </>
   )
 }
 
 /**
- * Book Home — the cover of The Job Book, one level above a single job.
+ * "3 in progress" / "6 things" — a count in ink, its noun in grey.
  *
- * It answers which job to open, and — since the cross-job Money slice — points
- * at the one thing that is true across all of them: money still moving in Mike's
- * direction or out of it. It is still not a dashboard: no Record bar (recording
- * always happens inside a named job), no counts of things to check, and no
- * placeholder rows for sections that don't exist yet.
- *
- * Coming here never changes which job is selected for recording. Only tapping
- * a job does that.
+ * "In progress" is the word the rest of the book already uses for a started job
+ * (see JOB_GROUP_LABELS, and the group heading on All Jobs). A synonym here
+ * would make the cover and the index it opens sound like two different systems.
  */
+function CountLine({ count, noun }: { count: number; noun: string }) {
+  return (
+    <>
+      <span className="book-dest-figure">{count}</span>
+      <span className="book-dest-words"> {noun}</span>
+    </>
+  )
+}
+
+/**
+ * One destination row. Name and an optional quiet sub-line on the left; one or
+ * two right-aligned lines on the right; a chevron, because every one of these
+ * goes somewhere.
+ */
+function DestinationRow({ name, sub, lines, onOpen }: {
+  name: string
+  sub?: ReactNode
+  lines?: ReactNode[]
+  onOpen: () => void
+}) {
+  return (
+    <button type="button" className="book-dest-row" onClick={onOpen}>
+      <span className="book-dest-text">
+        <span className="book-dest-name">{name}</span>
+        {sub && <span className="book-dest-sub">{sub}</span>}
+      </span>
+      {lines && lines.length > 0 && (
+        <span className="book-dest-lines">
+          {lines.map((line, i) => <span key={i} className="book-dest-line">{line}</span>)}
+        </span>
+      )}
+      <span className="book-chev" aria-hidden="true">›</span>
+    </button>
+  )
+}
+
+/**
+ * "OSB · Screws, 5.0×80 · Concrete · +3 more" — a taste of what is in there.
+ *
+ * Built from the same preview the backend already sends the Workshop page, so
+ * the cover cannot name something the page then fails to list. Separated with
+ * "·" rather than commas because material names contain their own commas
+ * ("Screws, 5.0×80"), and a comma-joined list would silently read as more
+ * items than there are.
+ */
+function workshopSummary(workshop: WorkshopResponse['bookHome']): string | null {
+  const names = workshop.previewItems.map(i => i.materialName)
+  if (names.length === 0) return null
+  const rest = workshop.availableCount - names.length
+  return [...names, ...(rest > 0 ? [`+${rest} more`] : [])].join(' · ')
+}
+
 export default function BookHomeScreen({
   jobs,
   money,
   workshop,
-  onOpenJob,
   onOpenAllJobs,
   onOpenMoney,
   onOpenWorkshop,
@@ -54,27 +119,36 @@ export default function BookHomeScreen({
   // does no money arithmetic of its own, so the row can never disagree with
   // the Money overview it opens.
   money: BookMoneyResponse['bookHome'] | null
-  // The backend's Workshop summary, or null while it loads / if it failed. The
-  // count and the preview are the backend's first three available items — this
-  // screen never counts or picks its own, so the cover cannot promise something
-  // the Workshop page then fails to list.
+  // The backend's Workshop summary, on the same terms.
   workshop: WorkshopResponse['bookHome'] | null
-  onOpenJob: (job: Job) => void
   onOpenAllJobs: () => void
   onOpenMoney: () => void
   onOpenWorkshop: () => void
 }) {
-  const live = liveJobs(jobs)
+  const counts = jobCounts(jobs)
+  // Planning and finished ride together under the headline count, and a zero
+  // simply drops out — "0 planning" is a fact about nothing.
+  const jobsSub = [
+    counts.planning > 0 ? `${counts.planning} planning` : null,
+    counts.finished > 0 ? `${counts.finished} finished` : null,
+  ].filter(Boolean).join(' · ')
 
-  // One Money row, shown only when the backend says there is something to say.
-  // Each line appears only if the backend supplied its label — so no £0, no
-  // "nothing owed", and no settlement copy can reach this screen. When the only
-  // useful signal is a cost with no price, that is what the row says.
   const showMoney = !!money?.showMoneyRow
   const hasOwed = !!money?.owedToMeLabel
   const hasToPay = !!money?.toPayOnAccountsLabel
   // Missing prices speak only when they are the whole reason to open Money.
   const needsPrice = !hasOwed && !hasToPay ? money?.missingPriceLabel ?? null : null
+
+  const moneyLines: ReactNode[] = []
+  if (hasOwed) {
+    moneyLines.push(<MoneyLine amount={money!.owedToMeAmount} currency={money!.owedToMeCurrency} words="still to receive" fallback={money!.owedToMeLabel!} />)
+  }
+  if (hasToPay) {
+    moneyLines.push(<MoneyLine amount={money!.toPayOnAccountsAmount} currency={money!.toPayOnAccountsCurrency} words="to pay on accounts" fallback={money!.toPayOnAccountsLabel!} />)
+  }
+  if (needsPrice) moneyLines.push(<span className="book-dest-words">{needsPrice}</span>)
+
+  const workshopSub = workshop ? workshopSummary(workshop) : null
 
   return (
     <div className="book-page">
@@ -85,94 +159,46 @@ export default function BookHomeScreen({
       </header>
 
       <div className="book-body">
-        <div className="book-section-head">
-          <h2 className="book-section-label" id="jobs-on-the-book">Jobs on the book</h2>
-          <button type="button" className="book-link" onClick={onOpenAllJobs}>
-            All jobs<span className="book-chev" aria-hidden="true">›</span>
-          </button>
+        <div className="book-dest-list">
+          {/* Jobs leads, because it is the one Mike opens most and the only one
+              that is about the work rather than about a total. Its sub-line is
+              deliberately empty for now: the design puts a cross-job "things to
+              check" count there, and no such count exists yet — inventing one
+              here would mean the cover disagreeing with the jobs. */}
+          <DestinationRow
+            name="Jobs"
+            lines={[
+              counts.onTheGo > 0 ? <CountLine count={counts.onTheGo} noun="in progress" /> : null,
+              jobsSub ? <span className="book-dest-words">{jobsSub}</span> : null,
+            ].filter(Boolean) as ReactNode[]}
+            onOpen={onOpenAllJobs}
+          />
+
+          {/* Shown only when the backend says there is something to say, so no
+              £0 and no "nothing owed" can reach this screen. */}
+          {showMoney && (
+            <DestinationRow
+              name="Money"
+              sub="Across all jobs"
+              lines={moneyLines}
+              onOpen={onOpenMoney}
+            />
+          )}
+
+          {/* Kept even when the workshop is empty — a route that comes and goes
+              is a route Mike cannot learn — but an empty one says nothing about
+              stock: no count, no summary, no explanation. */}
+          {workshop?.showWorkshopRow && (
+            <DestinationRow
+              name="Workshop"
+              sub={workshopSub}
+              lines={workshop.availableLabel
+                ? [<CountLine count={workshop.availableCount} noun={workshop.availableCount === 1 ? 'thing' : 'things'} />]
+                : []}
+              onOpen={onOpenWorkshop}
+            />
+          )}
         </div>
-
-        <ul className="book-job-list" aria-labelledby="jobs-on-the-book">
-          {live.map(job => (
-            <li key={job.id}>
-              <button type="button" className="book-job-row" onClick={() => onOpenJob(job)}>
-                <span className="book-job-name">{job.title}</span>
-                {/* In progress is the ordinary case and goes unsaid; only
-                    Planning earns a word, because it changes what the job is. */}
-                {job.status === 'planning' && <span className="book-job-state">Planning</span>}
-                <span className="book-chev" aria-hidden="true">›</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        {/* Across all jobs, under the one heavy rule, and the last thing on the
-            page: below it the book stops listing jobs and starts summing them
-            up, and nothing sends Mike back to jobs afterwards. */}
-        {showMoney && (
-          <button type="button" className="book-money-row" onClick={onOpenMoney}>
-            <span className="book-money-text">
-              <span className="book-money-name">Money</span>
-              <span className="book-money-scope">Across all jobs</span>
-            </span>
-            <span className="book-money-figures">
-              {hasOwed && (
-                <span className="book-money-line">
-                  <MoneyLine amount={money!.owedToMeAmount} currency={money!.owedToMeCurrency} words="still to receive" fallback={money!.owedToMeLabel!} />
-                </span>
-              )}
-              {hasToPay && (
-                <span className="book-money-line">
-                  <MoneyLine amount={money!.toPayOnAccountsAmount} currency={money!.toPayOnAccountsCurrency} words="to pay on accounts" fallback={money!.toPayOnAccountsLabel!} />
-                </span>
-              )}
-              {needsPrice && <span className="book-money-line book-money-words">{needsPrice}</span>}
-            </span>
-            <span className="book-chev" aria-hidden="true">›</span>
-          </button>
-        )}
-
-        {/* Workshop — the other thing that is true across every job: material
-            Mike may still have. A destination row, kept even when there is
-            nothing in there, because a route that comes and goes is a route he
-            cannot learn. Empty means bare: no 0, no explanation, no Record. */}
-        {workshop?.showWorkshopRow && (
-          <>
-            <button type="button" className="book-money-row book-workshop-row" onClick={onOpenWorkshop}>
-              <span className="book-money-text">
-                <span className="book-money-name">Workshop</span>
-              </span>
-              {workshop.availableLabel && (
-                <span className="book-workshop-count">{workshop.availableLabel}</span>
-              )}
-              <span className="book-chev" aria-hidden="true">›</span>
-            </button>
-            {/* The preview is provenance and rough words, nothing else. It is
-                not a second list to act on — tapping anywhere on the block goes
-                to the same place the row does. */}
-            {workshop.previewItems.length > 0 && (
-              <ul className="book-workshop-preview">
-                {workshop.previewItems.map(item => (
-                  <li key={item.id} className="book-workshop-preview-row">
-                    <span className="book-workshop-preview-name">
-                      {item.materialName}
-                      <span className="book-workshop-preview-source"> · {item.sourceLabel}</span>
-                    </span>
-                    {item.roughAmount && <span className="book-workshop-preview-amount">{item.roughAmount}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
-
-        {/* No Finished jobs row. It sent Mike from jobs, past Money, back to
-            jobs again — and "All jobs ›" at the top of this page already
-            reaches the finished work, where All Jobs lists it under its own
-            heading with the same count. One route is enough.
-
-            When every job is finished this list is simply empty; the route out
-            is still right there above it. */}
       </div>
     </div>
   )

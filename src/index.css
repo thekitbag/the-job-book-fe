@@ -1904,41 +1904,6 @@ code {
 
 .book-chev { color: var(--cobalt); font-weight: 700; margin-left: 0.35rem; flex-shrink: 0; }
 
-/* ── Book Home: jobs on the book ── */
-
-.book-job-list { list-style: none; margin: 0; padding: 0; }
-
-/* Name-first rows, no separators: this is a short standing list, and the
-   type size alone gives it enough structure. */
-.book-job-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  width: 100%;
-  border: none;
-  background: none;
-  padding: 14px 0;
-  min-height: 60px;
-  text-align: left;
-}
-.book-job-row:active { background: var(--grey-press); }
-
-.book-job-name {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-/* Only Planning is spoken. In progress is the ordinary case and repeating it
-   on every row would turn the list into wallpaper. */
-.book-job-state { font-size: var(--text-md); color: var(--grey-text); flex-shrink: 0; }
-
-
 /* ── All Jobs: one grouped index ── */
 
 .alljobs-group { margin-top: 18px; }
@@ -5746,47 +5711,71 @@ a.row-sheet-opt { text-decoration: none; }
    slice. Rows are routes back to the job that owns the fact.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Book Home: one Money row under the heavy rule ── */
+/* ── Book Home: three destination rows ── */
+/* Jobs, Money and Workshop are peers, so they share one row grammar: name (and
+   an optional quiet sub-line) left, right-aligned lines right, chevron last.
+   One heavy rule opens the set; hairlines separate the rows. */
 
-.book-money-row {
+.book-dest-list { border-top: var(--rule-heavy); margin-top: 22px; }
+
+.book-dest-row {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
   width: 100%;
   border: none;
-  border-top: var(--rule-heavy);
+  border-bottom: var(--rule-hair);
   background: none;
   padding: 18px 0;
-  min-height: 64px;
-  margin-top: 18px;
+  min-height: 72px;
   text-align: left;
 }
-.book-money-row:active { background: var(--grey-press); }
+.book-dest-row:active { background: var(--grey-press); }
 
-.book-money-text { flex: 1; min-width: 0; }
-.book-money-name {
+/* The figures column is the brittle one — "£12,850 still to receive" has a
+   width it needs and reads badly broken across lines — so it takes what it
+   needs first and the name column absorbs the remainder. */
+.book-dest-text { flex: 1 1 auto; min-width: 0; }
+.book-dest-name {
   display: block;
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 800;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.5px;
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
-.book-money-scope { display: block; font-size: var(--text-sm); color: var(--grey-text); }
+/* "Across all jobs" / "OSB · Screws, 5.0×80 · Concrete · +3 more" — context for
+   the name, never a second thing to act on. Wraps rather than truncating: a
+   preview that trails off says less than one that takes a second line. */
+.book-dest-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--grey-text);
+  overflow-wrap: anywhere;
+}
 
 /* The figures column: right-aligned, and allowed to wrap on a narrow phone
-   rather than shoving the job column into a single letter. */
-.book-money-figures {
+   rather than shoving the name into a single letter. */
+.book-dest-lines {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
+  /* Does not shrink to make room for a long sub-line on the left: "6 things"
+     broken over two lines is a worse read than a summary that wraps. The
+     max-width is the backstop for a figure long enough to crowd the name. */
+  flex: 0 0 auto;
   min-width: 0;
+  max-width: 64%;
   text-align: right;
 }
-.book-money-line { font-size: var(--text-md); overflow-wrap: anywhere; }
-.book-money-amount { font-weight: 700; color: var(--ink); }
-.book-money-words { color: var(--grey-text); }
+.book-dest-line { font-size: var(--text-md); overflow-wrap: anywhere; }
+/* The number carries; the noun explains. Same weight pairing for "3 on the go",
+   "£6,088 to pay" and "6 things", which is what makes the rows read as one set. */
+.book-dest-figure { font-weight: 700; color: var(--ink); }
+.book-dest-words { color: var(--grey-text); }
 
 /* ── Money page ── */
 
@@ -6177,61 +6166,6 @@ a.row-sheet-opt { text-decoration: none; }
    so it is set in the text face rather than the numeric one, and an absent
    amount simply leaves the column empty — never a 0.
    ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── Book Home: the Workshop row + its preview ── */
-
-/* It follows Money under the same heavy rule, so it takes a hairline of its
-   own rather than a second heavy one — one break between jobs and totals. */
-.book-workshop-row {
-  align-items: baseline;
-  border-top: var(--rule-hair);
-  margin-top: 0;
-  min-height: 56px;
-  padding: 16px 0 10px;
-}
-.book-workshop-count {
-  font-size: var(--text-md);
-  font-weight: 700;
-  color: var(--cobalt);
-  flex-shrink: 0;
-}
-
-/* A sunk block, not a list of rows: it previews what is in there and is not
-   itself tappable, so it must not look like three more routes. */
-.book-workshop-preview {
-  list-style: none;
-  margin: 0 0 18px;
-  padding: 2px 14px;
-  background: var(--surface-sunk);
-}
-.book-workshop-preview-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 10px 0;
-  border-bottom: var(--rule-hair);
-}
-.book-workshop-preview-row:last-child { border-bottom: none; }
-.book-workshop-preview-name {
-  flex: 1 1 auto;
-  min-width: 50%;
-  font-size: var(--text-md);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-/* Provenance is context for the material, so it recedes behind it. */
-.book-workshop-preview-source { color: var(--grey-text); }
-.book-workshop-preview-amount {
-  font-size: var(--text-md);
-  font-weight: 700;
-  color: var(--ink);
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 46%;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
 
 /* ── The Workshop page ── */
 

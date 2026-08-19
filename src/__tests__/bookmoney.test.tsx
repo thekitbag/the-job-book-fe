@@ -107,16 +107,18 @@ describe('Cross-job Money (read-only)', () => {
 
   // ── Book Home Money row ───────────────────────────────────────────────────
 
-  it('shows one Money row with both directions, from the backend labels', async () => {
+  it("shows one Money row with both directions, on the backend's figures", async () => {
     const user = userEvent.setup()
     await launch()
     await gotoBookHome(user)
 
     const row = await screen.findByRole('button', { name: /^Money/ })
-    const data = response().bookHome
+    const data = response()
     expect(row).toHaveTextContent('Across all jobs')
-    expect(row).toHaveTextContent(data.owedToMeLabel!)
-    expect(row).toHaveTextContent(data.toPayOnAccountsLabel!)
+    // The figures are the backend's; the words around them are this screen's,
+    // shared with the Jobs and Workshop rows so the three read as one set.
+    expect(row).toHaveTextContent(`${data.owedToMe!.totalLabel} still to receive`)
+    expect(row).toHaveTextContent(`${data.toPayOnAccounts!.totalLabel} to pay on accounts`)
     expect(screen.getAllByText('Money')).toHaveLength(1)
   })
 
@@ -126,7 +128,7 @@ describe('Cross-job Money (read-only)', () => {
     await gotoBookHome(user)
 
     const row = await screen.findByRole('button', { name: /^Money/ })
-    expect(row).toHaveTextContent(response('book-money-owed-only').bookHome.owedToMeLabel!)
+    expect(row).toHaveTextContent(`${response('book-money-owed-only').owedToMe!.totalLabel} still to receive`)
     expect(row).not.toHaveTextContent(/to pay on accounts/i)
   })
 
@@ -158,7 +160,7 @@ describe('Cross-job Money (read-only)', () => {
     const data = response()
 
     const row = await screen.findByRole('button', { name: /^Money/ })
-    expect(row).toHaveTextContent(data.bookHome.toPayOnAccountsLabel!)
+    expect(row).toHaveTextContent(data.toPayOnAccounts!.totalLabel!)
 
     await user.click(row)
     await screen.findByRole('heading', { name: /^Money/ })
@@ -356,8 +358,11 @@ describe('Cross-job Money (read-only)', () => {
     await user.click(screen.getByRole('button', { name: /Open Money for Kitchen Extension/ }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-section', 'money'))
 
+    // Opening the same job the ordinary way — through the job index — lands on
+    // job home, not back on the Money section the entry sent him to.
     await gotoBookHome(user)
-    await user.click(screen.getByRole('button', { name: /Kitchen Extension/ }))
+    await user.click(screen.getByRole('button', { name: /^Jobs/ }))
+    await user.click(await screen.findByRole('button', { name: /Kitchen Extension/ }))
     await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-section', 'home'))
   })
 
