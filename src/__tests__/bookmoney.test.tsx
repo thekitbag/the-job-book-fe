@@ -285,9 +285,16 @@ describe('Cross-job Money (read-only)', () => {
     const rows = screen.getAllByRole('button', { name: /^Open .+ on / })
     expect(rows.map(r => r.querySelector('.bm-row-name')?.textContent))
       .toEqual(group.lines.map(l => [l.itemLabel, l.quantityLabel].filter(Boolean).join(', ')))
-    // oldest first, as the backend ordered them
-    const dates = group.lines.map(l => l.sourceDate!)
-    expect([...dates].sort()).toEqual(dates)
+    // oldest first, as the backend ordered them. A cost with no recorded date
+    // has no place in that ordering, so it is excluded from the check and
+    // asserted separately below.
+    const dated = group.lines.map(l => l.sourceDate).filter((d): d is string => !!d)
+    expect([...dated].sort()).toEqual(dated)
+    // An undated cost still has to sit somewhere in a date-ordered list, and
+    // where the backend puts it is its own call — this only asserts that it is
+    // present and says so, not that it leads.
+    const undated = rows.find(r => r.textContent?.includes('Date not recorded'))
+    expect(undated).toBeDefined()
     // a finished job says so, because the account outlives the job
     expect(rows.some(r => r.textContent?.includes('finished job'))).toBe(true)
 

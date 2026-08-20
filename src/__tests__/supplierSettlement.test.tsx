@@ -6,6 +6,7 @@ import { getJobs } from '../api'
 import {
   _resetMockBookMoneyForTesting, _setMockSettlementGateForTesting, mockGetBookMoney,
 } from '../api/mock/bookMoney'
+import { _setMockSourceDateForTesting } from '../api/mock/sourceDates'
 import { mockBudgetSummary } from '../api/mock/budget'
 import { mockGetJobMoney } from '../api/mock/money'
 import { MOCK_JOBS } from '../api/mock/jobs'
@@ -303,11 +304,14 @@ describe('Supplier account settlement across jobs', () => {
     await user.click(screen.getByRole('button', { name: 'Done' }))
 
     const group = account()
-    expect(group.purchaseCount).toBe(2)
-    expect(group.totalLabel).toBe('£610')
-    expect(group.lines.map(l => l.itemLabel)).toEqual(['Fence posts', 'Sand'])
+    expect(group.purchaseCount).toBe(4)
+    expect(group.totalLabel).toBe('£1,200')
+    // Undated first, then oldest-dated first — the second timber buy stays
+    // behind, which is the point: settling one of two similar costs must leave
+    // the other plainly identifiable.
+    expect(group.lines.map(l => l.itemLabel)).toEqual(['Membrane', 'Fence posts', 'Timber', 'Sand'])
     // The source items were not touched; they simply stopped being unpaid.
-    await waitFor(() => expect(screen.getByRole('heading', { name: /£610/ })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: /£1,200/ })).toBeInTheDocument())
   })
 
   it('splits the payment across jobs without a job ever seeing the whole of it', async () => {
@@ -515,8 +519,8 @@ describe('Supplier account settlement across jobs', () => {
 
     // Reading the account is untouched.
     expect(screen.getByText('Recorded costs')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /£3,860/ })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /^Open .+ on / })).toHaveLength(4)
+    expect(screen.getByRole('heading', { name: /£4,450/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Open .+ on / })).toHaveLength(6)
   })
 
   it('fails closed when the backend is too old to publish the capability', async () => {
@@ -614,5 +618,157 @@ describe('Supplier account settlement across jobs', () => {
     const workspace = await screen.findByTestId('workspace-screen')
     expect(workspace).toHaveAttribute('data-job-id', WHITMORE)
     expect(workspace).toHaveAttribute('data-section', 'money')
+  })
+})
+
+// ── Source purchase dates on the receipt ─────────────────────────────────────
+//
+// Two dates live on a receipt and they answer different questions: when the
+// money left the bank, and when each purchase happened. Mike needs both to
+// match one combined payment back to a supplier statement, and the pair only
+// helps if the app never confuses them.
+
+describe('Supplier payment source dates', () => {
+  beforeEach(() => {
+    mockGetJobs.mockResolvedValue(LIVE_JOBS)
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+  })
+
+  /** The two same-supplier timber buys Mike could not tell apart. */
+  const TIMBER_BIG = 'Timber, 3 packs'
+  const TIMBER_SMALL = 'Timber, 2 packs'
+  const UNDATED = 'Membrane, 2 rolls'
+
+  function receiptLine(dialog: HTMLElement, itemLabel: string): HTMLElement {
+    return within(dialog).getByRole('button', { name: new RegExp(`^Open ${itemLabel} on `) })
+  }
+
+  /** Back out of the account detail to Money, where the history section lives. */
+  async function gotoHistory(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /back to money/i }))
+    return within(await screen.findByRole('region', { name: 'Account payment history' }))
+  }
+
+  function accountLine(itemLabel: string) {
+    return account().lines.find(l => [l.itemLabel, l.quantityLabel].filter(Boolean).join(', ') === itemLabel)!
+  }
+
+  it('dates every source line with the purchase date, not the payment date', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+
+    const big = accountLine(TIMBER_BIG)
+    const small = accountLine(TIMBER_SMALL)
+    // The fixture's whole point: same supplier, same item, different days.
+    expect(big.sourceDateLabel).not.toBe(small.sourceDateLabel)
+
+    const dialog = await settle(user, [TIMBER_BIG, TIMBER_SMALL])
+    expect(receiptLine(dialog, TIMBER_BIG)).toHaveTextContent(big.sourceDateLabel!)
+    expect(receiptLine(dialog, TIMBER_SMALL)).toHaveTextContent(small.sourceDateLabel!)
+    // Which is what makes the two lines tellable apart at last.
+    expect(receiptLine(dialog, TIMBER_BIG).textContent)
+      .not.toBe(receiptLine(dialog, TIMBER_SMALL).textContent)
+  })
+
+  it('says a missing purchase date out loud instead of filling one in', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+
+    const dialog = await settle(user, [UNDATED])
+    const line = receiptLine(dialog, UNDATED)
+    expect(line).toHaveTextContent('Date not recorded')
+    // Never the payment's date, and never today's.
+    const paidLabel = within(dialog).getByText(/^Paid · /).textContent!.replace('Paid · ', '')
+    expect(line).not.toHaveTextContent(paidLabel)
+  })
+
+  it('keeps the payment date as the only "Paid" date on the receipt', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+
+    const dialog = await settle(user, [TIMBER_BIG, UNDATED])
+    // Exactly one Paid stamp, and it is the receipt's own.
+    expect(within(dialog).getAllByText(/Paid/)).toHaveLength(1)
+    expect(within(dialog).getByText(/^Paid · /)).toBeInTheDocument()
+    for (const item of [TIMBER_BIG, UNDATED]) {
+      expect(receiptLine(dialog, item)).not.toHaveTextContent(/Paid/)
+    }
+  })
+
+  it('changes the payment date without touching a single source date', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+
+    const dialog = await settle(user, [TIMBER_BIG, TIMBER_SMALL])
+    const before = [TIMBER_BIG, TIMBER_SMALL].map(i => receiptLine(dialog, i).textContent)
+    const paidBefore = within(dialog).getByText(/^Paid · /).textContent
+
+    await user.click(within(dialog).getByRole('button', { name: /Change payment date/ }))
+    const form = screen.getByRole('form', { name: 'Change payment date' })
+    await user.clear(within(form).getByLabelText('Date paid'))
+    await user.type(within(form).getByLabelText('Date paid'), '2026-08-10')
+    await user.click(within(form).getByRole('button', { name: 'Save date' }))
+
+    const after = await screen.findByRole('dialog', { name: new RegExp(`to ${ACCOUNT}$`) })
+    // The header moved; the purchase dates did not.
+    expect(within(after).getByText(/^Paid · /).textContent).not.toBe(paidBefore)
+    expect([TIMBER_BIG, TIMBER_SMALL].map(i => receiptLine(after, i).textContent)).toEqual(before)
+  })
+
+  it('shows a corrected purchase date on the next read, and moves no money doing it', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+
+    const dialog = await settle(user, [TIMBER_BIG])
+    const receiptTotal = within(dialog).getByRole('heading', { name: new RegExp(`to ${ACCOUNT}$`) }).textContent
+    const amountBefore = receiptLine(dialog, TIMBER_BIG).querySelector('.sap-source-amount')!.textContent
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+
+    // Snapshot after the payment, not before it: recording the payment is
+    // supposed to move Money out. What must not move anything is the date
+    // correction that follows.
+    const budgetBefore = budgetShape(KITCHEN)
+    const moneyBefore = { ...mockGetJobMoney(KITCHEN), generatedAt: undefined }
+
+    // The correction Mike would make on the source item itself.
+    _setMockSourceDateForTesting('mem-x-kitchen-2', '2026-07-07T09:00:00.000Z')
+
+    const history = await gotoHistory(user)
+    await user.click(history.getByRole('button', { name: new RegExp(`payment to ${ACCOUNT}$`) }))
+    const reopened = await screen.findByRole('dialog', { name: new RegExp(`to ${ACCOUNT}$`) })
+
+    expect(receiptLine(reopened, TIMBER_BIG)).toHaveTextContent('7 Jul')
+    // A date is display evidence. Nothing it touches is money.
+    expect(within(reopened).getByRole('heading', { name: new RegExp(`to ${ACCOUNT}$`) }).textContent).toBe(receiptTotal)
+    expect(receiptLine(reopened, TIMBER_BIG).querySelector('.sap-source-amount')!.textContent).toBe(amountBefore)
+    expect(budgetShape(KITCHEN)).toEqual(budgetBefore)
+    expect({ ...mockGetJobMoney(KITCHEN), generatedAt: undefined }).toEqual(moneyBefore)
+  })
+
+  it('carries the dated breakdown into a receipt reopened from history', async () => {
+    const user = userEvent.setup()
+    await launch()
+    await gotoMoney(user)
+    await openAccount(user)
+
+    const small = accountLine(TIMBER_SMALL)
+    const dialog = await settle(user, [TIMBER_BIG, TIMBER_SMALL])
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+
+    const history = await gotoHistory(user)
+    await user.click(history.getByRole('button', { name: new RegExp(`payment to ${ACCOUNT}$`) }))
+    const reopened = await screen.findByRole('dialog', { name: new RegExp(`to ${ACCOUNT}$`) })
+
+    expect(receiptLine(reopened, TIMBER_SMALL)).toHaveTextContent(small.sourceDateLabel!)
   })
 })

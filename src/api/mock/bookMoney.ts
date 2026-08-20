@@ -6,7 +6,11 @@ import { MOCK_JOBS } from './jobs'
 import {
   _resetMockSupplierPaymentsForTesting, mockSettledSourceIds, mockSupplierPaymentHistory,
 } from './supplierPaymentStore'
-import { mockAmountString as amountString, mockDateLabel as dateLabel, mockMoney as money } from './util'
+import {
+  _resetMockSourceDatesForTesting, mockSourceDate, mockSourceDateLabel as sourceDateLabel,
+  seedMockSourceDate,
+} from './sourceDates'
+import { mockAmountString as amountString, mockMoney as money } from './util'
 
 // Mock stand-in for GET /api/book/money.
 //
@@ -25,7 +29,9 @@ type SeedLine = {
   itemLabel: string
   quantityLabel?: string | null
   amount: number
-  daysAgo: number
+  // When the purchase happened. null means the source cost carries no trusted
+  // date — a real case, and one the UI must say out loud rather than fill in.
+  daysAgo: number | null
 }
 
 type SeedMissing = {
@@ -63,6 +69,7 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString()
 }
 
+
 function jobFacts(jobId: string): { jobTitle: string; jobStatus: BookMoneyJobStatus; jobStatusLabel: BookMoneyJobStatusLabel } {
   const job = MOCK_JOBS.find(j => j.id === jobId)
   const status = (job?.status ?? 'started') as BookMoneyJobStatus
@@ -98,7 +105,16 @@ const DEFAULT_SEED: Seed = {
     // Several jobs on one account.
     { jobId: KITCHEN, sourceMemoryItemId: 'mem-x-kitchen-1', supplierName: 'Sydenhams', itemLabel: 'Roof battens', quantityLabel: 'bundle', amount: 250, daysAgo: 34 },
     { jobId: KITCHEN, sourceMemoryItemId: 'mem-x-kitchen-2', supplierName: 'Sydenhams', itemLabel: 'Timber', quantityLabel: '3 packs', amount: 3000, daysAgo: 18 },
+    // Mike's actual complaint: two timber buys on one account, a week apart.
+    // Without their purchase dates on the receipt the two lines are near
+    // enough identical, and a combined payment cannot be matched back to the
+    // supplier statement.
+    { jobId: KITCHEN, sourceMemoryItemId: 'mem-x-kitchen-5', supplierName: 'Sydenhams', itemLabel: 'Timber', quantityLabel: '2 packs', amount: 500, daysAgo: 25 },
     { jobId: GRANT, sourceMemoryItemId: 'mem-x-grant-1', supplierName: 'Sydenhams', itemLabel: 'Sand', quantityLabel: '4 tonne', amount: 300, daysAgo: 6 },
+    // A real cost nobody dated. It is still owed and still payable — the date
+    // is what is missing, not the purchase — so it says so rather than
+    // borrowing the payment's date.
+    { jobId: GRANT, sourceMemoryItemId: 'mem-x-grant-2', supplierName: 'Sydenhams', itemLabel: 'Membrane', quantityLabel: '2 rolls', amount: 90, daysAgo: null },
     { jobId: WHITMORE, sourceMemoryItemId: 'mem-x-whitmore-1', supplierName: 'Sydenhams', itemLabel: 'Fence posts', quantityLabel: '20', amount: 310, daysAgo: 71 },
     // Name variants that must NOT be merged into "Sydenhams".
     { jobId: HOLLYBUSH, sourceMemoryItemId: 'mem-x-holly-1', supplierName: "Sydenham's", itemLabel: 'Gravel boards', quantityLabel: '12', amount: 180, daysAgo: 22 },
@@ -187,7 +203,11 @@ export function _setMockSettlementGateForTesting(gate: SettlementGate | null): v
 
 function buildLine(seed: SeedLine, index: number): SupplierAccountLine {
   const facts = jobFacts(seed.jobId)
-  const sourceDate = isoDaysAgo(seed.daysAgo)
+  // Read through the shared registry, not the seed: a purchase date corrected
+  // after this line was first built must show here and on any receipt that
+  // covers it, and both must be the same read.
+  seedMockSourceDate(seed.sourceMemoryItemId, seed.daysAgo === null ? null : isoDaysAgo(seed.daysAgo))
+  const sourceDate = mockSourceDate(seed.sourceMemoryItemId)
   return {
     id: `bml-${index}`,
     sourceMemoryItemId: seed.sourceMemoryItemId,
@@ -199,7 +219,7 @@ function buildLine(seed: SeedLine, index: number): SupplierAccountLine {
     currency: 'GBP',
     amountLabel: money(seed.amount),
     sourceDate,
-    sourceDateLabel: dateLabel(sourceDate),
+    sourceDateLabel: sourceDateLabel(sourceDate),
     supplierName: seed.supplierName?.trim() || null,
     budgetCategoryId: null,
     budgetCategoryName: null,
@@ -248,7 +268,8 @@ function buildGroups(lines: SupplierAccountLine[]): SupplierAccountGroup[] {
 
 function buildMissing(seeds: SeedMissing[], totalLabel: string | null): SupplierMissingPriceItem[] {
   return seeds.map((seed, index): SupplierMissingPriceItem => {
-    const sourceDate = isoDaysAgo(seed.daysAgo)
+    seedMockSourceDate(seed.sourceMemoryItemId, isoDaysAgo(seed.daysAgo))
+    const sourceDate = mockSourceDate(seed.sourceMemoryItemId)
     return {
       id: `bmm-${index}`,
       sourceMemoryItemId: seed.sourceMemoryItemId,
@@ -258,7 +279,7 @@ function buildMissing(seeds: SeedMissing[], totalLabel: string | null): Supplier
       quantityLabel: seed.quantityLabel ?? null,
       supplierName: seed.supplierName?.trim() || null,
       sourceDate,
-      sourceDateLabel: dateLabel(sourceDate),
+      sourceDateLabel: sourceDateLabel(sourceDate),
       reason: seed.reason,
       // Never £0: the label says what it is and that it is outside the total.
       reasonLabel: totalLabel ? `can't be in the ${totalLabel}` : REASON_COPY[seed.reason],
@@ -383,6 +404,7 @@ let mockBookMoneyScenario = 'default'
 export function _resetMockBookMoneyForTesting(scenario = 'default'): void {
   mockBookMoneyScenario = scenario
   gateOverride = null
+  _resetMockSourceDatesForTesting()
   // Recorded supplier payments are part of the book's money state, so resetting
   // the book resets them too — otherwise one test's settlement would silently
   // shorten the next test's accounts.

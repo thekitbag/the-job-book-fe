@@ -3,6 +3,7 @@ import type {
   SupplierAccountPaymentHistoryRow, SupplierAccountPaymentReceipt,
   SupplierPaymentJobAllocation, SupplierPaymentSourceLine,
 } from '../../types'
+import { hasMockSourceDate, mockSourceDate, mockSourceDateLabel } from './sourceDates'
 import { mockAmountString, mockDayLabel, mockMoney } from './util'
 
 // The mock's durable aggregate supplier payments.
@@ -114,7 +115,20 @@ function jobIdsOf(payment: MockSupplierPayment): string[] {
   return [...new Set(payment.lines.map(l => l.jobId))]
 }
 
+/**
+ * Money from the payment, dates from the source.
+ *
+ * The amount and what the payment covers are settled facts, frozen when the
+ * payment was recorded. The purchase date is not: it describes the cost, not
+ * the payment, so it is resolved live and a later correction to it shows here
+ * on the next read without disturbing a single figure.
+ *
+ * The stored date is kept only as a fallback for a source the registry no
+ * longer knows — a receipt outlives the account line it was built from.
+ */
 function toSourceLine(line: MockSupplierPaymentLine): SupplierPaymentSourceLine {
+  const live = hasMockSourceDate(line.sourceMemoryItemId)
+  const sourceDate = live ? mockSourceDate(line.sourceMemoryItemId) : line.sourceDate
   return {
     sourceMemoryItemId: line.sourceMemoryItemId,
     itemLabel: line.itemLabel,
@@ -122,8 +136,8 @@ function toSourceLine(line: MockSupplierPaymentLine): SupplierPaymentSourceLine 
     amount: line.amount,
     currency: 'GBP',
     amountLabel: mockMoney(parseFloat(line.amount)),
-    sourceDate: line.sourceDate,
-    sourceDateLabel: line.sourceDateLabel,
+    sourceDate,
+    sourceDateLabel: mockSourceDateLabel(sourceDate),
     budgetCategoryId: line.budgetCategoryId,
     budgetCategoryName: line.budgetCategoryName,
   }
