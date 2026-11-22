@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 
 // All tests run at 390px (playwright.config.ts) with VITE_USE_MOCK_API=true.
-// The mock review queue returns: Ordered 2, Budget costs 1, Labour 3, Used 1,
-// Left over 0, Watch-outs 1 (8 pending) plus already-remembered context. (One
+// The mock review queue returns: Bought 2, Budget costs 1, Labour 3, Used 1,
+// Left over 0, Hours 3 (8 pending) plus already-remembered context. (One
 // ordered draft is timber, which suggests the seeded 'timber' budget category;
 // one note yields both a Labour-hours draft and a Budget-cost draft.)
 
@@ -23,7 +23,7 @@ async function openQueue(page: import('@playwright/test').Page) {
 test.describe('Things to check — real-use volume', () => {
   test('total pending count is visible across categories', async ({ page }) => {
     await openQueue(page)
-    await expect(page.getByText('8 waiting')).toBeVisible()
+    await expect(page.getByText('6 waiting')).toBeVisible()
   })
 
   test('there is no bulk keep/confirm action (each item is checked on its own)', async ({ page }) => {
@@ -35,9 +35,9 @@ test.describe('Things to check — real-use volume', () => {
 
   test('category chips show per-category counts (no zero chips)', async ({ page }) => {
     await openQueue(page)
-    await expect(page.getByRole('button', { name: 'All 8' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Ordered 2' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Watch-outs 1' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'All 6' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Bought 2' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hours 3' })).toBeVisible()
     // empty categories (Left over) get no chip
     await expect(page.getByRole('button', { name: 'Left over 0' })).toHaveCount(0)
   })
@@ -45,18 +45,18 @@ test.describe('Things to check — real-use volume', () => {
   test('focusing a category reduces visible pending items', async ({ page }) => {
     await openQueue(page)
     await page.getByRole('button', { name: 'Used 1' }).click()
-    await expect(page.getByText('OSB')).toBeVisible()
+    await expect(page.getByText(/boards.*OSB|OSB.*boards/)).toBeVisible()
     await expect(page.getByText('Bought / ordered')).not.toBeVisible()
     // total still visible while focused
-    await expect(page.getByText('8 waiting')).toBeVisible()
+    await expect(page.getByText('6 waiting')).toBeVisible()
   })
 
   test('confirming an item updates the counts', async ({ page }) => {
     await openQueue(page)
     await page.getByRole('button', { name: /remember this/i }).first().click()
     await page.waitForTimeout(600)
-    await expect(page.getByText('7 waiting')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Ordered 1' })).toBeVisible()
+    await expect(page.getByText('5 waiting')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Bought 1' })).toBeVisible()
   })
 
   test('source context expands from a pending item', async ({ page }) => {

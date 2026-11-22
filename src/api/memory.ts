@@ -1,9 +1,21 @@
-import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, ReturnMaterialRequest, ReturnMaterialResponse } from '../types'
+import type {
+  CreateMemoryItemRequest,
+  MemoryItemEdit,
+  MemoryViewItem,
+  MemoryViewResponse,
+  ReturnMaterialRequest,
+  ReturnMaterialResponse,
+} from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
-import { mockAssignMemoryItemCategory, mockCreateMemoryItem, mockMemoryView, mockRemoveMemoryItem, mockReturnMemoryItem, mockUpdateMemoryItem, mockVerifyMemoryItem } from './mock/memory'
-
-export const PAID_LABOUR_COST_EDIT_MESSAGE = 'Undo paid before changing the cost.'
+import {
+  mockCreateMemoryItem,
+  mockMemoryView,
+  mockRemoveMemoryItem,
+  mockReturnMemoryItem,
+  mockUpdateMemoryItem,
+  mockVerifyMemoryItem,
+} from './mock/memory'
 
 // GET /api/jobs/:jobId/memory-view — trusted memory for the job, grouped by section.
 export async function getMemoryView(jobId: string): Promise<MemoryViewResponse> {
@@ -36,13 +48,7 @@ export async function updateMemoryItem(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(edit),
   })
-  if (res.status === 400) {
-    const body = await res.json().catch(() => null) as { code?: string; message?: string } | null
-    if (body?.code === 'INVALID_FIELD' && body.message?.includes('Undo paid before changing')) {
-      throw new ApiError(PAID_LABOUR_COST_EDIT_MESSAGE, 400)
-    }
-    throw new ApiError('Invalid memory edit', 400)
-  }
+  if (res.status === 400) throw new ApiError('Invalid memory edit', 400)
   if (res.status === 401) throw new ApiError('Unauthenticated', 401)
   if (res.status === 403) throw new ApiError('Forbidden', 403)
   if (res.status === 404) throw new ApiError('Memory item not found', 404)
@@ -136,27 +142,4 @@ export async function returnMemoryItem(
   if (res.status === 404) throw new ApiError('Memory item not found', 404)
   if (!res.ok) throw new ApiError(`POST return memory-item → ${res.status}`, res.status)
   return res.json() as Promise<ReturnMaterialResponse>
-}
-
-// PATCH /api/jobs/:jobId/memory-items/:memoryItemId — assign/clear category only.
-export async function assignMemoryItemCategory(
-  jobId: string,
-  memoryItemId: string,
-  budgetCategoryId: string | null,
-): Promise<MemoryViewItem> {
-  if (USE_MOCK) {
-    await delay(250)
-    return mockAssignMemoryItemCategory(jobId, memoryItemId, budgetCategoryId)
-  }
-  const res = await apiFetch(`/api/jobs/${jobId}/memory-items/${memoryItemId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ budgetCategoryId }),
-  })
-  if (res.status === 400) throw new ApiError('Invalid category assignment', 400)
-  if (res.status === 401) throw new ApiError('Unauthenticated', 401)
-  if (res.status === 403) throw new ApiError('Forbidden', 403)
-  if (res.status === 404) throw new ApiError('Memory item not found', 404)
-  if (!res.ok) throw new ApiError(`PATCH memory-item category → ${res.status}`, res.status)
-  return res.json() as Promise<MemoryViewItem>
 }

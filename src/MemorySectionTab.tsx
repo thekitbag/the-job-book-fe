@@ -3,17 +3,16 @@ import MemoryCard from './MemoryCard'
 import DirectAddForm, { type DirectAddKind } from './DirectAddForm'
 import EmptyState from './EmptyState'
 import type { JobMemory } from './useJobMemory'
-import type { MarkPaidControls } from './markPaid'
 import type { WorkshopSourceControls } from './workshopSource'
-import type { BudgetCategory, CreateMemoryItemRequest, MemoryViewItem } from './types'
+import type { CreateMemoryItemRequest, MemoryViewItem } from './types'
 
 // "2 items left over" / "3 items bought" — the section kicker states how many,
 // which is the one thing a count-of-things section should say.
 const SECTION_COUNT_LABEL: Record<string, (n: number) => string> = {
-  ordered_materials: n => `${n} ${n === 1 ? 'item' : 'items'} bought`,
-  used_materials: n => `${n} ${n === 1 ? 'item' : 'items'} used`,
-  leftovers: n => `${n} ${n === 1 ? 'item' : 'items'} left over`,
-  returned_materials: n => `${n} ${n === 1 ? 'item' : 'items'} returned`,
+  ordered_materials: (n) => `${n} ${n === 1 ? 'item' : 'items'} bought`,
+  used_materials: (n) => `${n} ${n === 1 ? 'item' : 'items'} used`,
+  leftovers: (n) => `${n} ${n === 1 ? 'item' : 'items'} left over`,
+  returned_materials: (n) => `${n} ${n === 1 ? 'item' : 'items'} returned`,
 }
 
 const SECTION_HEADINGS: Record<string, string> = {
@@ -30,19 +29,16 @@ const SECTION_HEADINGS: Record<string, string> = {
 // Plain-language empty copy per addable section (Manual Add V2). Manual add is
 // the only action offered — Record stays global.
 const SECTION_EMPTY: Record<string, { title: string; hint: string }> = {
-  ordered_materials: { title: 'Nothing bought yet', hint: 'Say what you bought or ordered for this job, or add it yourself.' },
+  ordered_materials: {
+    title: 'Nothing bought yet',
+    hint: 'Say what you bought or ordered for this job, or add it yourself.',
+  },
   used_materials: { title: 'Nothing logged yet', hint: 'Say what you used on this job, or add it yourself.' },
   leftovers: { title: 'Nothing logged yet', hint: 'Note what’s left over so it isn’t wasted.' },
 }
 
 type SectionAdd = { kind: DirectAddKind; label: string }
 
-// Generic non-spend, non-labour lens. Renders the given memory-view section keys
-// as headed groups of MemoryCards. Two shapes of direct add:
-//  - `directAdd`  → one lens-level action (Notes: one "Add note" with a type
-//    picker, default plain note).
-//  - `sectionAdds` → a per-section "+" so each sub-section is addable even when
-//    empty (Used: separate Used and Left over adds).
 export default function MemorySectionTab({
   mem,
   sectionKeys,
@@ -51,10 +47,8 @@ export default function MemorySectionTab({
   sectionAdds,
   emptyText,
   footer,
-  markPaid,
   workshop,
   onAddMemoryItem,
-  budgetCategories = [],
   focusItemId = null,
 }: {
   mem: JobMemory
@@ -65,12 +59,8 @@ export default function MemorySectionTab({
   focusItemId?: string | null
   directAdd?: { kind: DirectAddKind; label: string; sectionLabel: string }
   sectionAdds?: Partial<Record<string, SectionAdd>>
-  // Budget cost items only (e.g. Materials → Bought): mark-as-paid capability.
-  markPaid?: MarkPaidControls
-  // Left over items only (Materials → Left over): the Workshop capability.
   workshop?: WorkshopSourceControls
   onAddMemoryItem?: (req: CreateMemoryItemRequest) => Promise<MemoryViewItem>
-  budgetCategories?: BudgetCategory[]
   // Empty copy for a lens with no add action of its own (e.g. Returned, which
   // is only reachable from a Left over item). Falls back to generic copy.
   emptyText?: string
@@ -83,17 +73,27 @@ export default function MemorySectionTab({
   // A section is visible if it has items OR its own add action (so you can add
   // the first item of that type).
   const rows = sectionKeys
-    .map(key => ({ key, items: sectionItems(key), add: sectionAdds?.[key] }))
-    .filter(s => s.items.length > 0 || s.add)
+    .map((key) => ({ key, items: sectionItems(key), add: sectionAdds?.[key] }))
+    .filter((s) => s.items.length > 0 || s.add)
 
   return (
     <div className="mem-tabpanel" role="tabpanel" aria-label={ariaLabel}>
-      {directAdd && <DirectAddForm kind={directAdd.kind} label={directAdd.label} sectionLabel={directAdd.sectionLabel} categories={budgetCategories} onAdd={addItem} actionHidden={rows.length === 0} />}
+      {directAdd && (
+        <DirectAddForm
+          kind={directAdd.kind}
+          label={directAdd.label}
+          sectionLabel={directAdd.sectionLabel}
+          onAdd={addItem}
+          actionHidden={rows.length === 0}
+        />
+      )}
 
       {refreshError && (
         <div className="mem-known-spend-refresh" role="alert">
           <span>Couldn’t refresh — this may be out of date.</span>
-          <button type="button" className="mem-known-spend-retry" onClick={refetch}>Try again</button>
+          <button type="button" className="mem-known-spend-retry" onClick={refetch}>
+            Try again
+          </button>
         </div>
       )}
 
@@ -102,32 +102,54 @@ export default function MemorySectionTab({
           <EmptyState
             title="No notes yet"
             hint="Keep short job notes here — changes, watch-outs, things to remember. Or say it with Record."
-            action={<DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} categories={budgetCategories} onAdd={addItem} />}
+            action={
+              <DirectAddForm kind={directAdd.kind} variant="button" label={directAdd.label} onAdd={addItem} />
+            }
           />
         ) : (
           !footer && <p className="mem-tab-empty">{emptyText ?? 'Nothing remembered here yet.'}</p>
         )
       ) : (
-        rows.map(s => {
+        rows.map((s) => {
           const heading = SECTION_HEADINGS[s.key] ?? s.key
-          const countLabel = s.items.length > 0
-            ? (SECTION_COUNT_LABEL[s.key]?.(s.items.length) ?? heading)
-            : heading
+          const countLabel =
+            s.items.length > 0 ? (SECTION_COUNT_LABEL[s.key]?.(s.items.length) ?? heading) : heading
           const empty = SECTION_EMPTY[s.key]
           return (
             <section key={s.key} className="mem-section">
-              {s.add
-                ? <DirectAddForm kind={s.add.kind} label={s.add.label} sectionLabel={countLabel} categories={budgetCategories} onAdd={addItem} actionHidden={s.items.length === 0} />
-                : <h2 className="mem-section-heading">{countLabel}</h2>}
-              {s.items.length > 0
-                ? s.items.map(item => <MemoryCard key={item.id} item={item} {...cardProps(item, false)} variant="sheet" autoOpen={item.id === focusItemId} markPaid={markPaid} workshop={workshop} />)
-                : s.add
-                  ? <EmptyState
-                      title={empty?.title ?? 'Nothing logged yet'}
-                      hint={empty?.hint}
-                      action={<DirectAddForm kind={s.add.kind} variant="button" label={s.add.label} categories={budgetCategories} onAdd={addItem} />}
-                    />
-                  : <p className="mem-section-empty">None yet.</p>}
+              {s.add ? (
+                <DirectAddForm
+                  kind={s.add.kind}
+                  label={s.add.label}
+                  sectionLabel={countLabel}
+                  onAdd={addItem}
+                  actionHidden={s.items.length === 0}
+                />
+              ) : (
+                <h2 className="mem-section-heading">{countLabel}</h2>
+              )}
+              {s.items.length > 0 ? (
+                s.items.map((item) => (
+                  <MemoryCard
+                    key={item.id}
+                    item={item}
+                    {...cardProps(item)}
+                    variant="sheet"
+                    autoOpen={item.id === focusItemId}
+                    workshop={workshop}
+                  />
+                ))
+              ) : s.add ? (
+                <EmptyState
+                  title={empty?.title ?? 'Nothing logged yet'}
+                  hint={empty?.hint}
+                  action={
+                    <DirectAddForm kind={s.add.kind} variant="button" label={s.add.label} onAdd={addItem} />
+                  }
+                />
+              ) : (
+                <p className="mem-section-empty">None yet.</p>
+              )}
             </section>
           )
         })

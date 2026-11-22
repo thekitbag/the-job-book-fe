@@ -413,7 +413,7 @@ export default function JobDetailsSheet({ jobId, jobTitle, onClose }: {
             <p className="mem-remove-consequence">They’ll be taken off this job’s details.</p>
             {/* Named consequences: a contact was never evidence or money, so
                 removing one moves nothing else. */}
-            <p className="mem-remove-consequence">Your notes, photos, Budget, and Money are not changed.</p>
+            <p className="mem-remove-consequence">Your notes and photos are kept.</p>
             <div className="mem-remove-actions">
               <button type="button" className="btn-mem-remove-confirm" disabled={removing} onClick={() => void confirmRemove(sub.contact)}>
                 {removing ? 'Removing…' : 'Remove'}

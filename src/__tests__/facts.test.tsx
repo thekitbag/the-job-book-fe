@@ -13,9 +13,10 @@ vi.mock('../api', () => ({
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn(),
   getReviewQueue: vi.fn(),
-  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
+  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001' }, generatedAt: '', sections: [], hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] } })),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
-  getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', photos: [] })),
+  getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
+    getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', photos: [] })),
   getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', receipts: [] })),
 }))
 
@@ -404,4 +405,16 @@ describe('draft facts visibility', () => {
     expect(screen.queryByText(/low confidence/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/^unclear$/i)).not.toBeInTheDocument()
   })
+})
+
+it('keeps legacy financial extraction summaries out of source history while preserving the original transcript', async () => {
+  const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'legacy', transcriptStatus: 'ready', transcriptText: 'Bought 8 bags of hardcore, £40 paid.', extractionStatus: 'ready' })
+  await saveNote(note)
+  mockGetStatuses.mockResolvedValue([])
+  vi.mocked(getReviewQueue).mockResolvedValue({jobId: JOB.id, generatedAt: '', sections: [], alreadyRemembered: []})
+  mockGetDraftFacts.mockResolvedValue([makeFact({ sourceNoteIds: ['legacy'], factType: 'ordered_material', summary: 'Legacy cost £40 paid on account', materialName: 'hardcore', quantity: '8', unit: 'bags', supplierName: 'Jewson' })])
+  render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+  await waitFor(() => expect(mockGetDraftFacts).toHaveBeenCalled())
+  await waitFor(() => expect(document.querySelector('.fact-summary')).toBeInTheDocument())
+  expect(document.querySelector('.fact-summary')).not.toHaveTextContent(/cost|£|paid|account/i)
 })

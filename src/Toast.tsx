@@ -1,14 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 
-// Lightweight toast/confirmation surface. Its job here is to say, in Mike's
-// terms, what a money action did to Money and to Budget — never a generic
-// "Saved". A toast carries a title and one explanation line; both are shown.
+// A short confirmation for a completed action, with a title and explanation.
 
 export interface Toast {
   id: number
   title: string
   body: string
-  tone: 'money' | 'plain'
+  tone: 'confirmation' | 'plain'
 }
 
 type ShowToast = (toast: { title: string; body: string; tone?: Toast['tone'] }) => void
@@ -31,7 +29,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
-  const show = useCallback<ShowToast>(({ title, body, tone = 'money' }) => {
+  const show = useCallback<ShowToast>(({ title, body, tone = 'confirmation' }) => {
     const id = nextId.current++
     setToasts(prev => [...prev, { id, title, body, tone }])
   }, [])

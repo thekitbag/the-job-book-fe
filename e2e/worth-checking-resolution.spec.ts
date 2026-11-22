@@ -47,9 +47,9 @@ test.describe('Worth checking resolution', () => {
   test('Fix memory clears Worth checking and updates the card', async ({ page }) => {
     await openUsedTab(page)
     await (await openRowActions(page, sandCard(page))).getByRole('button', { name: /fix memory/i }).click()
-    const form = page.getByRole('form', { name: /edit memory/i })
+    const form = page.getByRole('form', { name: /material entry/i })
     await form.locator('input[name="locationOrUse"]').fill('in the lockup')
-    await page.getByRole('button', { name: /save memory/i }).click()
+    await page.getByRole('button', { name: /^save$/i }).click()
     await page.waitForTimeout(500)
 
     const updated = page.locator('.mem-card', { hasText: 'in the lockup' })

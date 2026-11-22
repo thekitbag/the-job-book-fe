@@ -30,21 +30,6 @@ function postsCard(page: Page) {
   return page.locator('.mem-card').filter({ hasText: 'fence posts' }).first()
 }
 
-// Opening Budget starts a refetch, so the hero briefly shows whatever it had
-// before. Every read here waits for a settled money figure rather than
-// sampling once — a single innerText() call races the refetch and reads the
-// stale value on a slow runner.
-function budgetHero(page: Page) {
-  return page.locator('.mem-hero-amount').first()
-}
-
-async function openBudget(page: Page) {
-  await goToSection(page, 'Budget')
-  const hero = budgetHero(page)
-  await expect(hero).toContainText(/£[\d,]+ cost/)
-  return hero
-}
-
 test.describe('Returned materials', () => {
   test('Materials shows Returned as a peer of Bought, Used and Left over', async ({ page }) => {
     await gotoApp(page)
@@ -58,30 +43,27 @@ test.describe('Returned materials', () => {
     expect(overflow).toBeLessThanOrEqual(1)
   })
 
-  test('partial return: Left over drops to 2, Returned shows 4 with merchant and refund', async ({ page }) => {
+  test('partial return: Left over drops to 2, Returned shows 4 with merchant', async ({ page }) => {
     await gotoApp(page)
-    await expect(await openBudget(page)).toHaveText('£2,270 cost of £7,500')
 
     await goToSection(page, 'Materials', 'Left over')
-    await expect(postsCard(page)).toContainText('6 · from Jewson')
+    await expect(postsCard(page)).toContainText('6 · Jewson')
     await (await openRowActions(page, postsCard(page))).getByRole('button', { name: /mark as returned/i }).click()
 
     const sheet = page.getByRole('dialog', { name: /mark as returned/i })
     await sheet.getByRole('textbox', { name: /how many did you take back/i }).fill('4')
     await sheet.getByRole('textbox', { name: /took them back to/i }).fill('Jewson')
-    await sheet.getByRole('textbox', { name: /refund/i }).fill('80')
     await sheet.getByRole('button', { name: /save return/i }).click()
     await expect(sheet).toBeHidden()
 
     // Left over keeps the 2 he still has.
-    await expect(postsCard(page)).toContainText('2 · from Jewson')
+    await expect(postsCard(page)).toContainText('2 · Jewson')
 
     await page.getByRole('tab', { name: 'Returned' }).click()
     const returned = page.getByRole('tabpanel', { name: /returned materials/i })
     await expect(returned).toContainText('fence posts')
     await expect(returned).toContainText('4')
     await expect(returned).toContainText('Jewson')
-    await expect(returned).toContainText('£80 refund')
 
     // The purchase still happened: bought history is untouched.
     await page.getByRole('tab', { name: 'Bought' }).click()
@@ -91,8 +73,6 @@ test.describe('Returned materials', () => {
     // only — the refund itself is shown under Materials → Returned, not here.
     // Asserting the figure rather than "it changed" also catches a refund
     // applied with the wrong sign or amount.
-    await expect(await openBudget(page)).toHaveText('£2,190 cost of £7,500')
-    await expect(page.getByRole('region', { name: /^budget$/i })).not.toContainText('refund')
   })
 
   test('over-returning is refused without moving anything', async ({ page }) => {
@@ -102,16 +82,14 @@ test.describe('Returned materials', () => {
 
     const sheet = page.getByRole('dialog', { name: /mark as returned/i })
     await sheet.getByRole('textbox', { name: /how many did you take back/i }).fill('9')
-    await sheet.getByRole('textbox', { name: /refund/i }).fill('180')
     await sheet.getByRole('button', { name: /save return/i }).click()
 
     await expect(sheet.getByRole('alert')).toContainText(/more than is left over/i)
     // Values survive so he can correct the quantity, not retype the lot.
     await expect(sheet.getByRole('textbox', { name: /how many did you take back/i })).toHaveValue('9')
-    await expect(sheet.getByRole('textbox', { name: /refund/i })).toHaveValue('180')
 
     await sheet.getByRole('button', { name: /cancel/i }).click()
-    await expect(postsCard(page)).toContainText('6 · from Jewson')
+    await expect(postsCard(page)).toContainText('6 · Jewson')
     await page.getByRole('tab', { name: 'Returned' }).click()
     await expect(page.getByRole('tabpanel', { name: /returned materials/i })).toContainText(/nothing returned yet/i)
   })

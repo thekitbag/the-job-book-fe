@@ -1,7 +1,28 @@
-import type { BudgetSummaryResponse, InspectionData, JobPhotosResponse, MemoryViewResponse, ReviewQueue, SupportJob, SupportUser, SupportUserJobsResponse, SupportUsersResponse } from '../../types'
+import type {
+  BudgetSummaryResponse,
+  JobMoneyResponse,
+  LabourPeopleResponse,
+  InspectionData,
+  JobPhotosResponse,
+  MemoryViewResponse,
+  ReviewQueue,
+  SupportJob,
+  SupportUser,
+  SupportUserJobsResponse,
+  SupportUsersResponse,
+} from '../../internalSupport/types'
 import { ApiError } from '../client'
 import { getMockSession, MOCK_SUPPORT_DIRECTORY } from './auth'
-import { mockBudgetSummary } from './budget'
+import {
+  deriveBudgetSummary,
+  deriveCostSummary,
+  deriveLabourSummary,
+  deriveTotalKnownCost,
+  deriveGrossKnownCost,
+  deriveRefundsSummary,
+  deriveLabourHoursSummary,
+} from '../../internalSupport/scan'
+import { supportMemoryFixture } from '../../internalSupport/memoryFixture'
 import { mockInspectionData } from './inspection'
 import { MOCK_JOBS } from './jobs'
 import { mockMemoryView } from './memory'
@@ -21,7 +42,12 @@ function requireInternal(): void {
 // Mike owns the seeded jobs; Dave is a pilot with none (real empty state).
 const MIKE_ID = 'user-mock-mike'
 
-function toSupportUser(u: { id: string; email: string; name: string; role: 'PILOT' | 'INTERNAL' }): SupportUser {
+function toSupportUser(u: {
+  id: string
+  email: string
+  name: string
+  role: 'PILOT' | 'INTERNAL'
+}): SupportUser {
   return {
     id: u.id,
     email: u.email,
@@ -41,25 +67,26 @@ export function mockSupportUsers(): SupportUsersResponse {
 
 export function mockSupportUserJobs(targetUserId: string): SupportUserJobsResponse {
   requireInternal()
-  const user = MOCK_SUPPORT_DIRECTORY.find(u => u.id === targetUserId)
+  const user = MOCK_SUPPORT_DIRECTORY.find((u) => u.id === targetUserId)
   if (!user) throw new ApiError('Not found', 404)
-  const jobs: SupportJob[] = user.id === MIKE_ID
-    ? MOCK_JOBS.map(j => ({
-        id: j.id,
-        ownerUserId: MIKE_ID,
-        title: j.title,
-        jobType: j.jobType,
-        status: j.status,
-        roughLocationOrLabel: j.roughLocationOrLabel,
-        createdAt: j.createdAt,
-        updatedAt: j.updatedAt,
-      }))
-    : []
+  const jobs: SupportJob[] =
+    user.id === MIKE_ID
+      ? MOCK_JOBS.map((j) => ({
+          id: j.id,
+          ownerUserId: MIKE_ID,
+          title: j.title,
+          jobType: j.jobType,
+          status: j.status,
+          roughLocationOrLabel: j.roughLocationOrLabel,
+          createdAt: j.createdAt,
+          updatedAt: j.updatedAt,
+        }))
+      : []
   return { user: toSupportUser(user), jobs }
 }
 
 function requireMikeJob(jobId: string): void {
-  if (!MOCK_JOBS.some(j => j.id === jobId)) throw new ApiError('Not found', 404)
+  if (!MOCK_JOBS.some((j) => j.id === jobId)) throw new ApiError('Not found', 404)
 }
 
 // The job-scoped support reads delegate to the same mock state the target user
@@ -73,23 +100,64 @@ export function mockSupportInspection(jobId: string): InspectionData {
 export function mockSupportMemoryView(jobId: string): MemoryViewResponse {
   requireInternal()
   requireMikeJob(jobId)
-  return mockMemoryView(jobId)
+  return {
+    ...mockMemoryView(jobId),
+    sections: structuredClone(supportMemoryFixture),
+    costSummary: {
+      orderedMaterials: deriveCostSummary(supportMemoryFixture),
+      labour: deriveLabourSummary(supportMemoryFixture),
+      totalKnownCost: deriveTotalKnownCost(supportMemoryFixture),
+      grossKnownCost: deriveGrossKnownCost(supportMemoryFixture),
+      refunds: deriveRefundsSummary(supportMemoryFixture),
+    },
+    labourHoursSummary: deriveLabourHoursSummary(supportMemoryFixture),
+  }
 }
 
 export function mockSupportBudgetSummary(jobId: string): BudgetSummaryResponse {
   requireInternal()
   requireMikeJob(jobId)
-  return mockBudgetSummary(jobId)
+  return deriveBudgetSummary(jobId, supportMemoryFixture, [])
 }
 
 export function mockSupportReviewQueue(jobId: string): ReviewQueue {
   requireInternal()
   requireMikeJob(jobId)
-  return mockGetReviewQueue(jobId)
+  return mockGetReviewQueue(jobId) as unknown as ReviewQueue
 }
 
 export function mockSupportPhotos(jobId: string): JobPhotosResponse {
   requireInternal()
   requireMikeJob(jobId)
   return mockGetJobPhotos(jobId)
+}
+
+export function mockSupportMoney(jobId: string): JobMoneyResponse {
+  requireInternal()
+  requireMikeJob(jobId)
+  return {
+    jobId,
+    generatedAt: new Date().toISOString(),
+    customerTotalAmount: null,
+    customerTotalCurrency: null,
+    customerTotalLabel: null,
+    moneyInAmount: '4000',
+    moneyInCurrency: 'GBP',
+    moneyInLabel: '£4000 received',
+    moneyOutAmount: '40',
+    moneyOutCurrency: 'GBP',
+    moneyOutLabel: '£40 paid out',
+    stillOwedAmount: null,
+    stillOwedCurrency: null,
+    stillOwedLabel: null,
+    overpaid: false,
+    overpaidAmount: null,
+    overpaidLabel: null,
+    rows: [],
+  }
+}
+export function mockSupportPeople(jobId: string): LabourPeopleResponse {
+  requireInternal()
+  requireMikeJob(jobId)
+  return { jobId, people: [] }
 }

@@ -37,7 +37,7 @@ test.describe('Book Home and job navigation', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('Book Home is three destination rows and names no job', async ({ page }) => {
+  test('Book Home is two destination rows and names no job', async ({ page }) => {
     await openBookHome(page)
 
     // The cover counts the work; it does not list it. Opening a job happens on
@@ -45,7 +45,7 @@ test.describe('Book Home and job navigation', () => {
     const jobs = page.getByRole('button', { name: /^Jobs/ })
     await expect(jobs).toContainText('2 in progress')
     await expect(jobs).toContainText('2 planning · 2 finished')
-    await expect(page.getByRole('button', { name: /^Money/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Money/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /^Workshop/ })).toBeVisible()
 
     for (const title of ['Garden Room', 'Kitchen Extension', 'Grant James Roof', 'Whitmore Patio']) {

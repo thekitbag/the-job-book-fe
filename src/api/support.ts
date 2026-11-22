@@ -1,8 +1,20 @@
-import type { BudgetSummaryResponse, InspectionData, JobPhotosResponse, MemoryViewResponse, ReviewQueue, SupportUserJobsResponse, SupportUsersResponse } from '../types'
+import type {
+  BudgetSummaryResponse,
+  JobMoneyResponse,
+  LabourPeopleResponse,
+  InspectionData,
+  JobPhotosResponse,
+  MemoryViewResponse,
+  ReviewQueue,
+  SupportUserJobsResponse,
+  SupportUsersResponse,
+} from '../internalSupport/types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
 import {
   mockSupportBudgetSummary,
+  mockSupportMoney,
+  mockSupportPeople,
   mockSupportInspection,
   mockSupportMemoryView,
   mockSupportPhotos,
@@ -27,36 +39,70 @@ async function supportGet<T>(path: string): Promise<T> {
 }
 
 export async function getSupportUsers(): Promise<SupportUsersResponse> {
-  if (USE_MOCK) { await delay(300); return mockSupportUsers() }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportUsers()
+  }
   return supportGet('/api/internal/support/users')
 }
 
 export async function getSupportUserJobs(targetUserId: string): Promise<SupportUserJobsResponse> {
-  if (USE_MOCK) { await delay(300); return mockSupportUserJobs(targetUserId) }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportUserJobs(targetUserId)
+  }
   return supportGet(`/api/internal/support/users/${targetUserId}/jobs`)
 }
 
 export async function getSupportJobInspection(jobId: string): Promise<InspectionData> {
-  if (USE_MOCK) { await delay(300); return mockSupportInspection(jobId) }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportInspection(jobId)
+  }
   return supportGet(`/api/internal/support/jobs/${jobId}/inspection`)
 }
 
 export async function getSupportMemoryView(jobId: string): Promise<MemoryViewResponse> {
-  if (USE_MOCK) { await delay(300); return mockSupportMemoryView(jobId) }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportMemoryView(jobId)
+  }
   return supportGet(`/api/internal/support/jobs/${jobId}/memory-view`)
 }
 
 export async function getSupportBudgetSummary(jobId: string): Promise<BudgetSummaryResponse> {
-  if (USE_MOCK) { await delay(300); return mockSupportBudgetSummary(jobId) }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportBudgetSummary(jobId)
+  }
   return supportGet(`/api/internal/support/jobs/${jobId}/budget-summary`)
 }
 
 export async function getSupportReviewQueue(jobId: string): Promise<ReviewQueue> {
-  if (USE_MOCK) { await delay(300); return mockSupportReviewQueue(jobId) }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportReviewQueue(jobId)
+  }
   return supportGet(`/api/internal/support/jobs/${jobId}/review-queue`)
 }
 
 export async function getSupportPhotos(jobId: string): Promise<JobPhotosResponse> {
-  if (USE_MOCK) { await delay(300); return mockSupportPhotos(jobId) }
+  if (USE_MOCK) {
+    await delay(300)
+    return mockSupportPhotos(jobId)
+  }
   return supportGet(`/api/internal/support/jobs/${jobId}/photos`)
+}
+
+export async function getSupportJobMoney(jobId: string): Promise<JobMoneyResponse> {
+  if (USE_MOCK) {
+    return mockSupportMoney(jobId)
+  }
+  return supportGet(`/api/internal/support/jobs/${jobId}/money`)
+}
+export async function getSupportJobLabourPeople(jobId: string): Promise<LabourPeopleResponse> {
+  if (USE_MOCK) {
+    return mockSupportPeople(jobId)
+  }
+  return supportGet(`/api/internal/support/jobs/${jobId}/labour-people`)
 }

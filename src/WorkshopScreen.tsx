@@ -313,10 +313,9 @@ function WorkshopItemSheet({
         >
           <span className="row-sheet-opt-main">
             <span className="row-sheet-opt-label">Wasn&apos;t there after all</span>
-            {/* Only a source-linked item gets the cost reassurance, because only
-                it has a job whose cost a correction might seem to threaten. */}
+            {/* Keep the original job memory visible after correcting availability. */}
             {sourceLinked && (
-              <span className="row-sheet-opt-sub">Logged as never there. {item.sourceJobTitle} keeps its cost.</span>
+              <span className="row-sheet-opt-sub">Logged as never there. The original job memory is kept.</span>
             )}
           </span>
           <span aria-hidden="true">›</span>

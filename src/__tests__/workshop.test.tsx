@@ -6,14 +6,12 @@ import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import { ToastProvider } from '../Toast'
 import { getJobs } from '../api'
 import { MOCK_JOBS } from '../api/mock/jobs'
-import { mockBudgetSummary } from '../api/mock/budget'
-import { mockGetJobMoney } from '../api/mock/money'
 import { mockMemoryView } from '../api/mock/memory'
 import {
   _resetMockWorkshopForTesting, mockGetWorkshop,
 } from '../api/mock/workshop'
 import { _resetMockMemoryForTesting } from '../api/mock/state'
-import type { BudgetSummaryResponse, Job } from '../types'
+import type { Job } from '../types'
 
 // Workshop — availability memory across jobs, driven against the same stateful
 // mock backend the app talks to in mock mode.
@@ -51,8 +49,6 @@ vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
   const workshop = await import('../api/mock/workshop')
   const memory = await import('../api/mock/memory')
-  const budget = await import('../api/mock/budget')
-  const money = await import('../api/mock/money')
   return {
     ...actual,
     getJobs: vi.fn(),
@@ -73,12 +69,11 @@ vi.mock('../api', async (importOriginal) => {
     markWorkshopItemWasntThere: vi.fn(async (id: string) => workshop.mockWorkshopWasntThere(id)),
     putBackWorkshopItem: vi.fn(async (id: string) => workshop.mockPutBackWorkshopItem(id)),
     getMemoryView: vi.fn(async (jobId: string) => memory.mockMemoryView(jobId)),
-    getBudgetSummary: vi.fn(async (jobId: string) => budget.mockBudgetSummary(jobId)),
-    getJobMoney: vi.fn(async (jobId: string) => money.mockGetJobMoney(jobId)),
     getJobPayments: vi.fn(() => Promise.reject(new Error('none'))),
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: '', generatedAt: '', sections: [], alreadyRemembered: [] })),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: '', photos: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: '', receipts: [] })),
   }
@@ -99,15 +94,6 @@ beforeEach(() => {
   _resetMockWorkshopForTesting()
   vi.mocked(getJobs).mockResolvedValue(LIVE_JOBS)
 })
-
-/** Budget as the backend currently states it, minus the moving parts of a read. */
-function budgetShape(jobId: string): Partial<BudgetSummaryResponse> {
-  return { ...mockBudgetSummary(jobId), generatedAt: undefined }
-}
-
-function moneyShape(jobId: string) {
-  return { ...mockGetJobMoney(jobId), generatedAt: undefined }
-}
 
 // ── The Workshop page and Book Home, through the whole app ──────────────────
 
@@ -420,14 +406,12 @@ describe('Workshop from the source job', () => {
     const sheet = await openRow('fence posts')
 
     const move = sheet.getByRole('button', { name: /Move to the Workshop/ })
-    expect(move).toHaveTextContent('No new cost. Budget and Money stay as they are.')
+    expect(move).toHaveTextContent('Keep track of this material in the Workshop.')
     // The consequence is stated on the action, not repeated as a totals panel.
     expect(sheet.queryByText(/£/)).not.toBeInTheDocument()
   })
 
   it('moves a leftover from a Finished job without reopening it or touching the money', async () => {
-    const budgetBefore = budgetShape(WHITMORE.id)
-    const moneyBefore = moneyShape(WHITMORE.id)
 
     renderJob(WHITMORE)
     await openLeftovers()
@@ -444,8 +428,6 @@ describe('Workshop from the source job', () => {
 
     // The job is still finished, and every figure is exactly as it was.
     expect(MOCK_JOBS.find(j => j.id === WHITMORE.id)!.status).toBe('finished')
-    expect(budgetShape(WHITMORE.id)).toEqual(budgetBefore)
-    expect(moneyShape(WHITMORE.id)).toEqual(moneyBefore)
   })
 
   it('keeps the moved leftover on its job, marked IN WORKSHOP', async () => {
@@ -489,30 +471,6 @@ describe('Workshop from the source job', () => {
       expect(within(row).getByText('IN WORKSHOP')).toBeInTheDocument()
     })
     expect(mockGetWorkshop().availableItems.filter(i => i.materialName === 'Cement board')).toHaveLength(1)
-  })
-
-  it('leaves Budget and Money untouched through move, undo and put-back', async () => {
-    const budgetBefore = budgetShape(WHITMORE.id)
-    const moneyBefore = moneyShape(WHITMORE.id)
-
-    renderJob(WHITMORE)
-    await openLeftovers()
-
-    fireEvent.click((await openRow('Gravel boards')).getByRole('button', { name: /Move to the Workshop/ }))
-    const result = within(await screen.findByRole('dialog', { name: /Moved to the Workshop/ }))
-    expect(budgetShape(WHITMORE.id)).toEqual(budgetBefore)
-
-    fireEvent.click(result.getByRole('button', { name: /Undo move to the Workshop/ }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(budgetShape(WHITMORE.id)).toEqual(budgetBefore)
-
-    fireEvent.click((await openRow('Cement board')).getByRole('button', { name: /Put back in the Workshop/ }))
-    await waitFor(() => {
-      const row = screen.getByRole('button', { name: 'Open actions for Cement board' })
-      expect(within(row).getByText('IN WORKSHOP')).toBeInTheDocument()
-    })
-    expect(budgetShape(WHITMORE.id)).toEqual(budgetBefore)
-    expect(moneyShape(WHITMORE.id)).toEqual(moneyBefore)
   })
 
   it('says nothing changed when a move fails, and leaves the leftover as it was', async () => {

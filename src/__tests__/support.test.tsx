@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import SupportModePage from '../SupportModePage'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
-import type { AuthUser, InspectionData, Job, MemoryViewResponse, SupportUser } from '../types'
+import type { AuthUser, InspectionData, Job, MemoryViewResponse, SupportUser } from '../internalSupport/types'
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof api>()
@@ -17,6 +17,7 @@ vi.mock('../api', async (importOriginal) => {
     getSupportBudgetSummary: vi.fn(),
     getSupportReviewQueue: vi.fn(),
     getSupportPhotos: vi.fn(),
+    getSupportJobLabourPeople: vi.fn(() => Promise.reject(new Error('none'))),
     getSupportJobMoney: vi.fn(() => Promise.reject(new Error('none'))),
     // workspace deps for the entry-point test
     getMemoryView: vi.fn(() => Promise.resolve({ job: JOB, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
@@ -24,6 +25,7 @@ vi.mock('../api', async (importOriginal) => {
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-1', generatedAt: '', sections: [], alreadyRemembered: [] })),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-1', photos: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-1', receipts: [] })),
   }

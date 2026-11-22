@@ -37,7 +37,7 @@ test.describe('Current job home', () => {
   })
 
   test('opens on job home with the four stable section cards and no old tab strip', async ({ page }) => {
-    for (const card of ['Open Budget', 'Open Money', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Hours', 'Open Materials', 'Open Job log']) {
       await expect(page.getByRole('button', { name: card })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0)
@@ -51,7 +51,7 @@ test.describe('Current job home', () => {
 
   test('section cards fit the phone width without horizontal scroll', async ({ page }) => {
     const viewport = page.viewportSize()!
-    for (const card of ['Open Budget', 'Open Money', 'Open Labour', 'Open Materials', 'Open Job log']) {
+    for (const card of ['Open Hours', 'Open Materials', 'Open Job log']) {
       const box = await page.getByRole('button', { name: card }).boundingBox()
       expect(box).not.toBeNull()
       expect(box!.x).toBeGreaterThanOrEqual(0)
@@ -72,7 +72,7 @@ test.describe('Current job home', () => {
 
   test('Record is visible on home and every section workspace', async ({ page }) => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
-    for (const section of ['Budget', 'Money', 'Labour', 'Materials', 'Job log']) {
+    for (const section of ['Hours', 'Materials', 'Job log']) {
       await goToSection(page, section)
       await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
     }
@@ -84,7 +84,7 @@ test.describe('Current job home', () => {
     // job context stays visible
     await expect(page.locator('.ws-job-location')).toHaveText('Garden Room')
     await page.getByRole('button', { name: /job home/i }).click()
-    await expect(page.getByRole('button', { name: 'Open Budget' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
   })
 
   test('Things to check banner opens the review queue and returns', async ({ page }) => {
@@ -97,30 +97,11 @@ test.describe('Current job home', () => {
     await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
   })
 
-  test('the Spend card shows total known cost (bought + labour)', async ({ page }) => {
-    await page.waitForTimeout(700)
-    // £2,270 = bought + trusted labour, the job-level total known cost.
-    await expect(page.getByRole('button', { name: 'Open Budget' })).toContainText('£2,270')
-  })
-
   // The nav row keeps the figure and its denominator as separate elements so
   // the numbers right-align into a column, so they are asserted separately.
   test('the Labour card shows the job-total labour hours', async ({ page }) => {
     await page.waitForTimeout(700)
-    const labour = page.getByRole('button', { name: 'Open Labour' })
-    await expect(labour.locator('.ws-home-card-value')).toHaveText(/^\d+h$/)
-    await expect(labour.locator('.ws-home-card-denom')).toHaveText('logged')
-  })
-
-  test('latest activity sits below the section cards', async ({ page }) => {
-    await page.waitForTimeout(700)
-    const cards = page.locator('.ws-home-cards')
-    const latest = page.locator('.ws-latest-card')
-    await expect(cards).toBeVisible()
-    await expect(latest).toBeVisible()
-    const cardsY = await cards.boundingBox().then(b => b?.y ?? 0)
-    const latestY = await latest.boundingBox().then(b => b?.y ?? 0)
-    expect(latestY).toBeGreaterThan(cardsY)
+    await expect(page.getByRole('button', { name: 'Open Hours' })).toContainText('29h logged')
   })
 
   test('a started job shows "In progress" under the STATUS label', async ({ page }) => {
@@ -133,7 +114,7 @@ test.describe('Current job home', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
     await page.waitForTimeout(500)
     await expect(page.locator('.ws-status-chip')).toHaveText(/Planning/)
-    await expect(page.getByRole('button', { name: 'Open Budget' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
   })
 
   test('home does not show a days-since-start metric', async ({ page }) => {
@@ -141,24 +122,10 @@ test.describe('Current job home', () => {
     expect(bodyText).not.toMatch(/days? since start/i)
   })
 
-  test('latest activity rows show a type, date and time, and open the right section on tap', async ({ page }) => {
-    await page.waitForTimeout(700)
-    const firstRow = page.locator('.ws-latest-row').first()
-    await expect(firstRow).toBeVisible()
-    const typeLabel = await firstRow.locator('.ws-type-chip').textContent()
-    await expect(firstRow.locator('.ws-latest-time')).toHaveText(/\d{2}:\d{2}/)
-
-    // Section-per-type mapping mirrors CurrentJobWorkspace's ACTIVITY_DEST.
-    const expectedTitle: Record<string, string> = {
-      Bought: 'Budget', Labour: 'Labour', Used: 'Materials', Note: 'Job log', Photo: 'Job log',
-    }
-    await firstRow.click()
-    await expect(page.locator('.ws-job-title')).toHaveText(expectedTitle[typeLabel!.trim()])
-  })
-
   test('a newly uploaded photo appears under Job log → Photos with a Photo latest-activity entry when newest', async ({ page }) => {
     await goToSection(page, 'Job log', 'Photos')
     await page.waitForTimeout(700)
+    await page.getByRole('button', { name: 'Add or change photos' }).click()
     const photos = page.getByRole('region', { name: /job photos/i })
     await photos.getByRole('button', { name: 'Add photo' }).click()
     const form = photos.getByRole('form', { name: 'Add photo' })
@@ -189,7 +156,7 @@ test.describe('Current job home', () => {
 
   test('Job log contains All / Notes / Photos / Receipts filters, All first', async ({ page }) => {
     await goToSection(page, 'Job log')
-    for (const f of ['All', 'Notes', 'Photos', 'Receipts']) {
+    for (const f of ['All', 'Notes', 'Photos']) {
       await expect(page.getByRole('tab', { name: f })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')

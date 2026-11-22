@@ -11,15 +11,10 @@ export function memoryItemToEdit(item: MemoryViewItem): MemoryItemEdit {
     supplierName: item.supplierName,
     deliveryTiming: item.deliveryTiming,
     locationOrUse: item.locationOrUse,
-    costAmount: item.costAmount,
-    costCurrency: item.costCurrency,
-    costQualifier: item.costQualifier,
-    totalCostAmount: item.totalCostAmount,
     labourHours: item.labourHours ?? null,
     labourPerson: item.labourPerson ?? null,
     labourTask: item.labourTask ?? null,
     happenedAt: item.happenedAt ?? null,
-    budgetCategoryId: item.budgetCategoryId ?? null,
   }
 }
 
@@ -34,15 +29,10 @@ export function rememberedItemToEdit(item: AlreadyRememberedItem): MemoryItemEdi
     supplierName: item.supplierName ?? null,
     deliveryTiming: item.deliveryTiming ?? null,
     locationOrUse: item.locationOrUse ?? null,
-    costAmount: item.costAmount ?? null,
-    costCurrency: item.costCurrency ?? null,
-    costQualifier: item.costQualifier ?? null,
-    totalCostAmount: item.totalCostAmount ?? null,
     labourHours: item.labourHours ?? null,
     labourPerson: item.labourPerson ?? null,
     labourTask: item.labourTask ?? null,
     happenedAt: item.happenedAt ?? null,
-    budgetCategoryId: item.budgetCategoryId ?? null,
   }
 }
 
@@ -61,15 +51,10 @@ export function applyEditToRemembered(
     supplierName: updated.supplierName,
     deliveryTiming: updated.deliveryTiming,
     locationOrUse: updated.locationOrUse,
-    costAmount: updated.costAmount,
-    costCurrency: updated.costCurrency,
-    costQualifier: updated.costQualifier,
-    totalCostAmount: updated.totalCostAmount,
     labourHours: updated.labourHours ?? null,
     labourPerson: updated.labourPerson ?? null,
     labourTask: updated.labourTask ?? null,
     happenedAt: updated.happenedAt ?? null,
-    budgetCategoryId: updated.budgetCategoryId ?? null,
     uncertaintyFlags: updated.uncertaintyFlags ?? prev.uncertaintyFlags ?? [],
   }
 }

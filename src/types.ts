@@ -1,5 +1,3 @@
-// Authenticated account — replaces the single shared pilot passcode identity.
-// Backend always includes `role` (defaults to PILOT).
 export interface AuthUser {
   id: string
   email: string
@@ -8,13 +6,10 @@ export interface AuthUser {
 }
 
 export type LocalNoteState =
-  | 'saved_local'
-  | 'uploading'
-  | 'uploaded'
-  | 'upload_failed'
-  | 'upload_needs_attention'
+  'saved_local' | 'uploading' | 'uploaded' | 'upload_failed' | 'upload_needs_attention'
 
 export type TranscriptStatus = 'waiting' | 'transcribing' | 'ready' | 'failed'
+
 export type ExtractionStatus = 'waiting' | 'extracting' | 'ready' | 'failed'
 
 export interface LocalNote {
@@ -48,17 +43,12 @@ export interface Job {
   updatedAt: string
 }
 
-// POST /api/jobs — the lightweight New Job command. Only the three fields the
-// book-home spec allows: a name, an optional where, and the state the job
-// starts in. A job can only be created as work in hand or work being planned.
 export interface CreateJobRequest {
   title: string
   roughLocationOrLabel?: string | null
   status?: 'planning' | 'started'
 }
 
-// All statuses are editable through PATCH /api/jobs/:jobId — archived is an
-// archive action (not a delete), so the frontend must confirm before applying it.
 export type EditableJobStatus = 'planning' | 'started' | 'finished' | 'archived'
 
 export type FactType =
@@ -74,29 +64,7 @@ export type FactType =
 
 export type ConfidenceLabel = 'high' | 'medium' | 'low'
 
-export type CostQualifier = 'each' | 'total' | 'approx' | 'unknown' | 'per_hour'
-/** @deprecated Legacy API field; never shown or written by the builder UI. */
-export type LabourBudgetTreatment = 'counts_toward_budget' | 'hours_only'
-
-// ── Review queue types ────────────────────────────────────────────────────────
-
-// Trusted memory must be a concrete type — unclear items must be corrected or
-// dismissed. 'returned_material' is a memory type but deliberately not a
-// FactType: returns are recorded by Mike through the return action, never
-// inferred from a voice note ("I'm going to take these back" is not a refund).
-// 'budget_cost' is a general trusted job cost (labour cost, plant, hire,
-// subcontractor, or any non-material cost) — Budget owns all cost; Labour is
-// hours-only. See labour-hours-budget-costs-paid-undo spec.
-export type MemoryType = Exclude<FactType, 'unclear'> | 'returned_material' | 'budget_cost'
-
-// A deterministic, response-time category suggestion for a review item. Never
-// stored on the candidate fact — computed from the job's active categories.
-export type BudgetCategorySuggestionReason = 'material_name_match' | 'summary_match'
-export interface BudgetCategorySuggestion {
-  budgetCategoryId: string
-  categoryName: string
-  reason: BudgetCategorySuggestionReason
-}
+export type MemoryType = Exclude<FactType, 'unclear'> | 'returned_material'
 
 export interface ProposedMemory {
   memoryType: MemoryType
@@ -107,32 +75,14 @@ export interface ProposedMemory {
   supplierName: string | null
   deliveryTiming: string | null
   locationOrUse: string | null
-  costAmount: string | null
-  costCurrency: string | null
-  costQualifier: CostQualifier | null
-  totalCostAmount: string | null
-  // Labour-specific fields (only meaningful for memoryType 'labour').
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
-  // Review-queue labour enrichment: the exact-name-matched person's id + the
-  // budget treatment that will be persisted on confirm (correctable), plus the
-  // inherited person/treatment for display. Absent on non-labour drafts and on
-  // older backends without people enrichment.
-  labourPersonId?: string | null
-  labourBudgetEnabled?: boolean | null
-  inheritedLabourPerson?: LabourPerson | null
-  inheritedBudgetTreatment?: LabourBudgetTreatment | null
-  // Effective event day (ISO DateTime; local noon for date-only). Labour drafts
-  // carry the spoken/derived day; corrections may change it.
   happenedAt?: string | null
-  // Additive: the suggested/default category for this review item (not stored on
-  // the candidate fact). null when there is no strong suggestion.
-  budgetCategoryId?: string | null
-  budgetCategorySuggestion?: BudgetCategorySuggestion | null
 }
 
 export type QueueItemKind = 'single' | 'duplicate_group' | 'contradiction' | 'unclear_prompt'
+
 export type QueueItemStatus = 'draft' | 'confirmed' | 'corrected' | 'dismissed'
 
 export interface QueueSourceContext {
@@ -174,38 +124,23 @@ export interface AlreadyRememberedItem {
   supplierName?: string | null
   deliveryTiming?: string | null
   locationOrUse?: string | null
-  costAmount?: string | null
-  costCurrency?: string | null
-  costQualifier?: CostQualifier | null
-  totalCostAmount?: string | null
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
   happenedAt?: string | null
   uncertaintyFlags?: string[]
   sourceUncertaintyFlags?: string[]
-  // The confirmed category on this remembered item, if any.
-  budgetCategoryId?: string | null
 }
 
 export interface ReviewQueue {
   jobId: string
   generatedAt: string
-  // Active budget categories for the job (additive). Drives review-time category
-  // selection; empty/absent → no category UI is shown during review.
-  budgetCategories?: BudgetCategory[]
-  // Active labour people for the owner (additive) — used to resolve a corrected
-  // person name back to an id when confirming a labour draft.
-  labourPeople?: LabourPerson[]
   sections: QueueSection[]
   alreadyRemembered: AlreadyRememberedItem[]
 }
 
 export type QueueDecisionAction = 'confirm' | 'correct' | 'dismiss'
 
-// How a Worth-checking item's unresolved state is settled when it becomes /
-// stays trusted memory. 'resolved' = Mike has dealt with it (clear the flag);
-// 'still_unsure' = keep it flagged.
 export type UncertaintyResolution = 'resolved' | 'still_unsure'
 
 export interface QueueDecision {
@@ -214,13 +149,6 @@ export interface QueueDecision {
   corrected?: ProposedMemory
   reason?: string
   uncertaintyResolution?: UncertaintyResolution
-  // Selected category to carry into the created memory item (ordered_material
-  // only). null = remember with no category; omitted = backwards-compatible.
-  budgetCategoryId?: string | null
-  // Labour drafts only: the person to link and whether the entry counts toward
-  // Budget. Omitted → backend applies the same safe defaults as direct-add.
-  labourPersonId?: string | null
-  labourBudgetEnabled?: boolean | null
 }
 
 export interface QueueDecisionResponse {
@@ -245,18 +173,12 @@ export interface CandidateFact {
   supplierName: string | null
   deliveryTiming: string | null
   locationOrUse: string | null
-  costAmount: string | null
-  costCurrency: string | null
-  costQualifier: CostQualifier | null
-  totalCostAmount: string | null
   confidenceLabel: ConfidenceLabel
   confidenceReason: string | null
   uncertaintyFlags: string[]
   createdAt: string
   updatedAt: string
 }
-
-// ── Pilot inspection types ────────────────────────────────────────────────────
 
 export type InspectionReviewState = 'waiting' | 'confirmed' | 'edited' | 'dismissed'
 
@@ -359,8 +281,6 @@ export interface InspectionData {
   possibleMisses: InspectionPossibleMiss[]
 }
 
-// ── Job memory view types (Story 11) ──────────────────────────────────────────
-
 export interface MemoryViewSource {
   candidateFactId: string
   noteId: string
@@ -370,6 +290,13 @@ export interface MemoryViewSource {
 }
 
 export interface MemoryViewItem {
+  memoryItemId?: string
+  item?: string | null
+  amount?: string | null
+  supplier?: string | null
+  notes?: string | null
+  date?: string
+
   id: string
   memoryType: string
   summary: string
@@ -379,60 +306,18 @@ export interface MemoryViewItem {
   supplierName: string | null
   deliveryTiming: string | null
   locationOrUse: string | null
-  costAmount: string | null
-  costCurrency: string | null
-  costQualifier: CostQualifier | null
-  totalCostAmount: string | null
-  // Actionable unresolved flags (from memory_items.unresolvedFlags). Drives
-  // the "Worth checking" display; cleared when Mike resolves the item.
   uncertaintyFlags: string[]
-  // Provenance: the source candidate fact's original uncertainty. Preserved
-  // as evidence, not actionable. Optional until backend ships it.
   sourceUncertaintyFlags?: string[]
   sourceCandidateFactId: string | null
   reviewDecisionId: string | null
-  // Labour-specific fields (only meaningful for memoryType 'labour').
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
-  // The lightweight labour person this entry is linked to, if any.
-  labourPersonId?: string | null
-  // Whether this labour entry can contribute to Budget when it has trusted
-  // cost. false = hours-only. Absent on older rows (treated as legacy — the
-  // pre-people behaviour is preserved so migrated Budget totals don't shift).
-  labourBudgetEnabled?: boolean | null
-  // The budget category this trusted item is assigned to, if any (zero or one).
-  // Present on memory-view items so Job memory can show/edit assignment inline.
-  budgetCategoryId?: string | null
-  // Effective event date (direct-add). Display date preference:
-  // happenedAt ?? source.capturedAt ?? createdAt.
   happenedAt?: string | null
-  // ── Returned materials (memoryType 'returned_material') ──────────────────
-  // Money back, deliberately NOT costAmount/totalCostAmount: those mean money
-  // out for a bought/labour line, and overloading them would make a refund
-  // read as ordinary positive spend.
-  refundAmount?: string | null
-  refundCurrency?: string | null
-  // The Left over item this was returned from, when the return went through the
-  // Left over action. Traceability only — a plain id, not a loaded relation.
   returnedFromMemoryItemId?: string | null
-  // true for items added directly (not voice-extracted). Optional until backend ships it.
   isManual?: boolean
-  // ── Workshop (availability memory) ───────────────────────────────────────
-  // A confirmed leftover keeps living here, on its own job, and gains a current
-  // Workshop state. These are additive read-model fields owned by the backend:
-  // absent on an older API, which simply means no Workshop has been offered yet.
-  //
-  // Deliberately NOT a second copy of the material: the amount below travels
-  // with the linked Workshop item, so the source row and the Workshop row can
-  // never state two different rough amounts for the same physical stuff.
   workshopState?: SourceWorkshopState
   workshopItemId?: string | null
-  // The linked Workshop item's current rough wording. Preferred over
-  // quantity/unit for display while the material is linked: the source row and
-  // the Workshop row state one current amount between them, and this is it.
-  // The recorded quantity is left intact underneath — the leftover is still the
-  // memory it always was.
   workshopRoughAmount?: string | null
   workshopEnteredAt?: string | null
   workshopEnteredLabel?: string | null
@@ -462,406 +347,14 @@ export interface MemoryViewStillToCheck {
   items: MemoryViewStillToCheckItem[]
 }
 
-export interface ScanViewItem {
-  memoryType: string
-  // Prose headline for non-material groups (supplier notes, changes, watch-outs)
-  primaryText: string | null
-  materialName: string | null
-  quantity: string | null
-  unit: string | null
-  supplierName: string | null
-  deliveryTiming: string | null
-  locationOrUse: string | null
-  costLabel: string | null
-  totalCostLabel: string | null
-  uncertaintyFlags: string[]
-  // true when this row consolidates >1 remembered item (like-for-like total)
-  consolidated: boolean
-  memoryItemIds: string[]
-}
-
-export interface ScanViewSection {
-  key: string
-  label: string
-  items: ScanViewItem[]
-}
-
-// Backend-authoritative bought/ordered cost summary (memory-view.costSummary).
-export interface CostSummaryRow {
-  key: string
-  materialName: string
-  quantity: string | null
-  unit: string | null
-  lineTotalAmount: string
-  lineTotalCurrency: string
-  lineTotalLabel: string
-  memoryItemIds: string[]
-}
-// Why a trusted bought/ordered item is not in Known spend. Kept as an open
-// union (string) so an unknown future reason from the backend never crashes the
-// UI — it falls back to the safe "Cost worth checking" copy.
-export type SpendExclusionReason = 'no_cost_remembered' | 'cost_worth_checking'
-
-export interface ExcludedSpendRow {
-  memoryItemId: string
-  itemLabel: string
-  materialName: string | null
-  quantity: string | null
-  unit: string | null
-  reason: SpendExclusionReason | string
-}
-
-export interface OrderedCostSummary {
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  knownSpendLabel: string | null
-  includedMemoryItemIds: string[]
-  missingCostCount: number
-  uncertainCostCount: number
-  excludedMemoryItemIds: string[]
-  rows: CostSummaryRow[]
-  // Additive (Known spend clarity). Absent on older backends → the UI keeps the
-  // count-based explanation. Present → each excluded item is named with a reason.
-  excludedRows?: ExcludedSpendRow[]
-}
-// Labour money summary (additive). Mirrors the known-spend-clarity shape but
-// for labour: rows that contribute, and excluded rows with a labour reason.
-export interface LabourSpendRow {
-  memoryItemId: string
-  itemLabel: string
-  labourHours: string | null
-  labourPerson: string | null
-  labourTask: string | null
-  lineTotalAmount: string
-  lineTotalCurrency: string
-  lineTotalLabel: string
-}
-export type LabourExclusionReason = 'no_rate_or_cost' | 'cost_worth_checking'
-export interface LabourExcludedRow {
-  memoryItemId: string
-  itemLabel: string
-  labourHours: string | null
-  labourPerson: string | null
-  labourTask: string | null
-  reason: LabourExclusionReason
-}
-export interface LabourCostSummary {
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  knownSpendLabel: string | null
-  includedMemoryItemIds: string[]
-  rows: LabourSpendRow[]
-  excludedRows: LabourExcludedRow[]
-}
-export interface TotalKnownCost {
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  knownSpendLabel: string | null
-  includedMemoryItemIds: string[]
-}
-// Trusted money out before refunds — the figure totalKnownCost was until
-// returned materials landed. Shown as the "Bought and labour" line so a net
-// total can never drop without saying why.
-export interface GrossKnownCost {
-  amount: string | null
-  currency: string | null
-  label: string | null
-}
-// One trusted refund from a returned material. Never a spend row: it is money
-// back, and the Spend lens renders it as a signed reduction.
-export interface ReturnedRefundRow {
-  memoryItemId: string
-  itemLabel: string
-  materialName: string | null
-  quantity: string | null
-  unit: string | null
-  supplierName: string | null
-  refundAmount: string
-  refundCurrency: 'GBP'
-  refundLabel: string // e.g. "£80 refund"
-  happenedAt: string | null
-}
-export interface RefundsSummary {
-  knownRefundAmount: string | null
-  knownRefundCurrency: 'GBP' | null
-  knownRefundLabel: string | null // e.g. "£80 refunded"
-  rows: ReturnedRefundRow[]
-}
-export interface CostSummary {
-  orderedMaterials: OrderedCostSummary
-  // Additive: present once the backend supports labour money.
-  labour?: LabourCostSummary
-  // Bought + labour trusted monetary cost, NET of trusted refunds since
-  // returned materials. Drives the spend hero.
-  totalKnownCost?: TotalKnownCost
-  // Additive (returned materials): gross (pre-refund) and the refunds that
-  // take it down to totalKnownCost. Absent on older backends → no refunds
-  // exist, so the hero shows the total with no breakdown.
-  grossKnownCost?: GrossKnownCost
-  refunds?: RefundsSummary
-}
-
-// ── Labour daily view (Labour Tracking V2) ──────────────────────────────────
-// Backend-authoritative daily labour summary on memory-view. Days are UK local
-// calendar days from happenedAt; hour totals are safe totals (strict positive
-// decimal hours, no unresolved flags) — never guesses.
-
-export interface LabourDayItem {
-  memoryItemId: string
-  labourPerson: string | null
-  labourTask: string | null
-  labourHours: string | null
-  hoursLabel: string | null
-  happenedAt: string | null
-  includedInHourTotal: boolean
-  worthChecking: boolean
-  lineTotalAmount: string | null
-  lineTotalCurrency: string | null
-  lineTotalLabel: string | null
-}
-
-export interface LabourDaySummary {
-  date: string // YYYY-MM-DD in UK local day
-  totalHours: string | null
-  totalLabel: string | null // e.g. "10h day total"
-  items: LabourDayItem[]
-}
-
-export interface LabourHoursSummary {
-  totalHours: string | null
-  totalLabel: string | null // e.g. "24h job total"
-  days: LabourDaySummary[]
-}
-
-// ── Labour people (scoped to the current job) ────────────────────────────────
-
-export interface LabourPerson {
-  id: string
-  name: string
-  defaultHourlyRateAmount: string | null
-  defaultHourlyRateCurrency: 'GBP' | null
-  /** @deprecated Compatibility only. */
-  defaultBudgetTreatment?: LabourBudgetTreatment
-  createdAt: string
-  updatedAt: string
-}
-
-// A person plus this job's stats — returned by the job-scoped list so a person
-// with no entries on this job can still be selected for a new one.
-export interface LabourPersonWithJobStats extends LabourPerson {
-  // True for the account owner's own person row (shown as "· you").
-  isSelf?: boolean
-  jobHours: string | null
-  jobHoursLabel: string | null
-  jobLabourCostAmount?: string | null
-  jobLabourCostCurrency?: 'GBP' | null
-  jobLabourCostLabel?: string | null
-  /** @deprecated pre-correction response aliases. */
-  jobBudgetCostAmount?: string | null
-  jobBudgetCostCurrency?: 'GBP' | null
-  jobBudgetCostLabel?: string | null
-  hasEntriesWithoutRate: boolean
-}
-
-export interface LabourPeopleResponse {
-  jobId: string
-  people: LabourPersonWithJobStats[]
-}
-
-export interface CreateLabourPersonRequest {
-  name: string
-  defaultHourlyRateAmount?: string | null
-  defaultHourlyRateCurrency?: 'GBP' | null
-}
-
-// PATCH — omitted fields preserve; null rate clears the default rate/currency.
-export interface PatchLabourPersonRequest {
-  name?: string
-  defaultHourlyRateAmount?: string | null
-  defaultHourlyRateCurrency?: 'GBP' | null
-}
-
-// ── Budget categories & known spend by category ─────────────────────────────
-// Backend-authoritative. The frontend never recomputes category known spend as
-// confirmed truth — it renders the budget-summary response.
-
-export interface BudgetCategory {
-  id: string
-  jobId: string
-  name: string
-  budgetAmount: string | null
-  budgetCurrency: string | null
-  sortOrder: number
-  isArchived: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-// One contributing memory item under a category / uncategorised (not consolidated).
-export interface BudgetSpendRow {
-  memoryItemId: string
-  // Additive: distinguishes bought vs labour contributions in a category.
-  memoryType?: string
-  itemLabel: string
-  materialName: string | null
-  quantity: string | null
-  unit: string | null
-  labourHours?: string | null
-  labourPerson?: string | null
-  labourTask?: string | null
-  lineTotalAmount: string
-  lineTotalCurrency: string
-  lineTotalLabel: string
-  // Authoritative paid state for this source row. Optional keeps the frontend
-  // compatible with an older backend during the coordinated rollout.
-  paymentState?: 'paid' | 'not_paid' | null
-  paidMoneyEventId?: string | null
-  paidAt?: string | null
-  eligibleForPaymentState?: boolean
-}
-
-export interface BudgetCategorySummary {
-  category: BudgetCategory
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  knownSpendLabel: string | null
-  budgetAmount: string | null
-  budgetCurrency: string | null
-  budgetLabel: string | null
-  remainingAmount: string | null
-  remainingLabel: string | null
-  overBudget: boolean
-  paymentState?: 'paid' | 'not_paid' | 'some_paid' | null
-  paidAmount?: string | null
-  paidCurrency?: 'GBP' | null
-  paidLabel?: string | null
-  notPaidAmount?: string | null
-  notPaidCurrency?: 'GBP' | null
-  notPaidLabel?: string | null
-  paymentStateReason?: 'eligible_items' | 'missing_price_present' | 'no_eligible_items' | null
-  rows: BudgetSpendRow[]
-}
-
-export interface UncategorizedSpendSummary {
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  knownSpendLabel: string | null
-  rows: BudgetSpendRow[]
-}
-
-export interface BudgetSummaryTotals {
-  budgetAmount: string | null
-  budgetCurrency: string | null
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  remainingAmount: string | null
-  remainingLabel: string | null
-  overBudget: boolean
-  // Authoritative job-level payment context from budget-summary. Optional
-  // during the additive rollout; absence means omit the masthead line rather
-  // than joining category and Money rows in the frontend.
-  notPaidAmount?: string | null
-  notPaidCurrency?: 'GBP' | null
-  notPaidLabel?: string | null
-  allKnownCostsPaid?: boolean
-  hasKnownPayableCosts?: boolean
-  hasMissingPriceAttention?: boolean
-}
-
-// System labour spend group (Labour Tracking V2). Present even when Mike has
-// not created a Labour budget category; rows are every safe trusted labour
-// monetary row, once. If an active category named "labour" exists it is exposed
-// as budgetCategory and its budget drives budget/remaining.
-export interface LabourSpendSummary {
-  knownSpendAmount: string | null
-  knownSpendCurrency: string | null
-  knownSpendLabel: string | null
-  budgetCategory: BudgetCategory | null
-  budgetAmount: string | null
-  budgetCurrency: string | null
-  budgetLabel: string | null
-  remainingAmount: string | null
-  remainingLabel: string | null
-  overBudget: boolean
-  // The Labour system group is rendered as a Budget category in the frontend.
-  // Backends may return these directly; the older-response fallback derives
-  // them from authoritative row payment states.
-  paymentState?: 'paid' | 'not_paid' | 'some_paid' | null
-  paidAmount?: string | null
-  paidCurrency?: 'GBP' | null
-  paidLabel?: string | null
-  notPaidAmount?: string | null
-  notPaidCurrency?: 'GBP' | null
-  notPaidLabel?: string | null
-  paymentStateReason?: 'eligible_items' | 'missing_price_present' | 'no_eligible_items' | null
-  rows: BudgetSpendRow[] // memoryType === 'labour'
-}
-
-export interface BudgetSummaryResponse {
-  jobId: string
-  generatedAt: string
-  categories: BudgetCategorySummary[]
-  uncategorized: UncategorizedSpendSummary
-  totals: BudgetSummaryTotals
-  // Additive: absent on older backends → frontend falls back to deriving labour
-  // rows from categories/uncategorized.
-  labour?: LabourSpendSummary
-}
-
-export interface CreateBudgetCategoryRequest {
-  name: string
-  budgetAmount?: string | null
-  budgetCurrency?: string | null
-  sortOrder?: number
-}
-
-export interface PatchBudgetCategoryRequest {
-  name?: string
-  budgetAmount?: string | null
-  budgetCurrency?: string | null
-  sortOrder?: number
-  isArchived?: boolean
-}
-
 export interface MemoryViewResponse {
+  hours: HoursSummary
   job: Job
   generatedAt: string
   sections: MemoryViewSection[]
   stillToCheck: MemoryViewStillToCheck
-  summarySections?: ScanViewSection[]
-  costSummary?: CostSummary
-  // Additive: authoritative daily labour summary (Labour Tracking V2).
-  labourHoursSummary?: LabourHoursSummary
 }
 
-// ── Workspace Overview derivations (frontend-only) ────────────────────────────
-// Compact summaries the current-job Overview shows. Derived from trusted
-// memory-view sections only — pending drafts are never included.
-
-export interface LabourTodaySummary {
-  // Sum of strict-numeric labourHours on labour items dated today (local day).
-  totalHours: number
-  hasHours: boolean
-  // Per-person hour split, e.g. [{ person: 'Mike', hours: 4 }].
-  perPerson: { person: string; hours: number }[]
-}
-
-export type LatestActivityType = 'bought' | 'used' | 'returned' | 'labour' | 'note' | 'photo' | 'payment' | 'receipt'
-
-export interface LatestActivityItem {
-  memoryItemId: string
-  type: LatestActivityType
-  typeLabel: string // 'Bought' | 'Used' | 'Labour' | 'Note'
-  headline: string
-  // Right-aligned money label when the item carries a trusted/shown cost.
-  costLabel: string | null
-  // ISO effective timestamp (source.capturedAt ?? createdAt) for age display.
-  effectiveAt: string
-}
-
-// Request body for POST /api/jobs/:jobId/memory-items — create a trusted manual
-// memory item directly (no audio/transcription/extraction/review). The section
-// the user is in chooses memoryType; there is no generic "add record".
 export interface CreateMemoryItemRequest {
   memoryType: MemoryType
   summary?: string | null
@@ -872,89 +365,38 @@ export interface CreateMemoryItemRequest {
   supplierName?: string | null
   deliveryTiming?: string | null
   locationOrUse?: string | null
-  costAmount?: string | null
-  costCurrency?: string | null
-  costQualifier?: CostQualifier | null
-  totalCostAmount?: string | null
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
-  // Link a new labour entry to a labour person; when provided and rate/treatment
-  // are omitted, the backend applies that person's defaults.
-  labourPersonId?: string | null
-  // Whether the entry counts toward Budget when trusted. Omitted → the person's
-  // default, or hours-only when no person/default is available.
-  labourBudgetEnabled?: boolean | null
-  budgetCategoryId?: string | null
-  // Record an eligible trusted positive source cost as already paid on create,
-  // atomically adding one linked Money out. Currently used by bought material
-  // and labour source-entry flows.
-  markPaid?: boolean
 }
 
-// Request body for PATCH /api/jobs/:jobId/memory-items/:memoryItemId
-// Corrects trusted memory in place — never creates a queue item or draft fact.
 export interface MemoryItemEdit {
-  memoryType: MemoryType
+  memoryType?: MemoryType
   summary?: string | null
-  materialName: string | null
-  quantity: string | null
-  unit: string | null
-  supplierName: string | null
-  deliveryTiming: string | null
-  locationOrUse: string | null
-  costAmount: string | null
-  costCurrency: string | null
-  costQualifier: CostQualifier | null
-  // The backend treats presence of this key as explicit: a value sets the line
-  // total, null clears it. OMIT the key to let the backend derive it (e.g. unit
-  // cost = quantity × costAmount). Not sent → unchanged/derived, not cleared.
-  totalCostAmount?: string | null
-  // Labour-specific fields (sent when memoryType is 'labour').
+  materialName?: string | null
+  quantity?: string | null
+  unit?: string | null
+  supplierName?: string | null
+  deliveryTiming?: string | null
+  locationOrUse?: string | null
   labourHours?: string | null
   labourPerson?: string | null
   labourTask?: string | null
-  // Re-link (or unlink, with null) the entry's labour person. Omitted preserves.
-  labourPersonId?: string | null
-  // Change future Budget inclusion for this entry. Omitted preserves.
-  labourBudgetEnabled?: boolean | null
-  // Effective event day. Present sets/clears the value (local-noon ISO for a
-  // date-only edit); OMIT the key to preserve the existing value.
   happenedAt?: string | null
-  // Clears (resolved) or keeps (still_unsure) memory_items.unresolvedFlags.
-  // Omitted preserves existing flags (backwards compatible).
   uncertaintyResolution?: UncertaintyResolution
-  // Assign/clear the item's budget category. Omitted leaves it unchanged.
-  budgetCategoryId?: string | null
 }
-
-// ── Returned materials ────────────────────────────────────────────────────────
-// POST /api/jobs/:jobId/memory-items/:memoryItemId/return — move all or part of
-// a Left over item to Returned. A dedicated operation, not a client-side split:
-// creating the returned item and reducing the leftover must be one transaction.
-// Returning is not deleting — the original purchase history stays intact.
 
 export interface ReturnMaterialRequest {
   quantity: string
-  // Defaults to the source leftover's unit when omitted.
   unit?: string | null
   supplierName?: string | null
-  // Omitted/null → returned, but no trusted refund: it does not reduce spend.
-  refundAmount?: string | null
-  refundCurrency?: 'GBP' | null
   happenedAt?: string | null // ISO datetime or YYYY-MM-DD
 }
 
 export interface ReturnMaterialResponse {
   returnedItem: MemoryViewItem
-  // null on a full return — the leftover left the active record entirely.
   remainingLeftoverItem: MemoryViewItem | null
 }
-
-// ── Job photos ────────────────────────────────────────────────────────────────
-// A job photo is supporting job context — not a memory item, spend item, or
-// extraction source. Receipt photos are evidence only: uploading one never
-// creates candidate facts, memory items, review decisions, or spend changes.
 
 export interface JobPhotoLinkedNote {
   id: string
@@ -980,8 +422,6 @@ export interface JobPhoto {
   linkedMemoryItemId: string | null
   linkedNote: JobPhotoLinkedNote | null
   linkedMemoryItem: JobPhotoLinkedMemoryItem | null
-  // Authenticated backend route (e.g. /api/jobs/:jobId/photos/:photoId/file).
-  // Never a public object-storage URL.
   imageUrl: string
 }
 
@@ -990,8 +430,6 @@ export interface JobPhotosResponse {
   photos: JobPhoto[]
 }
 
-// Multipart upload fields for POST /api/jobs/:jobId/photos. At most one link
-// target; descriptor is trimmed, blank → null, max 120 chars.
 export interface UploadJobPhotoRequest {
   file: File
   descriptor?: string | null
@@ -999,68 +437,11 @@ export interface UploadJobPhotoRequest {
   linkedMemoryItemId?: string | null
 }
 
-// PATCH /api/jobs/:jobId/photos/:photoId — omitted fields preserve existing
-// values; null clears. At most one link target set after patch.
 export interface PatchJobPhotoRequest {
   descriptor?: string | null
   linkedNoteId?: string | null
   linkedMemoryItemId?: string | null
 }
-
-// ── Receipts and invoices (job evidence, never accounting) ───────────────────
-// A receipt is classified by Mike's intent at upload time, not by file format:
-// "Add photo" makes a photo, "Add receipt or invoice" makes receipt evidence.
-// A receipt image therefore never appears under Photos. Receipts are storage
-// and recall only — no OCR, no parsing, no spend, no Money, no memory items.
-
-// Whether the stored file is a renderable image or a PDF document. Drives the
-// thumbnail-vs-icon decision only; the backend is the authority on the value.
-export type JobEvidenceFileKind = 'image' | 'pdf'
-
-export interface JobReceipt {
-  id: string
-  jobId: string
-  kind: 'receipt'
-  fileKind: JobEvidenceFileKind
-  // Optional short description Mike typed. Blank → null.
-  descriptor: string | null
-  // The file's original name, kept for recognition only — never a storage key.
-  originalFileName: string | null
-  mimeType: string
-  sizeBytes: number
-  uploadedAt: string
-  createdAt: string
-  updatedAt: string
-  // Authenticated backend route (e.g. /api/jobs/:jobId/receipts/:id/file).
-  // Never a public object-storage URL.
-  fileUrl: string
-  // Optional authenticated thumbnail route; null for PDFs (and whenever the
-  // backend has no separate thumbnail), which fall back to a file-type icon.
-  thumbnailUrl: string | null
-}
-
-export interface JobReceiptsResponse {
-  jobId: string
-  receipts: JobReceipt[]
-}
-
-// Multipart upload fields for POST /api/jobs/:jobId/receipts. File-only save is
-// valid: descriptor is optional, trimmed, blank → null, max 120 chars. No
-// supplier/amount/date/category/spend-link fields exist by design.
-export interface UploadJobReceiptRequest {
-  file: File
-  descriptor?: string | null
-}
-
-// PATCH /api/jobs/:jobId/receipts/:receiptId — omitted preserves, null clears.
-export interface PatchJobReceiptRequest {
-  descriptor?: string | null
-}
-
-// ── Founder Support Mode (internal, read-only) ───────────────────────────────
-// Deliberate /api/internal/support/... READ endpoints gated on role INTERNAL.
-// Support mode never swaps the session user and has no write routes; normal
-// APIs stay owner-scoped to the signed-in user.
 
 export interface SupportUser {
   id: string
@@ -1099,157 +480,6 @@ export interface SupportUserJobsResponse {
   jobs: SupportJob[]
 }
 
-// ── Customer payments (money in — deliberately separate from spend) ──────────
-
-// GET /api/jobs/:jobId/payments — summary plus active history, newest first.
-export interface JobPaymentsResponse {
-  jobId: string
-  generatedAt: string
-
-  customerTotalAmount: string | null
-  customerTotalCurrency: 'GBP' | null
-  customerTotalLabel: string | null
-
-  totalPaidAmount: string | null
-  totalPaidCurrency: 'GBP' | null
-  totalPaidLabel: string | null
-
-  stillOwedAmount: string | null
-  stillOwedCurrency: 'GBP' | null
-  stillOwedLabel: string | null
-
-  overpaid: boolean
-  overpaidAmount: string | null
-  overpaidLabel: string | null
-
-  payments: JobPayment[]
-}
-
-export interface JobPayment {
-  id: string
-  jobId: string
-  amount: string
-  currency: 'GBP'
-  amountLabel: string
-  paidAt: string
-  note: string | null
-  reference: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-// PATCH /api/jobs/:jobId/payments/customer-total — null clears the total.
-export interface PatchCustomerTotalRequest {
-  customerTotalAmount: string | null
-  customerTotalCurrency?: 'GBP'
-}
-
-// POST /api/jobs/:jobId/payments
-export interface CreateJobPaymentRequest {
-  amount: string
-  currency?: 'GBP'
-  paidAt: string // ISO datetime or YYYY-MM-DD
-  note?: string | null
-  reference?: string | null
-}
-
-// PATCH /api/jobs/:jobId/payments/:paymentId — omitted preserves, null clears.
-export interface PatchJobPaymentRequest {
-  amount?: string
-  currency?: 'GBP'
-  paidAt?: string
-  note?: string | null
-  reference?: string | null
-}
-
-// ── Money (actual movement — in and out) ─────────────────────────────────────
-// The unified Money read model. Budget tracks committed/allocated cost; Money
-// tracks what has actually moved. Existing customer payments project in here as
-// money-in rows without any physical migration.
-
-export type MoneyDirection = 'in' | 'out'
-// customer_payment / refund → in; cost_paid → out.
-// customer_payment / refund → in; cost_paid / supplier_account_payment → out.
-// supplier_account_payment is one job's share of a single real payment made to
-// one supplier account across several jobs — see SupplierAccountPaymentReceipt.
-export type MoneyKind = 'customer_payment' | 'refund' | 'cost_paid' | 'supplier_account_payment'
-
-export interface MoneyRow {
-  id: string
-  jobId: string
-  direction: MoneyDirection
-  kind: MoneyKind
-  amount: string
-  currency: 'GBP'
-  amountLabel: string // "+£1000" / "-£336" — signed, direction-aware
-  occurredAt: string
-  note: string | null
-  reference: string | null
-  // Links a money-out / refund row back to the memory item that caused it.
-  sourceMemoryItemId: string | null
-  sourceItemLabel: string | null
-  sourceMemoryType: string | null
-  // Current Budget category context is resolved from the source at read time,
-  // so recategorising the source updates Money without another movement.
-  sourceBudgetCategoryId?: string | null
-  sourceBudgetCategoryName?: string | null
-  // Set on supplier_account_payment rows only: the aggregate payment this job's
-  // allocation belongs to, the account it paid, and the source costs it covered.
-  // The linked child paid markers never appear as separate rows — the allocation
-  // IS the job's visible money-out for that payment, so nothing double-counts.
-  supplierAccountPaymentId?: string | null
-  supplierName?: string | null
-  sourceMemoryItemIds?: string[]
-  allocationSourceLabels?: string[]
-  editable: boolean
-  removable: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-// GET /api/jobs/:jobId/money — combined totals + one history list, newest first.
-export interface JobMoneyResponse {
-  jobId: string
-  generatedAt: string
-
-  customerTotalAmount: string | null
-  customerTotalCurrency: 'GBP' | null
-  customerTotalLabel: string | null
-
-  moneyInAmount: string | null
-  moneyInCurrency: 'GBP' | null
-  moneyInLabel: string | null // e.g. "£4000 received"
-
-  moneyOutAmount: string | null
-  moneyOutCurrency: 'GBP' | null
-  moneyOutLabel: string | null // e.g. "£1124 paid out"
-
-  stillOwedAmount: string | null
-  stillOwedCurrency: 'GBP' | null
-  stillOwedLabel: string | null
-
-  overpaid: boolean
-  overpaidAmount: string | null
-  overpaidLabel: string | null
-
-  rows: MoneyRow[]
-}
-
-// POST /api/jobs/:jobId/money/out — mark a trusted Budget cost item as paid.
-// The amount is derived server-side from the trusted Budget line total; the
-// frontend never sends it (v1 is full-amount only).
-export interface MarkMoneyOutRequest {
-  sourceMemoryItemId: string
-  occurredAt?: string | null
-  note?: string | null
-  reference?: string | null
-}
-
-// ── Job details: site address + job-local contacts ───────────────────────────
-// Contacts are job context, not CRM: scoped to one job, manually entered, never
-// created from voice extraction, and never reusable across jobs. One optional
-// site address belongs to the job itself.
-
 export interface JobContact {
   id: string
   jobId: string
@@ -1263,7 +493,6 @@ export interface JobContact {
   updatedAt: string
 }
 
-// GET /api/jobs/:jobId/details
 export interface JobDetailsResponse {
   job: {
     id: string
@@ -1278,12 +507,10 @@ export interface JobDetailsResponse {
   contacts: JobContact[]
 }
 
-// PATCH /api/jobs/:jobId/details — omitted preserves, null/blank clears.
 export interface PatchJobDetailsRequest {
   siteAddress?: string | null
 }
 
-// POST /api/jobs/:jobId/contacts — name is the only required field.
 export interface CreateJobContactRequest {
   name: string
   role?: string | null
@@ -1292,8 +519,6 @@ export interface CreateJobContactRequest {
   note?: string | null
 }
 
-// PATCH /api/jobs/:jobId/contacts/:contactId — omitted preserves, null/blank
-// clears an optional field. Name can be changed but never cleared.
 export interface PatchJobContactRequest {
   name?: string
   role?: string | null
@@ -1302,241 +527,8 @@ export interface PatchJobContactRequest {
   note?: string | null
 }
 
-// ── Cross-job Money (read-only) ──────────────────────────────────────────────
-// GET /api/book/money — one backend read model behind both the Book Home Money
-// row and the Money overview, so the two can never disagree. The backend owns
-// every total, count and inclusion rule; the frontend renders what it is given
-// and routes back to the source job/item. No writes exist in this slice.
-
-export type BookMoneyJobStatus = 'planning' | 'started' | 'finished'
-export type BookMoneyJobStatusLabel = 'Planning' | 'In progress' | 'Finished'
-
-export interface SupplierAccountLine {
-  id: string
-  sourceMemoryItemId: string
-  jobId: string
-  jobTitle: string
-  jobStatus: BookMoneyJobStatus
-  jobStatusLabel: BookMoneyJobStatusLabel
-  itemLabel: string
-  quantityLabel: string | null
-  amount: string
-  currency: 'GBP'
-  amountLabel: string
-  sourceDate: string | null
-  sourceDateLabel: string | null
-  supplierName: string | null
-  budgetCategoryId: string | null
-  budgetCategoryName: string | null
-}
-
-// Eligible for an account but not for a total: no price, an untrusted one, a
-// currency this slice can't add up, or an unsafe total. Visible, never £0.
-export type SupplierMissingPriceReason = 'missing_price' | 'untrusted_price' | 'unsupported_currency' | 'unsafe_total'
-
-export interface SupplierMissingPriceItem {
-  id: string
-  sourceMemoryItemId: string
-  jobId: string
-  jobTitle: string
-  jobStatus: BookMoneyJobStatus
-  jobStatusLabel: BookMoneyJobStatusLabel
-  itemLabel: string
-  quantityLabel: string | null
-  supplierName: string | null
-  sourceDate: string | null
-  sourceDateLabel: string | null
-  reason: SupplierMissingPriceReason
-  reasonLabel: string // e.g. "can't be in the £6,088"
-}
-
-export interface SupplierAccountGroup {
-  groupId: string // opaque; never a supplier database id
-  supplierName: string | null
-  displayName: string // supplier name, or "Supplier needed"
-  kind: 'named_supplier' | 'supplier_needed'
-  totalAmount: string
-  currency: 'GBP'
-  totalLabel: string
-  purchaseCount: number
-  distinctJobCount: number
-  jobContextLabel: string // e.g. "5 jobs", or the job name when there is one
-  lines: SupplierAccountLine[]
-}
-
-export interface OwedToMeJob {
-  jobId: string
-  jobTitle: string
-  jobStatus: BookMoneyJobStatus
-  jobStatusLabel: BookMoneyJobStatusLabel
-  roughLocationOrLabel: string | null
-  owedAmount: string
-  currency: 'GBP'
-  owedLabel: string
-  customerTotalAmount: string
-  customerTotalLabel: string
-  moneyInAmount: string
-  moneyInLabel: string
-  contextLabel: string | null
-}
-
-export interface BookMoneyResponse {
-  generatedAt: string
-
-  // Book Home's one Money row. Derived by the backend from the same included
-  // facts as the overview below — the frontend never re-derives it.
-  bookHome: {
-    showMoneyRow: boolean
-    toPayOnAccountsAmount: string | null
-    toPayOnAccountsCurrency: 'GBP' | null
-    toPayOnAccountsLabel: string | null
-    owedToMeAmount: string | null
-    owedToMeCurrency: 'GBP' | null
-    owedToMeLabel: string | null
-    missingPriceCount: number
-    missingPriceLabel: string | null
-  }
-
-  // null when the direction has nothing to show — the section is omitted, not
-  // rendered as £0. toPayOnAccounts may exist with a null total when the only
-  // eligible costs are missing-price ones.
-  toPayOnAccounts: {
-    totalAmount: string | null
-    currency: 'GBP' | null
-    totalLabel: string | null
-    pricedCostCount: number
-    namedSupplierCount: number
-    unnamedSupplierGroupCount: number
-    summaryLabel: string
-    supplierGroups: SupplierAccountGroup[]
-    missingPriceItems: SupplierMissingPriceItem[]
-  } | null
-
-  owedToMe: {
-    totalAmount: string
-    currency: 'GBP'
-    totalLabel: string
-    jobCount: number
-    jobs: OwedToMeJob[]
-  } | null
-
-  // Real aggregate supplier payments only — never older individually marked-paid
-  // costs regrouped to look like one. Empty until this book has settled an
-  // account. Money stays reachable from Book Home when this is all there is.
-  accountPaymentHistory: SupplierAccountPaymentHistoryRow[]
-
-  // What this deployment will actually accept. Settlement is gated by backend
-  // config (SUPPLIER_ACCOUNT_SETTLEMENT_ENABLED, default off) while real-account
-  // validation is outstanding, and this reports the same gate the write routes
-  // enforce — so enablement is a fact the backend states, never one the frontend
-  // infers from its own build or environment.
-  //
-  // The frontend fails closed: only an explicit `true` offers the controls. A
-  // backend too old to send this field, or a response that cannot be read, means
-  // no settlement UI — never a payment button that cannot work.
-  capabilities: BookMoneyCapabilities
-}
-
-export interface BookMoneyCapabilities {
-  supplierAccountSettlement: boolean
-}
-
-// ── Supplier account settlement ─────────────────────────────────────────────
-// One real payment to one named supplier, covering whole recorded costs across
-// several jobs. It records what a payment covered and how much of it belongs to
-// each job. It is not bank reconciliation, statement matching or account-cleared
-// truth, and it never changes Budget.
-//
-// The backend derives the amount from the selected source costs; the frontend
-// sends ids and never an amount. Undo is the whole payment or nothing.
-
-export interface SupplierPaymentSourceLine {
-  sourceMemoryItemId: string
-  itemLabel: string
-  quantityLabel: string | null
-  amount: string
-  currency: 'GBP'
-  amountLabel: string
-  sourceDate: string | null
-  sourceDateLabel: string | null
-  budgetCategoryId: string | null
-  budgetCategoryName: string | null
-}
-
-export interface SupplierPaymentJobAllocation {
-  jobId: string
-  jobTitle: string
-  jobStatus: BookMoneyJobStatus
-  jobStatusLabel: BookMoneyJobStatusLabel
-  amount: string
-  currency: 'GBP'
-  amountLabel: string // outgoing, e.g. "-£3,250"
-  sourceLines: SupplierPaymentSourceLine[]
-}
-
-export interface SupplierAccountPaymentReceipt {
-  id: string
-  supplierName: string
-  paidAt: string
-  paidAtLabel: string
-  totalAmount: string
-  currency: 'GBP'
-  totalLabel: string
-  costCount: number
-  jobCount: number
-  budgetsUnchanged: true
-  isDeleted: boolean
-  canUndo: boolean
-  canChangeDate: boolean
-  allocations: SupplierPaymentJobAllocation[]
-}
-
-export interface SupplierAccountPaymentHistoryRow {
-  id: string
-  supplierName: string
-  paidAt: string
-  paidAtLabel: string
-  totalAmount: string
-  currency: 'GBP'
-  totalLabel: string
-  costCount: number
-  jobCount: number
-}
-
-// POST /api/book/money/supplier-payments. No amount: the backend derives it
-// from the selected source costs so the receipt can never disagree with them.
-export interface CreateSupplierAccountPaymentRequest {
-  supplierGroupId: string
-  supplierName: string
-  sourceMemoryItemIds: string[]
-  paidAt?: string | null
-  clientRequestId: string // frontend-generated, stable per submit for idempotency
-}
-
-// PATCH /api/book/money/supplier-payments/:id — the date is the only thing a
-// recorded payment can be corrected to. Amount, supplier and membership are not
-// editable: undo the payment, fix the source, record it again.
-export interface PatchSupplierAccountPaymentRequest {
-  paidAt: string
-}
-
-// ── Workshop (availability memory across jobs) ───────────────────────────────
-//
-// Workshop answers "what do I think we may still have, and which job did it
-// come from" — not "what does an inventory system guarantee is in stock". Every
-// type below is availability memory. None of it carries a price, a supplier, a
-// Budget category, a location or a unit, because none of those exist in this
-// model: moving, editing, using up, correcting or undoing Workshop material
-// never touches Budget, Money, cost, paid state, job status or source evidence.
-
-/** Where a source leftover currently stands with respect to the Workshop. */
 export type SourceWorkshopState = 'not_moved' | 'in_workshop' | 'used_up' | 'wasnt_there'
 
-/**
- * The Workshop item's own lifecycle. Only 'available' items are listed, counted
- * or previewed; the terminal states stay reachable so a mistaken outcome can be
- * put back without creating a second item for the same material.
- */
 export type WorkshopItemState = 'available' | 'used_up' | 'wasnt_there' | 'moved_back'
 
 export type WorkshopItemSourceKind = 'leftover' | 'manual'
@@ -1558,10 +550,6 @@ export interface WorkshopItem {
   resolvedLabel: string | null
   sourceJobId: string | null
   sourceJobTitle: string | null
-  // A Workshop item outlives its source job being archived, so the status is
-  // whatever that job now is — labelled honestly rather than hidden. Left open
-  // rather than pinned to a union: the frontend branches on 'finished' alone
-  // and renders every other label as the backend's own words.
   sourceJobStatus: string | null
   sourceJobStatusLabel: string | null
   sourceMemoryItemId: string | null
@@ -1588,7 +576,6 @@ export interface WorkshopBookHomeSummary {
   previewItems: WorkshopPreviewItem[]
 }
 
-// GET /api/workshop
 export interface WorkshopResponse {
   generatedAt: string
   bookHome: WorkshopBookHomeSummary
@@ -1596,7 +583,6 @@ export interface WorkshopResponse {
   availableItems: WorkshopItem[]
 }
 
-// POST /api/jobs/:jobId/memory-items/:memoryItemId/workshop
 export interface MoveLeftoverToWorkshopRequest {
   /** Omitted → the backend defaults to the source leftover's display amount. */
   roughAmount?: string | null
@@ -1608,21 +594,53 @@ export interface WorkshopMoveResponse {
   sourceItem: MemoryViewItem
 }
 
-// POST /api/workshop/items
 export interface CreateManualWorkshopItemRequest {
   materialName: string
   roughAmount?: string | null
 }
 
-// PATCH /api/workshop/items/:workshopItemId
 export interface PatchWorkshopItemRequest {
   materialName?: string
   roughAmount?: string | null
 }
 
-/** Undo move / used up / wasn't there / put back. sourceItem is null when the
- *  item was added by hand and so has no source row to update. */
 export interface WorkshopActionResponse {
   workshopItem: WorkshopItem
   sourceItem: MemoryViewItem | null
+}
+
+export interface HoursSummary {
+  totalHours: string
+  people: { name: string; hours: string }[]
+  days: {
+    date: string
+    totalHours: string
+    entries: { memoryItemId: string; person: string; hours: string; task: string | null; isManual: boolean }[]
+  }[]
+}
+
+export type JobLogEntry =
+  | {
+      kind: 'voice_note'
+      id: string
+      noteId: string
+      at: string
+      durationMs: number | null
+      transcriptStatus: 'pending' | 'completed' | 'failed'
+      text: string | null
+      linkedPhotoIds: string[]
+    }
+  | { kind: 'typed_note'; id: string; memoryItemId: string; at: string; text: string }
+  | {
+      kind: 'photo'
+      id: string
+      photoId: string
+      at: string
+      fileKind: 'IMAGE' | 'PDF'
+      fileUrl: string
+      descriptor: string | null
+      linkedNoteId: string | null
+    }
+export interface JobLogResponse {
+  entries: JobLogEntry[]
 }
