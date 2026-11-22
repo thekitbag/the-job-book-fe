@@ -203,8 +203,12 @@ export default function SourceHistory({
   onToggle: () => void
 }) {
   const canRefresh = notes.some(n => n.localState === 'uploaded' && n.serverNoteId)
+  // The Job log is the record of a job's notes. This list is only the
+  // recordings held on this phone (with upload state and Retry), so it is
+  // absent rather than "empty" when there are none.
+  if (notes.length === 0) return null
   return (
-    <section className="source-history" aria-label="Source history">
+    <section className="source-history" aria-label="Recordings on this phone">
       <div className="source-history-header">
         <button
           className="source-history-toggle"
@@ -212,10 +216,8 @@ export default function SourceHistory({
           onClick={onToggle}
         >
           {open
-            ? 'Hide source history'
-            : notes.length > 0
-              ? `Source history (${notes.length})`
-              : 'Source history'}
+            ? 'Hide recordings on this phone'
+            : `Recordings on this phone (${notes.length})`}
         </button>
         {open && canRefresh && (
           <button className="btn-refresh-transcripts" onClick={onRefresh}>
@@ -224,17 +226,13 @@ export default function SourceHistory({
         )}
       </div>
       {open && (
-        notes.length === 0 ? (
-          <p className="notes-empty">No notes yet. Tap Record to add one.</p>
-        ) : (
-          <ul className="notes-list">
-            {notes.map(note => (
-              <li key={note.clientNoteId}>
-                <NoteCard note={note} online={online} onRetry={onRetry} facts={facts} factsLoadFailed={factsLoadFailed} />
-              </li>
-            ))}
-          </ul>
-        )
+        <ul className="notes-list">
+          {notes.map(note => (
+            <li key={note.clientNoteId}>
+              <NoteCard note={note} online={online} onRetry={onRetry} facts={facts} factsLoadFailed={factsLoadFailed} />
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   )

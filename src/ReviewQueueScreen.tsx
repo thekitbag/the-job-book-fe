@@ -33,18 +33,16 @@ const STRUCTURED_TYPES = new Set<MemoryType>([
   'leftover_material',
   'labour',
 ])
-// Types that can carry a budget category. Budget owns all cost, so cost-bearing
-// types are category-bearing; labour is hours-only and never carries a category.
 
 const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
   ordered_material: 'Bought / ordered',
   used_material: 'Used',
   leftover_material: 'Left over',
-  labour: 'Hours · hours',
+  labour: 'Hours',
 }
 
-// Scannable card text: a bold headline, a muted meta line, and a cost line —
-// instead of a dense label/value grid.
+// Scannable card text: a bold headline and a muted meta line, instead of a
+// dense label/value grid.
 function reviewHeadline(pm: ProposedMemory): string {
   if (pm.memoryType === 'labour') {
     const hours = pm.labourHours ? `${pm.labourHours} hours` : null

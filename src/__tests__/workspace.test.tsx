@@ -327,8 +327,8 @@ describe('CurrentJobWorkspace — capture', () => {
     await user.click(screen.getByRole('button', { name: /start recording/i }))
     await simulateRecordingComplete(FAKE_RESULT)
 
-    // Scope to source history — the capture confirmation overlay also reflects state.
-    const history = () => within(screen.getByRole('region', { name: /source history/i }))
+    // Scope to the phone recordings list — the capture confirmation overlay also reflects state.
+    const history = () => within(screen.getByRole('region', { name: /recordings on this phone/i }))
     await waitFor(() => expect(history().getByText(/saved on phone/i)).toBeInTheDocument())
     await waitFor(() => expect(history().getByText(/voice note saved/i)).toBeInTheDocument(), { timeout: 3000 })
   })
@@ -362,7 +362,7 @@ describe('CurrentJobWorkspace — capture', () => {
     await user.click(screen.getByRole('button', { name: /start recording/i }))
     await simulateRecordingComplete(FAKE_RESULT)
 
-    const history = () => within(screen.getByRole('region', { name: /source history/i }))
+    const history = () => within(screen.getByRole('region', { name: /recordings on this phone/i }))
     await waitFor(() => expect(history().getByText(/saved on this phone/i)).toBeInTheDocument())
     expect(mockUpload).not.toHaveBeenCalled()
 
@@ -406,15 +406,22 @@ describe('CurrentJobWorkspace — capture', () => {
   })
 })
 
-describe('CurrentJobWorkspace — source history / no pipeline language', () => {
+describe('CurrentJobWorkspace — phone recordings list / no pipeline language', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     vi.mocked(getReviewQueue).mockResolvedValue(EMPTY_QUEUE)
   })
 
-  it('source history region is present', () => {
+  it('shows no phone recordings list, and no "No notes yet", when the phone holds none for this job', () => {
     renderWorkspace()
-    expect(screen.getByRole('region', { name: /source history/i })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /recordings on this phone/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/no notes yet/i)).not.toBeInTheDocument()
+  })
+
+  it('lists recordings held on this phone for this job', async () => {
+    await saveNote(makeNote({ jobId: JOB.id, localState: 'saved_local', serverNoteId: null }))
+    renderWorkspace()
+    expect(await screen.findByRole('region', { name: /recordings on this phone/i })).toBeInTheDocument()
   })
 
   it('does not show file size on note cards', async () => {

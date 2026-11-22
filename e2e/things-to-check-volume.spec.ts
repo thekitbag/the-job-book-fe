@@ -79,3 +79,29 @@ test.describe('Things to check — real-use volume', () => {
     expect((remBox?.y ?? 0)).toBeGreaterThan(cardBox?.y ?? 0)
   })
 })
+
+test.describe('Things to check — action buttons fit on a phone', () => {
+  for (const width of [320, 390]) {
+    test(`no action button is clipped at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 })
+      await openQueue(page)
+      const clipped = await page.$$eval('.queue-item-actions button', (buttons) =>
+        buttons
+          .filter((b) => {
+            const card = b.closest('.queue-item-card') ?? document.body
+            const r = b.getBoundingClientRect()
+            const c = card.getBoundingClientRect()
+            return b.scrollWidth > b.clientWidth + 1 || r.right > c.right + 1
+          })
+          .map((b) => b.textContent?.trim()),
+      )
+      expect(clipped).toEqual([])
+      await expect(page.getByRole('button', { name: 'Dismiss' }).first()).toBeVisible()
+    })
+  }
+})
+
+test('Hours checks are labelled once, not "Hours · hours"', async ({ page }) => {
+  await openQueue(page)
+  await expect(page.getByText('Hours · hours')).toHaveCount(0)
+})
