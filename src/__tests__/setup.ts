@@ -4,6 +4,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { _resetDbForTesting } from '../db'
+import { _resetLocalOwnerForTesting } from '../localOwner'
 
 // happy-dom's localStorage isn't fully initialised in all environments.
 // Replace it with a plain in-memory implementation for reliability.
@@ -18,12 +19,15 @@ const localStorageMock: Storage = {
 }
 Object.defineProperty(global, 'localStorage', { value: localStorageMock, configurable: true })
 
-beforeEach(() => {
+beforeEach(async () => {
   // Fresh IndexedDB for each test; other IDB globals stay from the auto-import above
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(global as any).indexedDB = new IDBFactory()
   _resetDbForTesting()
   localStorageMock.clear()
+  _resetLocalOwnerForTesting()
+  const { _resetCapturePersistenceForTesting } = await import('../capturePersistence')
+  _resetCapturePersistenceForTesting()
   // Reset mock call history AND implementations so each test starts with a clean slate
   vi.resetAllMocks()
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   getDraftFacts,
   getReviewQueue,
@@ -7,9 +7,11 @@ import {
   patchJob,
   putBackWorkshopItem,
 } from './api'
-import { saveNote, getNotesForJob } from './db'
-import { useRecorder, isRecordingSupported } from './useRecorder'
-import { useSync } from './useSync'
+import { getNotesForJob, subscribeLocalCaptures } from './db'
+import { getCaptureSessionId, subscribeLocalOwner } from './localOwner'
+import RecordingControls from './RecordingControls'
+import { dismissSavedCapture } from './capturePersistence'
+import { CaptureSyncProvider, useCaptureContext } from './CaptureSyncProvider'
 import { useTranscriptPoll } from './useTranscriptPoll'
 import { usePwaInstall } from './usePwaInstall'
 import { useJobMemory } from './useJobMemory'
@@ -17,13 +19,13 @@ import JobLog from './JobLog'
 import HoursTab from './HoursTab'
 import MemorySectionTab from './MemorySectionTab'
 import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
-import SourceHistory, { formatDuration } from './SourceHistory'
+import SourceHistory from './SourceHistory'
 import BottomSheet from './BottomSheet'
 import JobDetailsSheet from './JobDetailsSheet'
 import { useToast } from './Toast'
 import MoveToWorkshopResult from './MoveToWorkshopResult'
 import type { WorkshopSourceControls } from './workshopSource'
-import { durationBucket, mimeTypeFamily, track } from './analytics'
+import { track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
 import type {
   AuthUser,
@@ -36,7 +38,6 @@ import type {
   WorkshopItem,
 } from './types'
 
-const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -249,7 +250,7 @@ function CaptureConfirmation({
   )
 }
 
-export default function CurrentJobWorkspace({
+function Workspace({
   job,
   entry = null,
   onOpenReviewQueue,
@@ -476,14 +477,32 @@ export default function CurrentJobWorkspace({
   const [draftCount, setDraftCount] = useState(0)
   const [queueLoadState, setQueueLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
 
+  const activeJob = useRef(job.id)
+  activeJob.current = job.id
   const refreshNotes = useCallback(async () => {
+    const session = getCaptureSessionId()
     const fresh = await getNotesForJob(job.id)
+    if (activeJob.current !== job.id || session !== getCaptureSessionId()) return
     fresh.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
     setNotes(fresh)
   }, [job.id])
 
   useEffect(() => {
-    refreshNotes()
+    let current = true
+    const refresh = () => {
+      if (current) void refreshNotes().catch(() => {})
+    }
+    refresh()
+    const unsubscribe = subscribeLocalCaptures(refresh)
+    const unsubscribeOwner = subscribeLocalOwner(() => {
+      setNotes([])
+      refresh()
+    })
+    return () => {
+      current = false
+      unsubscribe()
+      unsubscribeOwner()
+    }
   }, [refreshNotes])
 
   useEffect(() => {
@@ -533,52 +552,27 @@ export default function CurrentJobWorkspace({
     fetchFacts()
   }, [readyExtractionCount, fetchFacts])
 
-  const { syncAll, retryNote } = useSync(refreshNotes)
+  const { retryNote, recorder, record, lastSavedNote } = useCaptureContext()!
   const { refreshNow: refreshStatus } = useTranscriptPoll(notes, job.id, refreshNotes)
-  const recorder = useRecorder()
 
   const handleRefresh = useCallback(() => {
     refreshStatus()
     if (readyExtractionCount > 0) fetchFacts()
   }, [refreshStatus, readyExtractionCount, fetchFacts])
 
-  const handleRecord = useCallback(async () => {
-    const started = await recorder.start(async (result) => {
-      track('record_completed', {
-        job_id: job.id,
-        duration_bucket: durationBucket(result.durationMs),
-        mime_type_family: mimeTypeFamily(result.mimeType),
-      })
-      const clientNoteId = crypto.randomUUID()
-      const note: LocalNote = {
-        clientNoteId,
-        jobId: job.id,
-        capturedAt: new Date().toISOString(),
-        durationMs: result.durationMs,
-        mimeType: result.mimeType,
-        blob: result.blob,
-        sizeBytes: result.blob.size,
-        localState: 'saved_local',
-        uploadAttemptCount: 0,
-        lastUploadAttemptAt: null,
-        serverNoteId: null,
-        lastErrorCode: null,
-        transcriptStatus: null,
-        transcriptText: null,
-        transcriptErrorCode: null,
-        extractionStatus: null,
-      }
-      await saveNote(note)
-      await refreshNotes()
-      setJustCapturedId(clientNoteId)
-      syncAll()
-      loadQueue()
-    })
-    // The UI has no cancel affordance mid-recording; the only way a tapped
-    // Record produces no note is a failed start (mic permission denied).
-    if (started) track('record_started', { job_id: job.id })
-    else track('record_cancelled', { job_id: job.id, error_kind: 'PERMISSION_DENIED' })
-  }, [recorder, job.id, refreshNotes, syncAll, loadQueue])
+  const handleRecord = useCallback(() => {
+    void record({ jobId: job.id, title: job.title })
+  }, [record, job.id, job.title])
+  useEffect(() => {
+    if (!lastSavedNote) {
+      setJustCapturedId(null)
+      return
+    }
+    if (lastSavedNote.jobId !== job.id) return
+    void refreshNotes().catch(() => {})
+    setJustCapturedId(lastSavedNote.clientNoteId)
+    loadQueue()
+  }, [lastSavedNote, job.id, refreshNotes, loadQueue])
 
   const dismissExplainer = useCallback(() => {
     localStorage.setItem(EXPLAINER_KEY, 'true')
@@ -1037,71 +1031,27 @@ export default function CurrentJobWorkspace({
       </div>
 
       {/* Pinned Record — available on every tab, never blocked by summary loads. */}
-      <div className="ws-record-bar">
-        {!isRecordingSupported ? (
-          <p className="ws-record-unsupported">
-            {!window.isSecureContext
-              ? 'Open this page over https:// to enable the microphone.'
-              : 'Recording is not supported in this browser. Try Chrome or Safari.'}
-          </p>
-        ) : recorder.state === 'idle' ? (
-          <button className="ws-record-btn" onClick={handleRecord} aria-label="Start recording">
-            <span className="ws-record-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="9" y="2" width="6" height="12" rx="3" />
-                <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
-              </svg>
-            </span>
-            {/* The persistent Record bar names its destination job on every
-                screen (not "Tap · say it · done", which narrated the control) so
-                a recording can never quietly land on the wrong job. */}
-            <span className="ws-record-text">
-              <span className="ws-record-title">Record</span>
-              <span className="ws-record-sub">to {job.title}</span>
-            </span>
-          </button>
-        ) : (
-          <div className="ws-recording-active">
-            <span className="ws-rec-dot" aria-hidden="true" />
-            <span className="ws-rec-elapsed" aria-live="polite" aria-atomic="true">
-              {formatDuration(recorder.elapsedMs)}
-              <span className="ws-rec-max"> / {formatDuration(MAX_DURATION_MS)}</span>
-            </span>
-            <button
-              className="ws-stop-btn"
-              onClick={recorder.stop}
-              disabled={recorder.state === 'stopping'}
-              aria-label="Stop recording"
-            >
-              {recorder.state === 'stopping' ? 'Saving…' : 'Stop'}
-            </button>
-          </div>
-        )}
-        {recorder.permissionError && (
-          <p className="permission-error">
-            Microphone access denied. Check your browser settings and try again.
-          </p>
-        )}
-      </div>
+      <RecordingControls recorder={recorder} onRecord={handleRecord} jobTitle={job.title} />
 
       {justCapturedId && (
         <CaptureConfirmation
           note={notes.find((n) => n.clientNoteId === justCapturedId)}
           online={online}
-          onClose={() => setJustCapturedId(null)}
+          onClose={() => { setJustCapturedId(null); dismissSavedCapture() }}
           onOpenReviewQueue={() => {
             setJustCapturedId(null)
+            dismissSavedCapture()
             onOpenReviewQueue()
           }}
         />
       )}
     </div>
   )
+}
+
+// An isolated workspace is also a complete capture root (component tests and
+// previews). The real app supplies this provider above every screen.
+export default function CurrentJobWorkspace(props: React.ComponentProps<typeof Workspace>) {
+  const capture = useCaptureContext()
+  return capture ? <Workspace {...props} /> : <CaptureSyncProvider><Workspace {...props} /></CaptureSyncProvider>
 }

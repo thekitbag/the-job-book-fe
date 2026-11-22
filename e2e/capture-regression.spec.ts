@@ -6,7 +6,7 @@ test.use({
 async function notes(page: Page) {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const r = indexedDB.open('job-book', 1)
+      const r = indexedDB.open('job-book')
       r.onsuccess = () => resolve(r.result)
       r.onerror = () => reject(r.error)
     })

@@ -89,6 +89,7 @@ const EMPTY_QUEUE: ReviewQueue = { jobId: JOB.id, generatedAt: '', sections: [],
 
 const noop = () => {}
 function renderWorkspace(props: Partial<React.ComponentProps<typeof CurrentJobWorkspace>> = {}) {
+  localStorage.setItem('job-book-owner-user-id', 'workspace-user')
   return render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={noop} onOpenBookHome={noop} onLogout={noop} {...props} />)
 }
 

@@ -5,7 +5,8 @@ import { getNotesForJob } from '../db'
 import { getReviewQueue } from '../api'
 
 // CaptureScreen depends on these; mock to isolate install behaviour
-vi.mock('../db', () => ({
+vi.mock('../db', async original => ({
+  ...await original<typeof import('../db')>(),
   saveNote: vi.fn(),
   getNotesForJob: vi.fn(),
 }))

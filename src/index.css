@@ -6359,3 +6359,36 @@ a.row-sheet-opt { text-decoration: none; }
 .job-log-entry a { color: inherit; }
 
 .ws-home-card-figures .ws-home-card-denom { white-space: normal; text-align: right; }
+
+/* Persistence errors stay visible after navigating away from capture. */
+.capture-save-notice {
+  position: fixed;
+  z-index: 90;
+  bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+  left: 12px;
+  right: 12px;
+  max-width: 560px;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-inline: auto;
+  padding: 16px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: var(--paper, #fffdf8);
+  color: var(--ink, #242a24);
+  box-shadow: 0 4px 20px #0002;
+}
+.capture-save-notice p { margin: 0 0 12px; }
+.capture-save-notice button { min-height: 44px; max-width: 100%; white-space: normal; }
+.capture-refresh-error { padding: 12px 16px; background: var(--paper, #fffdf8); }
+.capture-refresh-error p { margin: 0 0 8px; }
+.capture-save-failure + .capture-save-failure { margin-top: 16px; padding-top: 16px; border-top: 1px solid currentColor; }
+.capture-save-notice button:not(.btn-queue-save), .capture-refresh-error button {
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--cobalt, #293dff);
+  font: inherit;
+  cursor: pointer;
+}

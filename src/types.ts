@@ -14,7 +14,12 @@ export type ExtractionStatus = 'waiting' | 'extracting' | 'ready' | 'failed'
 
 export interface LocalNote {
   clientNoteId: string
-  jobId: string
+  jobId: string | null
+  // Missing metadata denotes an existing v1 record; new captures always stamp it.
+  ownerUserId?: string | null
+  captureSessionId?: string
+  captureContext?: 'job' | 'home'
+  serverJobId?: string | null
   capturedAt: string
   durationMs: number
   mimeType: string
@@ -29,6 +34,22 @@ export interface LocalNote {
   transcriptText: string | null
   transcriptErrorCode: string | null
   extractionStatus: ExtractionStatus | null
+}
+
+export interface LocalPhoto {
+  clientPhotoId: string
+  jobId: string | null
+  ownerUserId: string | null
+  captureSessionId: string
+  capturedAt: string
+  mimeType: string
+  blob: Blob
+  sizeBytes: number
+  localState: LocalNoteState
+  uploadAttemptCount: number
+  lastUploadAttemptAt: string | null
+  lastErrorCode: string | null
+  serverPhotoId: string | null
 }
 
 export type JobType = 'garden_room' | 'extension' | 'other'
