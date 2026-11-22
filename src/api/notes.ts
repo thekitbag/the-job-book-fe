@@ -58,6 +58,7 @@ export async function getNoteTranscript(jobId: string, serverNoteId: string): Pr
 }
 
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
+  if (!note.jobId) throw new ApiError('A recording without a job stays on this phone until filing is available.', 400)
   if (USE_MOCK) {
     await delay(1000 + Math.random() * 500)
     mockRecordUploadedNote(note)

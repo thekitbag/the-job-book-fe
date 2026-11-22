@@ -97,7 +97,7 @@ vi.mock('../AllJobsScreen', () => ({
 vi.mock('../AuthScreen', () => ({
   default: ({ onAuthSuccess }: { onAuthSuccess: (user: { id: string; email: string; name: string }) => void }) => (
     <div data-testid="auth-screen">
-      <button onClick={() => onAuthSuccess({ id: 'user-mike', email: 'mike@thejobbook.test', name: 'Mike' })}>mock-login</button>
+      <button onClick={() => onAuthSuccess({ id: 'u1', email: 'mike@thejobbook.test', name: 'Mike' })}>mock-login</button>
     </div>
   ),
   getResetToken: () => {
@@ -212,11 +212,12 @@ describe('App', () => {
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
-  it('shows error screen when API fails and no cached jobs exist', async () => {
+  it('keeps Record and retry available when API fails without cached jobs', async () => {
     mockGetJobs.mockRejectedValue(new Error('network error'))
     render(<App />)
-    await waitFor(() => expect(screen.getByText(/could not load jobs/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/jobs could not refresh/i)).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+    expect(screen.getByTestId('all-jobs-screen')).toBeInTheDocument()
   })
 
   it('shows All Jobs / add-job prompt when no jobs exist', async () => {

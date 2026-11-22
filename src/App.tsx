@@ -1,5 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getCurrentUser, getJobs, getWorkshop, logout, onUnauthorized, ApiError } from './api'
+import {
+  AuxiliaryCaptureControls,
+  CaptureSyncProvider,
+  useCaptureContext,
+} from './CaptureSyncProvider'
+import {
+  beginSignedInSession,
+  clearLocalOwner,
+  establishLocalOwner,
+  getCaptureSessionId,
+  getLocalOwnerId,
+} from './localOwner'
+import { stampUnownedCaptures } from './db'
+import {
+  getCurrentUser,
+  getJobs,
+  getWorkshop,
+  logout,
+  onUnauthorized,
+  ApiError,
+} from './api'
 import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
@@ -29,39 +49,52 @@ function loadSelectedJobId(): string | null {
 // Never leave another account's job data visible/cached after logout or a
 // session lapsing mid-use (401 from any core data load).
 function clearLocalJobData() {
+  clearLocalOwner()
   localStorage.removeItem(CACHED_JOBS_KEY)
   localStorage.removeItem(SELECTED_JOB_ID_KEY)
 }
 
 function pickJob(jobs: Job[], storedId: string | null): Job | null {
   if (storedId) {
-    const match = jobs.find(j => j.id === storedId)
+    const match = jobs.find((j) => j.id === storedId)
     if (match) return match
   }
-  return jobs.find(j => j.status === 'started')
-    ?? jobs.find(j => j.status === 'planning')
-    ?? jobs.find(j => j.status === 'finished')
-    ?? jobs[0] ?? null
+  return (
+    jobs.find((j) => j.status === 'started') ??
+    jobs.find((j) => j.status === 'planning') ??
+    jobs.find((j) => j.status === 'finished') ??
+    jobs[0] ??
+    null
+  )
 }
 
-type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
+type AppState = 'ready' | 'unauthenticated' | 'noJobs'
 // The app still launches into the last selected Job Home. Book Home is the
 // level above it, reached from a job — never the default screen.
 type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'workshop'
 
-export default function App() {
+function AppContent() {
+  const { setSyncEnabled } = useCaptureContext()!
   // A password-reset link must work even for a browser that still has a valid
   // session (an old tab left open, a stale cookie, etc.) — always defer to
   // AuthScreen's reset-confirm flow when the URL carries a reset token.
   const [hasResetToken, setHasResetToken] = useState(() => !!getResetToken())
-  const [appState, setAppState] = useState<AppState>('loading')
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const [jobs, setJobs] = useState<Job[]>(loadCachedJobs)
+  const [selectedJob, setSelectedJob] = useState<Job | null>(() =>
+    pickJob(loadCachedJobs(), loadSelectedJobId()),
+  )
+  const [appState, setAppState] = useState<AppState>(() =>
+    loadCachedJobs().length ? 'ready' : 'noJobs',
+  )
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('workspace')
   const [online, setOnline] = useState(navigator.onLine)
-  const [workshopData, setWorkshopData] = useState<WorkshopResponse | null>(null)
-  const [workshopState, setWorkshopState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [workshopData, setWorkshopData] = useState<WorkshopResponse | null>(
+    null,
+  )
+  const [workshopState, setWorkshopState] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading')
   const [jobEntry, setJobEntry] = useState<JobEntry | null>(null)
   // Current account (for role-gated UI like the internal Support entry).
   // Best-effort: the app works without it; only INTERNAL extras depend on it.
@@ -81,76 +114,122 @@ export default function App() {
   // A 401 from any in-app data load (not just the initial jobs fetch) means
   // the session has lapsed — drop straight back to the auth screen with no
   // stale job data left visible.
+  const expireSession = useCallback(() => {
+    setSyncEnabled(false)
+    clearLocalJobData()
+    setJobs([])
+    setSelectedJob(null)
+    setCurrentUser(null)
+    setWorkshopData(null)
+    setView('workspace')
+    setAppState('unauthenticated')
+  }, [setSyncEnabled])
+
   useEffect(() => {
-    onUnauthorized(() => {
-      clearLocalJobData()
-      setJobs([])
-      setSelectedJob(null)
-      setAppState('unauthenticated')
-    })
+    onUnauthorized(expireSession)
     return () => onUnauthorized(null)
-  }, [])
+  }, [expireSession])
+
+  useEffect(() => {
+    setSyncEnabled(!hasResetToken && appState !== 'unauthenticated')
+  }, [hasResetToken, appState, setSyncEnabled])
 
   const loadJobs = useCallback(() => {
-    setAppState('loading')
-    getJobs()
-      .then(loaded => {
+    const session = getCaptureSessionId()
+    setErrorMsg('')
+    // Never replace a usable cached screen with a loading gate.
+    void getJobs()
+      .then((loaded) => {
+        if (session !== getCaptureSessionId()) return
         localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(loaded))
         setJobs(loaded)
-        const storedId = loadSelectedJobId()
-        const chosen = pickJob(loaded, storedId)
-        if (!chosen) {
-          setAppState('noJobs')
-          return
-        }
+        const chosen = pickJob(loaded, loadSelectedJobId())
         setSelectedJob(chosen)
-        localStorage.setItem(SELECTED_JOB_ID_KEY, chosen.id)
-        setAppState('ready')
+        if (chosen) localStorage.setItem(SELECTED_JOB_ID_KEY, chosen.id)
+        else localStorage.removeItem(SELECTED_JOB_ID_KEY)
+        setAppState(chosen ? 'ready' : 'noJobs')
       })
       .catch((err: unknown) => {
+        if (session !== getCaptureSessionId()) return
         if (err instanceof ApiError && err.status === 401) {
-          setAppState('unauthenticated')
+          expireSession()
           return
         }
-        // Offline fallback: use cached jobs and selected id
-        const cached = loadCachedJobs()
-        const storedId = loadSelectedJobId()
-        const chosen = pickJob(cached, storedId)
-        if (chosen) {
-          setJobs(cached)
-          setSelectedJob(chosen)
-          setAppState('ready')
-          return
-        }
-        setErrorMsg(err instanceof Error ? err.message : 'Could not load jobs')
-        setAppState('error')
+        setErrorMsg(
+          'Jobs could not refresh. You can still record on this phone.',
+        )
       })
-  }, [])
+  }, [expireSession])
 
-  useEffect(() => { loadJobs() }, [loadJobs])
-
-  // Role lookup for gated UI. Refreshes alongside auth transitions; a failure
-  // just means no internal extras are shown.
   useEffect(() => {
-    if (appState !== 'ready' && appState !== 'noJobs') return
-    getCurrentUser()
-      .then(u => {
-        setCurrentUser(u)
-        // Restored sessions never pass through AuthScreen — identify here so a
-        // returning user's events are attributed (id + role only, never email).
-        identifyAnalyticsUser(u)
+    if (!hasResetToken) loadJobs()
+  }, [loadJobs, hasResetToken])
+
+  const signedOut = appState === 'unauthenticated'
+
+  // Identity lookup is independent of jobs: a hung jobs request must not delay
+  // stamping captures made before /me resolves. Sign-in always rotates session.
+  useEffect(() => {
+    if (hasResetToken || signedOut) return
+    const session = getCaptureSessionId()
+    let active = true
+    void getCurrentUser()
+      .then(async (user) => {
+        if (!active || session !== getCaptureSessionId()) return
+        const previousOwner = getLocalOwnerId()
+        if (!establishLocalOwner(user.id, session)) return
+        if (previousOwner && previousOwner !== user.id) {
+          localStorage.removeItem(CACHED_JOBS_KEY)
+          localStorage.removeItem(SELECTED_JOB_ID_KEY)
+          setJobs([])
+          setSelectedJob(null)
+          setWorkshopData(null)
+          setView('workspace')
+          setAppState('noJobs')
+          loadJobs()
+        } else {
+          await stampUnownedCaptures(user.id, session).catch(() => {})
+        }
+        if (getLocalOwnerId() !== user.id) return
+        setCurrentUser(user)
+        identifyAnalyticsUser(user)
       })
-      .catch(() => setCurrentUser(null))
-  }, [appState])
+      .catch((err: unknown) => {
+        if (!active || session !== getCaptureSessionId()) return
+        if (err instanceof ApiError && err.status === 401) expireSession()
+        else setCurrentUser(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [signedOut, hasResetToken, loadJobs, expireSession])
+
+  function handleAuthSuccess(user: AuthUser) {
+    beginSignedInSession(user.id)
+    localStorage.removeItem(CACHED_JOBS_KEY)
+    localStorage.removeItem(SELECTED_JOB_ID_KEY)
+    setJobs([])
+    setSelectedJob(null)
+    setWorkshopData(null)
+    setView('workspace')
+    setCurrentUser(user)
+    setAppState('noJobs')
+    setSyncEnabled(true)
+    setHasResetToken(false)
+    loadJobs()
+  }
 
   // Workshop is availability memory changed from two places — the Workshop page
   // itself and any job's leftover — so it is re-read on every arrival at the
   // book level rather than cached. A leftover moved in a moment ago is already
   // on the cover by the time Mike gets back to it.
   const loadWorkshop = useCallback(() => {
-    setWorkshopState(prev => (prev === 'ready' ? 'ready' : 'loading'))
+    setWorkshopState((prev) => (prev === 'ready' ? 'ready' : 'loading'))
     getWorkshop()
-      .then(res => { setWorkshopData(res); setWorkshopState('ready') })
+      .then((res) => {
+        setWorkshopData(res)
+        setWorkshopState('ready')
+      })
       .catch(() => setWorkshopState('error'))
   }, [])
 
@@ -172,7 +251,7 @@ export default function App() {
   // (or the job picker/empty state if none remain).
   function handleJobUpdated(updated: Job) {
     if (updated.status === 'archived') {
-      const remaining = jobs.filter(j => j.id !== updated.id)
+      const remaining = jobs.filter((j) => j.id !== updated.id)
       localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(remaining))
       setJobs(remaining)
       // Stale guard: only move the selection if the archived job is (still)
@@ -190,9 +269,9 @@ export default function App() {
       }
       return
     }
-    setSelectedJob(prev => (prev && prev.id === updated.id ? updated : prev))
-    setJobs(prev => {
-      const next = prev.map(j => (j.id === updated.id ? updated : j))
+    setSelectedJob((prev) => (prev && prev.id === updated.id ? updated : prev))
+    setJobs((prev) => {
+      const next = prev.map((j) => (j.id === updated.id ? updated : j))
       localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(next))
       return next
     })
@@ -205,7 +284,11 @@ export default function App() {
   //
   // `cause` keeps job_switched meaning a deliberate switch: selecting the job
   // that was just created is part of job_created, not a switch.
-  function handleSelectJob(job: Job, cause: 'switch' | 'created' = 'switch', entry: JobEntry | null = null) {
+  function handleSelectJob(
+    job: Job,
+    cause: 'switch' | 'created' = 'switch',
+    entry: JobEntry | null = null,
+  ) {
     if (cause === 'switch' && selectedJob && selectedJob.id !== job.id) {
       track('job_switched', { job_id: job.id })
     }
@@ -215,8 +298,11 @@ export default function App() {
     setView('workspace')
   }
 
-  function openWorkshopSource(target: { jobId: string; sourceMemoryItemId: string | null }) {
-    const job = jobs.find(j => j.id === target.jobId)
+  function openWorkshopSource(target: {
+    jobId: string
+    sourceMemoryItemId: string | null
+  }) {
+    const job = jobs.find((j) => j.id === target.jobId)
     if (!job) return
     handleSelectJob(job, 'switch', {
       jobId: job.id,
@@ -236,128 +322,129 @@ export default function App() {
   // priority is never showing this account's data again once Mike has logged out.
   async function handleLogout() {
     track('auth_logout')
+    resetAnalyticsUser()
+    expireSession()
     try {
       await logout()
     } catch {
-      // ignored — local state is cleared unconditionally below
+      /* Local identity already cleared. */
     }
-    // Reset after the logout event so it is still attributed to the user,
-    // and before local state clears so no later event carries this identity.
-    resetAnalyticsUser()
-    clearLocalJobData()
-    setJobs([])
-    setSelectedJob(null)
-    setAppState('unauthenticated')
   }
 
-  if (hasResetToken) {
-    return <AuthScreen onAuthSuccess={() => { setHasResetToken(false); loadJobs() }} />
+  if (hasResetToken || appState === 'unauthenticated') {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />
   }
 
-  if (appState === 'loading') {
-    return (
-      <div className="app-loading">
-        <p>Loading…</p>
-      </div>
-    )
-  }
+  const workspaceVisible = !!selectedJob && view === 'workspace'
+  return (
+    <>
+      {errorMsg && (
+        <div className="capture-refresh-error" role="status">
+          <p>{errorMsg}</p>
+          <button onClick={loadJobs}>Try again</button>
+        </div>
+      )}
+      <AuxiliaryCaptureControls
+        workspaceVisible={workspaceVisible}
+        allowIdle={!selectedJob}
+      />
+      {renderScreen()}
+    </>
+  )
 
-  if (appState === 'unauthenticated') {
-    return <AuthScreen onAuthSuccess={() => loadJobs()} />
-  }
-
-  if (appState === 'error') {
-    return (
-      <div className="app-error">
-        <p>Could not load jobs.</p>
-        <p className="app-error-detail">{errorMsg}</p>
-        <button onClick={loadJobs}>Try again</button>
-      </div>
-    )
-  }
-
-  if (appState === 'noJobs') {
-    return (
-      <>
-        {/* Internal accounts often have no jobs of their own — keep the
+  function renderScreen() {
+    if (!selectedJob && view === 'workspace') {
+      return (
+        <>
+          {/* Internal accounts often have no jobs of their own — keep the
             Support entry reachable from the first-job screen too. */}
-        {currentUser?.role === 'INTERNAL' && (
-          <div className="support-entry-bar">
-            <a className="btn-support-entry" href="/internal/support">Founder support ›</a>
-          </div>
-        )}
-      {/* An empty book still opens on All Jobs rather than a special
+          {currentUser?.role === 'INTERNAL' && (
+            <div className="support-entry-bar">
+              <a className="btn-support-entry" href="/internal/support">
+                Founder support ›
+              </a>
+            </div>
+          )}
+          {/* An empty book still opens on All Jobs rather than a special
           first-run screen: it already carries the one route that matters
           (New job), and it is the same page Mike will use ever after. */}
-      <AllJobsScreen
-        jobs={[]}
-        online={online}
-        hideBack={true}
-        onOpenJob={handleSelectJob}
-        onJobAdded={handleJobAdded}
-        onBack={() => {}}
-      />
-      </>
-    )
-  }
+          <AllJobsScreen
+            jobs={[]}
+            online={online}
+            hideBack={true}
+            onOpenJob={handleSelectJob}
+            onJobAdded={handleJobAdded}
+            onBack={() => {}}
+          />
+        </>
+      )
+    }
 
-  if (!selectedJob) {
-    return (
-      <div className="app-loading">
-        <p>Loading…</p>
-      </div>
-    )
-  }
+    if (view === 'bookHome') {
+      return (
+        <BookHomeScreen
+          jobs={jobs}
+          workshop={workshopData?.bookHome ?? null}
+          onOpenAllJobs={() => setView('allJobs')}
+          onOpenWorkshop={openWorkshop}
+        />
+      )
+    }
 
-  if (view === 'bookHome') {
+    if (view === 'workshop') {
+      return (
+        <WorkshopScreen
+          data={workshopData}
+          loadState={workshopState}
+          onBack={openBookHome}
+          onReload={loadWorkshop}
+          onOpenSourceItem={openWorkshopSource}
+        />
+      )
+    }
+
+    if (view === 'allJobs') {
+      return (
+        <AllJobsScreen
+          jobs={jobs}
+          online={online}
+          onOpenJob={handleSelectJob}
+          onJobAdded={handleJobAdded}
+          onBack={() => setView('bookHome')}
+        />
+      )
+    }
+
+    if (!selectedJob) return null
+
+    if (view === 'reviewQueue') {
+      return (
+        <ReviewQueueScreen
+          job={selectedJob}
+          onClose={() => setView('workspace')}
+        />
+      )
+    }
+
     return (
-      <BookHomeScreen
-        jobs={jobs}
-        workshop={workshopData?.bookHome ?? null}
-        onOpenAllJobs={() => setView('allJobs')}
+      <CurrentJobWorkspace
+        job={selectedJob}
+        entry={jobEntry && jobEntry.jobId === selectedJob.id ? jobEntry : null}
+        onOpenReviewQueue={() => setView('reviewQueue')}
+        onOpenBookHome={openBookHome}
         onOpenWorkshop={openWorkshop}
+        onLogout={handleLogout}
+        user={currentUser}
+        onJobUpdated={handleJobUpdated}
       />
     )
   }
+}
 
-  if (view === 'workshop') {
-    return (
-      <WorkshopScreen
-        data={workshopData}
-        loadState={workshopState}
-        onBack={openBookHome}
-        onReload={loadWorkshop}
-        onOpenSourceItem={openWorkshopSource}
-      />
-    )
-  }
-
-  if (view === 'allJobs') {
-    return (
-      <AllJobsScreen
-        jobs={jobs}
-        online={online}
-        onOpenJob={handleSelectJob}
-        onJobAdded={handleJobAdded}
-        onBack={() => setView('bookHome')}
-      />
-    )
-  }
-
-  if (view === 'reviewQueue') {
-    return <ReviewQueueScreen job={selectedJob} onClose={() => setView('workspace')} />
-  }
-
+export default function App() {
   return (
-    <CurrentJobWorkspace
-      job={selectedJob}
-      entry={jobEntry && jobEntry.jobId === selectedJob.id ? jobEntry : null}
-      onOpenReviewQueue={() => setView('reviewQueue')}
-      onOpenBookHome={openBookHome}
-      onOpenWorkshop={openWorkshop}
-      onLogout={handleLogout}
-      user={currentUser}
-      onJobUpdated={handleJobUpdated}
-    />
+    <CaptureSyncProvider>
+      <AppContent />
+    </CaptureSyncProvider>
   )
 }
