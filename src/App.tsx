@@ -86,6 +86,9 @@ function AppContent() {
   const [appState, setAppState] = useState<AppState>(() =>
     loadCachedJobs().length ? 'ready' : 'noJobs',
   )
+  const [jobsLoadState, setJobsLoadState] = useState<
+    'loading' | 'ready' | 'error'
+  >(() => (loadCachedJobs().length ? 'ready' : 'loading'))
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('workspace')
   const [online, setOnline] = useState(navigator.onLine)
@@ -118,6 +121,7 @@ function AppContent() {
     setSyncEnabled(false)
     clearLocalJobData()
     setJobs([])
+    setJobsLoadState('loading')
     setSelectedJob(null)
     setCurrentUser(null)
     setWorkshopData(null)
@@ -137,12 +141,14 @@ function AppContent() {
   const loadJobs = useCallback(() => {
     const session = getCaptureSessionId()
     setErrorMsg('')
+    setJobsLoadState((previous) => (previous === 'ready' ? 'ready' : 'loading'))
     // Never replace a usable cached screen with a loading gate.
     void getJobs()
       .then((loaded) => {
         if (session !== getCaptureSessionId()) return
         localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(loaded))
         setJobs(loaded)
+        setJobsLoadState('ready')
         const chosen = pickJob(loaded, loadSelectedJobId())
         setSelectedJob(chosen)
         if (chosen) localStorage.setItem(SELECTED_JOB_ID_KEY, chosen.id)
@@ -155,6 +161,9 @@ function AppContent() {
           expireSession()
           return
         }
+        setJobsLoadState((previous) =>
+          previous === 'ready' ? 'ready' : 'error',
+        )
         setErrorMsg(
           'Jobs could not refresh. You can still record on this phone.',
         )
@@ -182,6 +191,7 @@ function AppContent() {
           localStorage.removeItem(CACHED_JOBS_KEY)
           localStorage.removeItem(SELECTED_JOB_ID_KEY)
           setJobs([])
+          setJobsLoadState('loading')
           setSelectedJob(null)
           setWorkshopData(null)
           setView('workspace')
@@ -209,6 +219,7 @@ function AppContent() {
     localStorage.removeItem(CACHED_JOBS_KEY)
     localStorage.removeItem(SELECTED_JOB_ID_KEY)
     setJobs([])
+    setJobsLoadState('loading')
     setSelectedJob(null)
     setWorkshopData(null)
     setView('workspace')
@@ -368,14 +379,24 @@ function AppContent() {
           {/* An empty book still opens on All Jobs rather than a special
           first-run screen: it already carries the one route that matters
           (New job), and it is the same page Mike will use ever after. */}
-          <AllJobsScreen
-            jobs={[]}
-            online={online}
-            hideBack={true}
-            onOpenJob={handleSelectJob}
-            onJobAdded={handleJobAdded}
-            onBack={() => {}}
-          />
+          {jobsLoadState !== 'ready' ? (
+            <div className="app-loading">
+              <p role="status">
+                {jobsLoadState === 'loading'
+                  ? 'Loading your jobs…'
+                  : 'Your jobs aren’t available yet.'}
+              </p>
+            </div>
+          ) : (
+            <AllJobsScreen
+              jobs={[]}
+              online={online}
+              hideBack={true}
+              onOpenJob={handleSelectJob}
+              onJobAdded={handleJobAdded}
+              onBack={() => {}}
+            />
+          )}
         </>
       )
     }

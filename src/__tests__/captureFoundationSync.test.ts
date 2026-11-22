@@ -92,7 +92,7 @@ it('does not upload or reset another account’s pending recordings', async () =
 })
 it('keeps an unknown capture quarantined across sign-in instead of claiming it for the next user', async () => {
   clearLocalOwner()
-  await db.saveNote(makeNote({ ...captureIdentity() }))
+  await db.saveNote(makeNote({ ...captureIdentity(), jobId: null }))
   beginSignedInSession('b')
   vi.mocked(uploadNote).mockImplementation(async (n) => success(n))
   renderHook(() => useSync(vi.fn()))
@@ -143,5 +143,23 @@ it('keeps rejected media on the phone without consuming network retry attempts',
   expect((await db.getAllNotes())[0].uploadAttemptCount).toBe(0)
   expect((await db.getAllNotes())[0].lastErrorCode).toBe(
     'UNSUPPORTED_MEDIA_TYPE',
+  )
+})
+
+it('lists and uploads an ownerless job recording from any earlier boundary through its job route', async () => {
+  clearLocalOwner()
+  const note = makeNote({ ...captureIdentity(), jobId: 'original-job' })
+  await db.saveNote(note)
+  beginSignedInSession('b')
+  expect((await db.getNotesForJob('original-job'))[0].clientNoteId).toBe(
+    note.clientNoteId,
+  )
+  vi.mocked(uploadNote).mockImplementation(async (n) => success(n))
+  renderHook(() => useSync(vi.fn()))
+  await waitFor(() => expect(uploadNote).toHaveBeenCalledOnce())
+  expect(vi.mocked(uploadNote).mock.calls[0][0].jobId).toBe('original-job')
+  expect(vi.mocked(uploadNote).mock.calls[0][0].ownerUserId).toBeNull()
+  await waitFor(async () =>
+    expect((await db.getAllNotes())[0].localState).toBe('uploaded'),
   )
 })

@@ -32,24 +32,37 @@ const USER = {
 
 async function fixture(
   page: Page,
-  options: { hangJobs?: boolean; failJobs?: boolean; cached?: boolean } = {},
+  options: {
+    hangJobs?: boolean
+    failJobs?: boolean
+    cached?: boolean
+    owner?: string | null
+    failMe?: boolean
+  } = {},
 ) {
   const uploads: { url: string; body: string }[] = []
   await page.addInitScript(
     ({ job, cached, owner }) => {
       if (!sessionStorage.getItem('foundation-seeded')) {
-        localStorage.setItem('job-book-owner-user-id', owner)
+        if (owner !== null)
+          localStorage.setItem('job-book-owner-user-id', owner)
         if (cached)
           localStorage.setItem('job-book-cached-jobs', JSON.stringify([job]))
         sessionStorage.setItem('foundation-seeded', '1')
       }
     },
-    { job: JOB, cached: options.cached ?? true, owner: USER.id },
+    {
+      job: JOB,
+      cached: options.cached ?? true,
+      owner: options.owner === undefined ? USER.id : options.owner,
+    },
   )
   // Context routes also cover requests sent by the service worker's client.
   await page.context().route('**/api/**', async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname
+    if (path === '/api/auth/me' && options.failMe)
+      return route.abort('internetdisconnected')
     if (path === '/api/jobs' && options.hangJobs) return // intentionally unresolved until context closes
     if (path === '/api/jobs' && options.failJobs)
       return route.abort('internetdisconnected')
@@ -114,6 +127,7 @@ async function stored(page: Page) {
         clientNoteId: string
         jobId: string | null
         ownerUserId: string | null
+        captureSessionId: string
         blob: Blob
         localState: string
         serverNoteId: string | null
@@ -129,6 +143,7 @@ async function stored(page: Page) {
         id: n.clientNoteId,
         jobId: n.jobId,
         owner: n.ownerUserId,
+        boundary: n.captureSessionId,
         state: n.localState,
         serverId: n.serverNoteId,
         size: n.blob.size,
@@ -329,4 +344,137 @@ test('old v1 tab blocks upgrade visibly; close and retry preserves existing audi
   const legacy = (await stored(page)).find((n) => n.id === 'legacy')!
   expect(legacy.state).toBe('upload_needs_attention')
   expect(Buffer.from(legacy.bytes).toString()).toBe('legacy audio')
+})
+
+test('unknown-owner job recording is stamped, listed and uploaded after closing and reopening a new page', async ({
+  page,
+  context,
+}) => {
+  const options = { cached: false, owner: null, failMe: true }
+  const uploads = await fixture(page, options)
+  const meFailed = page.waitForEvent(
+    'requestfailed',
+    (request) => new URL(request.url()).pathname === '/api/auth/me',
+  )
+  await page.goto('/')
+  await meFailed
+  await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
+  expect(
+    await page.evaluate(() => localStorage.getItem('job-book-owner-user-id')),
+  ).toBeNull()
+  await context.setOffline(true)
+  await record(page)
+  await expect
+    .poll(async () => (await stored(page))[0]?.state)
+    .toBe('saved_local')
+  const [before] = await stored(page)
+  expect(before.owner).toBeNull()
+  expect(before.jobId).toBe(JOB.id)
+  expect(uploads).toHaveLength(0)
+  await page.close()
+  options.failMe = false
+  await context.setOffline(false)
+  const reopened = await context.newPage()
+  await reopened.goto('https://localhost:5176/')
+  expect(
+    await reopened.evaluate(() => sessionStorage.getItem('foundation-seeded')),
+  ).toBeNull()
+  await expect
+    .poll(async () => (await stored(reopened))[0]?.owner)
+    .toBe(USER.id)
+  await expect
+    .poll(async () => (await stored(reopened))[0]?.state)
+    .toBe('uploaded')
+  const [after] = await stored(reopened)
+  expect(after.boundary).toBe(before.boundary)
+  expect(after.id).toBe(before.id)
+  expect(after.bytes).toEqual(before.bytes)
+  expect(uploads).toHaveLength(1)
+  expect(uploads[0].url).toBe(`/api/jobs/${JOB.id}/notes`)
+  const history = reopened.getByRole('region', {
+    name: 'Recordings on this phone',
+  })
+  await expect(history.locator('.note-card')).toHaveCount(1)
+  await expect(history.getByText('Voice note saved')).toBeVisible()
+})
+
+test('another account signing in after a new-page launch cannot claim an ownerless unfiled recording', async ({
+  page,
+  context,
+}) => {
+  const uploads = await fixture(page, {
+    cached: false,
+    owner: null,
+    failMe: true,
+    hangJobs: true,
+  })
+  const meFailed = page.waitForEvent(
+    'requestfailed',
+    (request) => new URL(request.url()).pathname === '/api/auth/me',
+  )
+  await page.goto('/')
+  await meFailed
+  await record(page)
+  await expect(page.getByText('Recording saved on this phone.')).toBeVisible()
+  const [before] = await stored(page)
+  expect(before.owner).toBeNull()
+  expect(before.jobId).toBeNull()
+  await page.close()
+  const otherUser = {
+    ...USER,
+    id: 'builder-b',
+    name: 'Dave',
+    email: 'dave@example.test',
+  }
+  let signedIn = false
+  await context.route('**/api/auth/me', (route) =>
+    route.fulfill({
+      status: signedIn ? 200 : 401,
+      json: signedIn ? { user: otherUser } : { code: 'UNAUTHORIZED' },
+    }),
+  )
+  await context.route('**/api/auth/login', (route) => {
+    signedIn = true
+    return route.fulfill({ json: { user: otherUser } })
+  })
+  await context.route('**/api/jobs', (route) => route.fulfill({ json: [] }))
+  const reopened = await context.newPage()
+  await reopened.goto('https://localhost:5176/')
+  await reopened.getByLabel('Email', { exact: true }).fill(otherUser.email)
+  await reopened
+    .getByLabel('Password', { exact: true })
+    .fill('example-password')
+  await reopened.getByRole('button', { name: 'Log in', exact: true }).click()
+  await expect
+    .poll(() =>
+      reopened.evaluate(() => localStorage.getItem('job-book-owner-user-id')),
+    )
+    .toBe(otherUser.id)
+  await expect(
+    reopened.getByRole('heading', { name: 'All jobs' }),
+  ).toBeVisible()
+  const [after] = await stored(reopened)
+  expect(after).toEqual(before)
+  expect(uploads).toHaveLength(0)
+  await expect(
+    reopened.getByText('Recording saved on this phone.'),
+  ).toHaveCount(0)
+})
+
+test('uncached pending jobs stay unknown while Record remains usable', async ({
+  page,
+}) => {
+  await fixture(page, { cached: false, hangJobs: true })
+  await page.goto('/')
+  await expect(
+    page.getByRole('button', { name: 'Start recording' }),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'All jobs' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'New job' })).toHaveCount(0)
+  await record(page)
+  await expect(page.getByText('Recording saved on this phone.')).toBeVisible()
+  await noClipping(page)
+  await page.screenshot({
+    path: 'docs/verification/capture-foundation/jobs-loading-390.png',
+  })
 })

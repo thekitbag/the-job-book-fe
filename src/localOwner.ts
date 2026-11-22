@@ -1,7 +1,7 @@
 /** Local ownership is independent of selected jobs. A sign-in starts a new
- * capture session so a delayed identity lookup cannot claim earlier audio. */
+ * durable capture boundary so a delayed identity lookup cannot claim earlier audio. */
 export const LOCAL_OWNER_KEY = 'job-book-owner-user-id'
-const SESSION_KEY = 'job-book-capture-session-id'
+const BOUNDARY_KEY = 'job-book-capture-boundary-id'
 let memorySession: string | null = null
 let memoryOwner: string | null = null
 let ownerStorageFailed = false
@@ -15,28 +15,28 @@ export function getLocalOwnerId(): string | null {
     return memoryOwner
   }
 }
+// Keep the existing record field/API name; this id now lasts across app launches.
 export function getCaptureSessionId(): string {
   try {
-    const stored = sessionStorage.getItem(SESSION_KEY)
-    if (stored) return stored
+    const stored = localStorage.getItem(BOUNDARY_KEY)
+    if (stored) return (memorySession = stored)
   } catch {
-    /* Keep an in-memory identity if browser storage is unavailable. */
+    /* Storage unavailable: retain identity in memory for this page. */
   }
   memorySession ??= crypto.randomUUID()
-  try {
-    sessionStorage.setItem(SESSION_KEY, memorySession)
-  } catch {
-    /* best effort */
-  }
+  persistBoundary(memorySession)
   return memorySession
+}
+function persistBoundary(id: string) {
+  try {
+    localStorage.setItem(BOUNDARY_KEY, id)
+  } catch {
+    /* in-memory fallback when browser storage is unavailable */
+  }
 }
 function rotateSession() {
   memorySession = crypto.randomUUID()
-  try {
-    sessionStorage.setItem(SESSION_KEY, memorySession)
-  } catch {
-    /* best effort */
-  }
+  persistBoundary(memorySession)
 }
 function emit() {
   for (const listener of listeners) listener()
@@ -87,11 +87,12 @@ export function canListCapture(item: {
   jobId: string | null
 }): boolean {
   if (item.ownerUserId) return item.ownerUserId === getLocalOwnerId()
-  if (item.captureSessionId)
-    return item.captureSessionId === getCaptureSessionId()
-  // v1 records have no ownership metadata. Their job route remains the
-  // authority; never reinterpret these records as new unfiled captures.
-  return item.jobId !== null
+  // Every ownerless job recording, including an older tagged boundary, uses
+  // that job's server ownership check. Never turn it into an unfiled capture.
+  if (item.jobId !== null) return true
+  return (
+    !!item.captureSessionId && item.captureSessionId === getCaptureSessionId()
+  )
 }
 export function canSyncCapture(item: {
   ownerUserId?: string | null
@@ -100,12 +101,18 @@ export function canSyncCapture(item: {
 }): boolean {
   return item.ownerUserId
     ? item.ownerUserId === getLocalOwnerId()
-    : !item.captureSessionId && item.jobId !== null
+    : item.jobId !== null
 }
 function onStorage(event: StorageEvent) {
-  if (event.key !== LOCAL_OWNER_KEY && event.key !== null) return
+  if (
+    event.key !== LOCAL_OWNER_KEY &&
+    event.key !== BOUNDARY_KEY &&
+    event.key !== null
+  )
+    return
   ownerStorageFailed = false
-  rotateSession()
+  // The tab handling the auth transition already persisted the new boundary.
+  // Observers adopt it, rather than rotating again or rotating on /me discovery.
   emit()
 }
 export function subscribeLocalOwner(listener: () => void): () => void {
@@ -123,9 +130,4 @@ export function _resetLocalOwnerForTesting(): void {
   memorySession = null
   memoryOwner = null
   ownerStorageFailed = false
-  try {
-    sessionStorage.removeItem(SESSION_KEY)
-  } catch {
-    /* test/browser storage may be unavailable */
-  }
 }

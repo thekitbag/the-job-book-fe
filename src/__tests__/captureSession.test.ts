@@ -64,3 +64,63 @@ it('ignores an old request’s 401 after a new sign-in but expires the current s
   expect(expired).toHaveBeenCalledOnce()
   onUnauthorized(null)
 })
+
+it('persists an unknown capture boundary after all page session storage is gone', async () => {
+  const { _resetLocalOwnerForTesting } = await import('../localOwner')
+  clearLocalOwner()
+  const boundary = getCaptureSessionId()
+  await persistCapturedNote(createCapturedNote(audio, null))
+  sessionStorage.clear()
+  _resetLocalOwnerForTesting()
+  expect(getCaptureSessionId()).toBe(boundary)
+  expect(establishLocalOwner('a', boundary)).toBe(true)
+  const { stampUnownedCaptures } = await import('../db')
+  await stampUnownedCaptures('a', boundary)
+  expect((await getAllNotes())[0].ownerUserId).toBe('a')
+})
+
+it('keeps the boundary through owner discovery and rotates it only at auth/account boundaries', () => {
+  const boundary = getCaptureSessionId()
+  establishLocalOwner('a', boundary)
+  expect(getCaptureSessionId()).toBe(boundary)
+  establishLocalOwner('a', boundary)
+  expect(getCaptureSessionId()).toBe(boundary)
+  establishLocalOwner('b', boundary)
+  const accountChanged = getCaptureSessionId()
+  expect(accountChanged).not.toBe(boundary)
+  beginSignedInSession('b')
+  const signedIn = getCaptureSessionId()
+  expect(signedIn).not.toBe(accountChanged)
+  clearLocalOwner()
+  expect(getCaptureSessionId()).not.toBe(signedIn)
+})
+
+it('adopts another tab’s auth boundary without rotating on owner discovery or storage notifications', async () => {
+  const { subscribeLocalOwner } = await import('../localOwner')
+  const notify = vi.fn()
+  const boundary = getCaptureSessionId()
+  const unsubscribe = subscribeLocalOwner(notify)
+  try {
+    localStorage.setItem('job-book-owner-user-id', 'a')
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'job-book-owner-user-id',
+        oldValue: null,
+        newValue: 'a',
+      }),
+    )
+    expect(getCaptureSessionId()).toBe(boundary)
+    localStorage.setItem('job-book-capture-boundary-id', 'other-tab-sign-in')
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'job-book-capture-boundary-id',
+        oldValue: boundary,
+        newValue: 'other-tab-sign-in',
+      }),
+    )
+    expect(getCaptureSessionId()).toBe('other-tab-sign-in')
+    expect(notify).toHaveBeenCalledTimes(2)
+  } finally {
+    unsubscribe()
+  }
+})

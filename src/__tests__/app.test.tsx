@@ -217,7 +217,8 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByText(/jobs could not refresh/i)).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
-    expect(screen.getByTestId('all-jobs-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('all-jobs-screen')).not.toBeInTheDocument()
+    expect(screen.getByText('Your jobs aren’t available yet.')).toBeInTheDocument()
   })
 
   it('shows All Jobs / add-job prompt when no jobs exist', async () => {

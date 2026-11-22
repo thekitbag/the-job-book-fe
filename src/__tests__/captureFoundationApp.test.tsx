@@ -165,12 +165,40 @@ it('does not reopen an acknowledged save when returning to the job', async () =>
   await screen.findByRole('heading', { name: JOB.title })
   fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
   await waitFor(() => expect(recorder.complete).toBeTruthy())
-  await act(async () => { await recorder.complete!(result) })
+  await act(async () => {
+    await recorder.complete!(result)
+  })
   await screen.findByRole('dialog', { name: 'Recording saved' })
   fireEvent.click(screen.getByRole('button', { name: 'Done' }))
   fireEvent.click(screen.getByRole('button', { name: /the job book/i }))
   fireEvent.click(await screen.findByRole('button', { name: /^jobs/i }))
   fireEvent.click(screen.getByRole('button', { name: /garden room/i }))
   await screen.findByRole('heading', { name: JOB.title })
-  expect(screen.queryByRole('dialog', { name: 'Recording saved' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('dialog', { name: 'Recording saved' }),
+  ).not.toBeInTheDocument()
+})
+
+it('keeps Record available without presenting pending jobs as an empty book', async () => {
+  let finish!: (jobs: Job[]) => void
+  vi.mocked(api.getJobs).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  render(<App />)
+  expect(screen.getByRole('button', { name: 'Start recording' })).toBeVisible()
+  expect(
+    screen.queryByRole('heading', { name: /^All jobs/ }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'New job' }),
+  ).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
+  await waitFor(() => expect(recorder.start).toHaveBeenCalledOnce())
+  await act(async () => finish([]))
+  expect(
+    await screen.findByRole('heading', { name: /^All jobs/ }),
+  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'New job' })).toBeVisible()
 })
