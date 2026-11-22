@@ -19,6 +19,7 @@ vi.mock('../api', async (importOriginal) => {
     onUnauthorized: vi.fn(),
     uploadNote: vi.fn(),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-x', receipts: [] })),
     getNoteTranscript: vi.fn(),

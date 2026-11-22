@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, getReviewQueue, PAID_LABOUR_COST_EDIT_MESSAGE, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
+import { getReviewQueue, submitQueueDecision, updateMemoryItem, verifyMemoryItem } from './api'
 import { track } from './analytics'
 import MemoryEditForm from './MemoryEditForm'
 import { applyEditToRemembered, rememberedItemToEdit } from './memoryEdit'
-import { deriveEachTotal, deriveHourlyTotal, eachTotalGaps, friendlyDayLabel, hourlyTotalGaps, joinWithAnd, formatCostLabel, formatMoney, formatTotalLabel, localDateKey, localNoonISO, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
+import { friendlyDayLabel, localDateKey, MEMORY_TYPE_TO_SECTION_KEY } from './memoryScan'
 import type {
   AlreadyRememberedItem,
-  BudgetCategory,
-  CostQualifier,
   Job,
   MemoryItemEdit,
   MemoryType,
@@ -21,41 +19,30 @@ import type {
 
 const MEMORY_TYPE_OPTIONS: { value: MemoryType; label: string; shortLabel: string }[] = [
   { value: 'used_material', label: 'Used material', shortLabel: 'Used' },
-  { value: 'ordered_material', label: 'Ordered material', shortLabel: 'Ordered' },
+  { value: 'ordered_material', label: 'Bought material', shortLabel: 'Bought' },
   { value: 'leftover_material', label: 'Leftover material', shortLabel: 'Leftover' },
-  { value: 'budget_cost', label: 'Budget cost', shortLabel: 'Cost' },
-  { value: 'labour', label: 'Labour (hours)', shortLabel: 'Labour' },
-  { value: 'supplier_delivery_note', label: 'Supplier / delivery note', shortLabel: 'Supplier' },
-  { value: 'customer_change', label: 'Customer change', shortLabel: 'Customer' },
-  { value: 'watch_out', label: 'Watch out', shortLabel: 'Watch out' },
-]
-
-const COST_QUALIFIER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: '— not stated —' },
-  { value: 'each', label: 'Each (per item)' },
-  { value: 'per_hour', label: 'Per hour' },
-  { value: 'total', label: 'Total' },
-  { value: 'approx', label: 'Approximate' },
-  { value: 'unknown', label: 'Not clear' },
+  { value: 'labour', label: 'Hours', shortLabel: 'Hours' },
+  { value: 'general_note', label: 'Note', shortLabel: 'Note' },
 ]
 
 const MATERIAL_TYPES = new Set<MemoryType>(['ordered_material', 'used_material', 'leftover_material'])
 // Types that lead with a structured type label + detail rows (not a prose summary).
-const STRUCTURED_TYPES = new Set<MemoryType>(['ordered_material', 'budget_cost', 'used_material', 'leftover_material', 'labour'])
-// Types that can carry a budget category. Budget owns all cost, so cost-bearing
-// types are category-bearing; labour is hours-only and never carries a category.
-const CATEGORY_TYPES = new Set<MemoryType>(['ordered_material', 'budget_cost'])
+const STRUCTURED_TYPES = new Set<MemoryType>([
+  'ordered_material',
+  'used_material',
+  'leftover_material',
+  'labour',
+])
 
 const MATERIAL_TYPE_CARD_LABEL: Partial<Record<MemoryType, string>> = {
   ordered_material: 'Bought / ordered',
-  budget_cost: 'Budget cost',
   used_material: 'Used',
   leftover_material: 'Left over',
-  labour: 'Labour · hours',
+  labour: 'Hours',
 }
 
-// Scannable card text: a bold headline, a muted meta line, and a cost line —
-// instead of a dense label/value grid.
+// Scannable card text: a bold headline and a muted meta line, instead of a
+// dense label/value grid.
 function reviewHeadline(pm: ProposedMemory): string {
   if (pm.memoryType === 'labour') {
     const hours = pm.labourHours ? `${pm.labourHours} hours` : null
@@ -74,22 +61,11 @@ function reviewMeta(pm: ProposedMemory): string {
   }
   return [pm.supplierName, pm.deliveryTiming, pm.locationOrUse].filter(Boolean).join(' · ')
 }
-function reviewCost(pm: ProposedMemory): string {
-  // Labour is hours-only — cost never shows on a labour draft.
-  if (pm.memoryType === 'labour') return ''
-  const cost = formatCostLabel(pm.costAmount, pm.costCurrency, pm.costQualifier)
-  // Prefer an explicit total; otherwise show the derived each × quantity total.
-  const derived = pm.totalCostAmount ? null : deriveEachTotal({ quantity: pm.quantity, unit: pm.unit, costAmount: pm.costAmount, costQualifier: pm.costQualifier })
-  const total = formatTotalLabel(pm.totalCostAmount ?? derived, pm.costCurrency || 'GBP')
-  // A 'total'-basis cost already IS the line total — don't state it twice.
-  if (pm.costQualifier === 'total') return total ? `${total} total` : (cost ?? '')
-  return [cost, total ? `${total} total` : null].filter(Boolean).join(' · ')
-}
 // Plain builder labels for the category focus chips, keyed by section key.
 const SECTION_CHIP_LABELS: Record<string, string> = {
-  ordered_materials: 'Ordered',
+  ordered_materials: 'Bought',
   budget_costs: 'Costs',
-  labour: 'Labour',
+  labour: 'Hours',
   used_materials: 'Used',
   leftovers: 'Left over',
   supplier_delivery_notes: 'Supplier notes',
@@ -99,7 +75,7 @@ const SECTION_CHIP_LABELS: Record<string, string> = {
 }
 
 const chipLabel = (s: QueueSection) => SECTION_CHIP_LABELS[s.key] ?? s.label
-const draftCount = (s: QueueSection) => s.items.filter(it => it.status === 'draft').length
+const draftCount = (s: QueueSection) => s.items.filter((it) => it.status === 'draft').length
 
 // MEMORY_TYPE_TO_SECTION_KEY (shared) maps memoryType → section key so
 // already-remembered context can follow the active category focus.
@@ -116,7 +92,7 @@ function CategoryChips({
   onFocus: (key: string | null) => void
 }) {
   return (
-    <div className="queue-cat-chips" role="group" aria-label="Focus a category">
+    <div className="queue-cat-chips" role="group" aria-label="Focus a section">
       {/* Label + count render as a single text node so the count chips never
           collide with the remembered type chips (e.g. exact text "Ordered"). */}
       <button
@@ -129,20 +105,22 @@ function CategoryChips({
       </button>
       {/* Only categories that actually have pending items get a chip — no row of
           "0"s. The currently-focused chip stays even if it just emptied. */}
-      {sections.filter(s => draftCount(s) > 0 || focusedKey === s.key).map(s => {
-        const count = draftCount(s)
-        return (
-          <button
-            key={s.key}
-            type="button"
-            className={`queue-cat-chip${focusedKey === s.key ? ' queue-cat-chip--active' : ''}${count === 0 ? ' queue-cat-chip--empty' : ''}`}
-            aria-pressed={focusedKey === s.key}
-            onClick={() => onFocus(s.key)}
-          >
-            {chipLabel(s)} <span className="queue-cat-chip-count">{count}</span>
-          </button>
-        )
-      })}
+      {sections
+        .filter((s) => draftCount(s) > 0 || focusedKey === s.key)
+        .map((s) => {
+          const count = draftCount(s)
+          return (
+            <button
+              key={s.key}
+              type="button"
+              className={`queue-cat-chip${focusedKey === s.key ? ' queue-cat-chip--active' : ''}${count === 0 ? ' queue-cat-chip--empty' : ''}`}
+              aria-pressed={focusedKey === s.key}
+              onClick={() => onFocus(s.key)}
+            >
+              {chipLabel(s)} <span className="queue-cat-chip-count">{count}</span>
+            </button>
+          )
+        })}
     </div>
   )
 }
@@ -160,17 +138,21 @@ function SourceContext({ contexts }: { contexts: QueueItem['sourceContext'] }) {
         type="button"
         className="queue-source-toggle"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
       >
         This came from your note {open ? '▴' : '▾'}
       </button>
       {open && (
         <ul className="queue-source-list">
-          {contexts.map(ctx => (
+          {contexts.map((ctx) => (
             <li key={ctx.candidateFactId} className="queue-source-item">
-              {ctx.transcriptText
-                ? <p className="queue-source-text">"{ctx.transcriptText}"</p>
-                : <p className="queue-source-unavailable">Source unavailable</p>}
+              {ctx.transcriptText ? (
+                <p className="queue-source-text" data-builder-note>
+                  "{ctx.transcriptText}"
+                </p>
+              ) : (
+                <p className="queue-source-unavailable">Source unavailable</p>
+              )}
             </li>
           ))}
         </ul>
@@ -192,179 +174,68 @@ function ItemKindBadge({ item }: { item: QueueItem }) {
 
 function EditForm({
   initial,
-  categories,
   onSubmit,
   onCancel,
   submitting,
 }: {
   initial: ProposedMemory
-  categories: BudgetCategory[]
-  onSubmit: (corrected: ProposedMemory) => void
+  onSubmit: (pm: ProposedMemory) => void
   onCancel: () => void
   submitting: boolean
 }) {
-  const [form, setForm] = useState<ProposedMemory>(initial)
-  // Labour effective day, corrected as a date-only value (saved as local noon).
-  const [happenedDate, setHappenedDate] = useState(initial.happenedAt ? localDateKey(initial.happenedAt) : '')
-  const setStr = (k: Exclude<keyof ProposedMemory, 'memoryType' | 'costQualifier'>, v: string) =>
-    setForm(f => ({ ...f, [k]: v || null }))
-  // Changing type away from a category-bearing type clears any category.
-  const setType = (v: string) =>
-    setForm(f => ({ ...f, memoryType: v as MemoryType, budgetCategoryId: CATEGORY_TYPES.has(v as MemoryType) ? (f.budgetCategoryId ?? null) : null }))
-  const setCostQualifier = (v: string) =>
-    setForm(f => ({ ...f, costQualifier: (v as CostQualifier) || null }))
-  const isLabour = form.memoryType === 'labour'
-  const showCategory = CATEGORY_TYPES.has(form.memoryType) && categories.length > 0
-  // A clear `each` material line or `per_hour` labour line: derive the total
-  // (quantity × unit cost, or hours × rate) and show the working, matching the
-  // Fix-memory form. Omit the explicit total on save so the backend derives it
-  // rather than trusting a stale figure.
-  const eachRecalc = isLabour ? form.costQualifier === 'per_hour' : form.costQualifier === 'each'
-  const derivedTotal = eachRecalc
-    ? (isLabour
-        ? deriveHourlyTotal({ labourHours: form.labourHours, costAmount: form.costAmount, costQualifier: form.costQualifier })
-        : deriveEachTotal({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount, costQualifier: 'each' }))
-    : null
-  // For any other basis (`total`, `approx`, `unknown`, not stated) there is a
-  // single cost figure — no separate unit-cost-vs-total split to show.
-  const isTotalBasis = !eachRecalc && form.costQualifier === 'total'
-  // `each`/`per_hour` claim a computable total, but without quantity+unit+cost
-  // (or hours+rate) there is nothing to derive it from — block save rather than
-  // silently dropping the total and leaving the item stuck worth-checking.
-  const eachGaps = eachRecalc
-    ? (isLabour
-        ? hourlyTotalGaps({ labourHours: form.labourHours, costAmount: form.costAmount })
-        : eachTotalGaps({ quantity: form.quantity, unit: form.unit, costAmount: form.costAmount }))
-    : []
-  const eachRecalcBlocked = eachRecalc && eachGaps.length > 0
-
-  const submit = () => {
-    const corrected = { ...form }
-    if (eachRecalc) delete (corrected as Partial<ProposedMemory>).totalCostAmount
-    else if (isTotalBasis) corrected.totalCostAmount = corrected.costAmount
-    else delete (corrected as Partial<ProposedMemory>).totalCostAmount
-    // Labour carries the corrected effective day (local noon; null clears it).
-    if (isLabour) corrected.happenedAt = happenedDate ? localNoonISO(happenedDate) : null
-    onSubmit(corrected)
-  }
-
+  const [type, setType] = useState<MemoryType>(initial.memoryType)
   return (
-    <form
-      className="queue-edit-form"
-      aria-label="Edit correction"
-      onSubmit={e => { e.preventDefault(); submit() }}
-    >
+    <div>
       <label className="queue-field">
-        <span className="queue-field-label">Type</span>
-        <select className="queue-field-input" value={form.memoryType} onChange={e => setType(e.target.value)}>
-          {MEMORY_TYPE_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+        <span className="queue-field-label">Remember as</span>
+        <select
+          className="queue-field-input"
+          aria-label="Remember as"
+          value={type}
+          onChange={(e) => setType(e.target.value as MemoryType)}
+        >
+          {MEMORY_TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
       </label>
-      {showCategory && (
-        <label className="queue-field">
-          <span className="queue-field-label">Budget category</span>
-          <select className="queue-field-input" aria-label="Budget category" value={form.budgetCategoryId ?? ''} onChange={e => setForm(f => ({ ...f, budgetCategoryId: e.target.value || null }))}>
-            <option value="">Choose category</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-      )}
-      {isLabour ? (
-        <>
-          <label className="queue-field">
-            <span className="queue-field-label">Day</span>
-            <input className="queue-field-input" type="date" name="happenedAt" value={happenedDate} onChange={e => setHappenedDate(e.target.value)} />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Hours</span>
-            <input className="queue-field-input" name="labourHours" value={form.labourHours ?? ''} inputMode="decimal" onChange={e => setStr('labourHours', e.target.value)} placeholder="e.g. 8" />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Person / role</span>
-            <input className="queue-field-input" name="labourPerson" value={form.labourPerson ?? ''} onChange={e => setStr('labourPerson', e.target.value)} placeholder="e.g. Tom" />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Task / work area</span>
-            <input className="queue-field-input" name="labourTask" value={form.labourTask ?? ''} onChange={e => setStr('labourTask', e.target.value)} placeholder="e.g. electrics" />
-          </label>
-          {/* Labour is hours-only — no rate, cost, or Budget treatment. Cost
-              lives in Budget as its own draft. */}
-        </>
-      ) : (
-        <>
-          <label className="queue-field">
-            <span className="queue-field-label">Material</span>
-            <input className="queue-field-input" name="materialName" value={form.materialName ?? ''} onChange={e => setStr('materialName', e.target.value)} />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Quantity</span>
-            <input className="queue-field-input" name="quantity" value={form.quantity ?? ''} onChange={e => setStr('quantity', e.target.value)} />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Unit</span>
-            <input className="queue-field-input" name="unit" value={form.unit ?? ''} onChange={e => setStr('unit', e.target.value)} placeholder="e.g. sheets, bags, m²" />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Supplier</span>
-            <input className="queue-field-input" name="supplierName" value={form.supplierName ?? ''} onChange={e => setStr('supplierName', e.target.value)} />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Delivery timing</span>
-            <input className="queue-field-input" name="deliveryTiming" value={form.deliveryTiming ?? ''} onChange={e => setStr('deliveryTiming', e.target.value)} />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Location / use</span>
-            <input className="queue-field-input" name="locationOrUse" value={form.locationOrUse ?? ''} onChange={e => setStr('locationOrUse', e.target.value)} />
-          </label>
-        </>
-      )}
-      {/* Cost fields — never for labour (hours-only). One cost figure on screen
-          at a time: an editable unit cost plus a derived `each` preview, or a
-          single editable total for any other basis. */}
-      {!isLabour && (
-        <>
-          <label className="queue-field">
-            <span className="queue-field-label">
-              {eachRecalc ? 'Unit cost' : (isTotalBasis ? 'Total cost' : 'Cost amount')}
-            </span>
-            <input className="queue-field-input" name="costAmount" value={form.costAmount ?? ''} onChange={e => setStr('costAmount', e.target.value)} placeholder="e.g. 5.00" />
-          </label>
-          <label className="queue-field">
-            <span className="queue-field-label">Cost qualifier</span>
-            <select className="queue-field-input" value={form.costQualifier ?? ''} onChange={e => setCostQualifier(e.target.value)}>
-              {COST_QUALIFIER_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </label>
-          {eachRecalc && (
-            derivedTotal ? (
-              <p className="cost-preview" role="status">
-                {form.quantity} × {formatMoney(Number(form.costAmount), 'GBP')} each = <strong>{formatMoney(Number(derivedTotal), 'GBP')} total</strong>
-              </p>
-            ) : (
-              <p className="cost-preview cost-preview--warning" role="alert">
-                Add {joinWithAnd(eachGaps)} above to calculate a total — until then this stays worth checking.
-              </p>
-            )
-          )}
-        </>
-      )}
-      <label className="queue-field">
-        <span className="queue-field-label">Summary (optional)</span>
-        <input className="queue-field-input queue-field-summary" name="summary" value={form.summary} onChange={e => setStr('summary', e.target.value)} />
-      </label>
-      <div className="queue-edit-actions">
-        <button type="submit" className="btn-queue-save" disabled={submitting || eachRecalcBlocked}>
-          {submitting ? 'Saving…' : 'Save correction'}
-        </button>
-        <button type="button" className="btn-queue-cancel" onClick={onCancel} disabled={submitting}>
-          Cancel
-        </button>
-      </div>
-    </form>
+      <MemoryEditForm
+        key={type}
+        initial={{ ...initial, memoryType: type }}
+        submitting={submitting}
+        onCancel={onCancel}
+        onSubmit={(edit) => {
+          const material = MATERIAL_TYPES.has(type)
+          const hours = type === 'labour'
+          const amountUnchanged = edit.quantity === [initial.quantity, initial.unit].filter(Boolean).join(' ')
+          // A correction is a new fact shape, not a PATCH. Preserve a legacy
+          // quantity/unit pair when its combined display amount was untouched.
+          // Build an explicit field list so old response metadata cannot be sent.
+          const corrected: ProposedMemory = {
+            memoryType: type,
+            summary: edit.summary ?? '',
+            materialName: material ? (edit.materialName ?? initial.materialName) : null,
+            quantity: material ? (amountUnchanged ? initial.quantity : (edit.quantity ?? null)) : null,
+            unit: material && amountUnchanged ? initial.unit : null,
+            supplierName: material ? (edit.supplierName ?? null) : null,
+            deliveryTiming: material ? initial.deliveryTiming : null,
+            locationOrUse: material ? (edit.locationOrUse ?? null) : null,
+            ...(hours
+              ? {
+                  labourHours: edit.labourHours ?? initial.labourHours,
+                  labourPerson: edit.labourPerson ?? initial.labourPerson,
+                  labourTask: initial.labourTask,
+                  happenedAt: edit.happenedAt ?? initial.happenedAt,
+                }
+              : {}),
+          }
+          if (material || hours) corrected.summary = reviewHeadline(corrected)
+          onSubmit(corrected)
+        }}
+      />
+    </div>
   )
 }
 
@@ -373,7 +244,6 @@ function QueueItemCard({
   isEditing,
   submitting,
   errorMsg,
-  categories,
   onConfirm,
   onConfirmStillUnsure,
   onStartEdit,
@@ -385,9 +255,8 @@ function QueueItemCard({
   isEditing: boolean
   submitting: boolean
   errorMsg: string | null
-  categories: BudgetCategory[]
-  onConfirm: (categoryId: string | null) => void
-  onConfirmStillUnsure: (categoryId: string | null) => void
+  onConfirm: () => void
+  onConfirmStillUnsure: () => void
   onStartEdit: () => void
   onSubmitCorrection: (corrected: ProposedMemory) => void
   onCancelEdit: () => void
@@ -397,37 +266,28 @@ function QueueItemCard({
   const uncertain = item.uncertaintyFlags.length > 0
   const memType = item.proposedMemory.memoryType
   const isStructured = STRUCTURED_TYPES.has(memType)
-  // Category selection for bought/ordered + labour drafts. Default to the backend
-  // suggestion (set once, so a later suggestion can't override Mike's choice).
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(item.proposedMemory.budgetCategoryId ?? null)
-  const suggestion = item.proposedMemory.budgetCategorySuggestion ?? null
-  const showCategory = CATEGORY_TYPES.has(memType) && categories.length > 0 && !resolved && !isEditing
-  // Category select stays collapsed behind a quiet link unless the backend
-  // already suggested one (then default it open with the suggestion shown).
-  const [catOpen, setCatOpen] = useState<boolean>(!!suggestion)
   const headline = reviewHeadline(item.proposedMemory)
   const meta = reviewMeta(item.proposedMemory)
-  const cost = reviewCost(item.proposedMemory)
 
   return (
-    <div
-      className={`queue-item-card queue-item-card--${item.status}`}
-      data-testid={`queue-item-${item.id}`}
-    >
+    <div className={`queue-item-card queue-item-card--${item.status}`} data-testid={`queue-item-${item.id}`}>
       {item.kind !== 'single' && (
         <div className="queue-item-top">
           <ItemKindBadge item={item} />
         </div>
       )}
 
-      {isStructured && <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>}
+      {isStructured && (
+        <p className="queue-item-type-label">{MATERIAL_TYPE_CARD_LABEL[memType] ?? memType}</p>
+      )}
 
       {!isEditing && (
         <>
           <p className="queue-item-headline">{headline}</p>
           {meta && <p className="queue-item-meta">{meta}</p>}
-          {cost && <p className="queue-item-cost">{cost}</p>}
-          {uncertain && <p className="queue-item-uncertain-line">Worth checking — cost or quantity may need confirming</p>}
+          {uncertain && (
+            <p className="queue-item-uncertain-line">Worth checking — details may need confirming</p>
+          )}
         </>
       )}
 
@@ -440,39 +300,25 @@ function QueueItemCard({
         <p className="queue-item-resolved queue-item-resolved--dismissed">Dismissed</p>
       )}
 
-      {showCategory && (
-        <div className="queue-item-category">
-          {catOpen ? (
-            <label className="queue-field">
-              {suggestion && <span className="queue-item-suggestion">Suggested: {suggestion.categoryName}</span>}
-              <span className="queue-field-label">Budget category</span>
-              <select
-                className="queue-field-input"
-                aria-label="Budget category"
-                value={selectedCategoryId ?? ''}
-                disabled={submitting}
-                onChange={e => setSelectedCategoryId(e.target.value || null)}
-              >
-                <option value="">Choose category</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </label>
-          ) : (
-            <button type="button" className="btn-queue-addcat" onClick={() => setCatOpen(true)}>+ Add budget category</button>
-          )}
-        </div>
-      )}
-
       {!resolved && !isEditing && (
         <div className="queue-item-actions">
-          <button className="btn-queue-remember" onClick={() => onConfirm(selectedCategoryId)} disabled={submitting}>
+          <button className="btn-queue-remember" onClick={() => onConfirm()} disabled={submitting}>
             {submitting ? 'Saving…' : 'Remember this'}
           </button>
-          <button className="btn-queue-correct" onClick={onStartEdit} disabled={submitting} aria-label="Fix details">Fix</button>
-          <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>Dismiss</button>
+          <button
+            className="btn-queue-correct"
+            onClick={onStartEdit}
+            disabled={submitting}
+            aria-label="Fix details"
+          >
+            Fix
+          </button>
+          <button className="btn-queue-dismiss" onClick={onDismiss} disabled={submitting}>
+            Dismiss
+          </button>
           {/* On a Worth-checking draft, "Remember, but still unsure" keeps the flag. */}
           {uncertain && (
-            <button className="btn-queue-unsure" onClick={() => onConfirmStillUnsure(selectedCategoryId)} disabled={submitting}>
+            <button className="btn-queue-unsure" onClick={() => onConfirmStillUnsure()} disabled={submitting}>
               Remember, but still unsure
             </button>
           )}
@@ -482,14 +328,17 @@ function QueueItemCard({
       {!resolved && isEditing && (
         <EditForm
           initial={item.proposedMemory}
-          categories={categories}
           onSubmit={onSubmitCorrection}
           onCancel={onCancelEdit}
           submitting={submitting}
         />
       )}
 
-      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      {errorMsg && (
+        <p className="queue-item-error" role="alert">
+          {errorMsg}
+        </p>
+      )}
     </div>
   )
 }
@@ -500,7 +349,6 @@ function RememberedCard({
   submitting,
   verifying,
   errorMsg,
-  categories,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -511,20 +359,28 @@ function RememberedCard({
   submitting: boolean
   verifying: boolean
   errorMsg: string | null
-  categories: BudgetCategory[]
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
   onVerify: () => void
 }) {
-  const typeLabel = MEMORY_TYPE_OPTIONS.find(o => o.value === item.memoryType)?.shortLabel ?? item.memoryType
+  const typeLabel = MEMORY_TYPE_OPTIONS.find((o) => o.value === item.memoryType)?.shortLabel ?? 'Note'
   const [ackUnsure, setAckUnsure] = useState(false)
 
   if (isEditing) {
     return (
       <li className="queue-remembered-card queue-remembered-card--editing">
-        <MemoryEditForm initial={rememberedItemToEdit(item)} submitting={submitting} categories={categories} onSubmit={onSave} onCancel={onCancelEdit} />
-        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+        <MemoryEditForm
+          initial={rememberedItemToEdit(item)}
+          submitting={submitting}
+          onSubmit={onSave}
+          onCancel={onCancelEdit}
+        />
+        {errorMsg && (
+          <p className="queue-item-error" role="alert">
+            {errorMsg}
+          </p>
+        )}
       </li>
     )
   }
@@ -536,10 +392,6 @@ function RememberedCard({
   if (item.supplierName) rows.push(['Supplier', item.supplierName])
   if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
   if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
-  const costLabel = formatCostLabel(item.costAmount ?? null, item.costCurrency ?? null, item.costQualifier ?? null)
-  if (costLabel) rows.push(['Cost', costLabel])
-  const totalLabel = formatTotalLabel(item.totalCostAmount ?? null, item.costCurrency ?? null)
-  if (totalLabel) rows.push(['Total', totalLabel])
   const uncertain = (item.uncertaintyFlags ?? []).length > 0
   const isMaterial = MATERIAL_TYPES.has(item.memoryType)
   const hasDetailRows = rows.length > 0 || uncertain
@@ -547,11 +399,15 @@ function RememberedCard({
   return (
     <li className={`queue-remembered-card queue-remembered-card--${item.memoryType}`}>
       <div className="queue-remembered-card-top">
-        <span className={`queue-remembered-type-chip queue-remembered-type-chip--${item.memoryType}`}>{typeLabel}</span>
+        <span className={`queue-remembered-type-chip queue-remembered-type-chip--${item.memoryType}`}>
+          {typeLabel}
+        </span>
         {item.timeLabel && <span className="queue-remembered-card-time">{item.timeLabel}</span>}
       </div>
       {(!isMaterial || !hasDetailRows) && (
-        <p className="queue-remembered-card-summary">{item.summary}</p>
+        <p className="queue-remembered-card-summary">
+          {reviewHeadline(rememberedItemToEdit(item) as ProposedMemory)}
+        </p>
       )}
       {(rows.length > 0 || uncertain) && (
         <dl className="card-detail-fields">
@@ -564,7 +420,7 @@ function RememberedCard({
           {uncertain && (
             <div className="card-detail-row card-uncertainty">
               <dt className="card-detail-label">Worth checking</dt>
-              <dd className="card-detail-value">cost or quantity may need confirming</dd>
+              <dd className="card-detail-value">details may need confirming</dd>
             </div>
           )}
         </dl>
@@ -574,22 +430,32 @@ function RememberedCard({
           <button type="button" className="btn-mem-verify" onClick={onVerify} disabled={verifying}>
             {verifying ? 'Saving…' : 'This is right'}
           </button>
-          <button type="button" className="btn-mem-unsure" onClick={() => setAckUnsure(true)} disabled={verifying}>
+          <button
+            type="button"
+            className="btn-mem-unsure"
+            onClick={() => setAckUnsure(true)}
+            disabled={verifying}
+          >
             Still unsure
           </button>
         </div>
       )}
       <div className="queue-remembered-card-footer">
-        <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
+        <button type="button" className="btn-mem-fix" onClick={onStartEdit}>
+          Fix memory
+        </button>
       </div>
-      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      {errorMsg && (
+        <p className="queue-item-error" role="alert">
+          {errorMsg}
+        </p>
+      )}
     </li>
   )
 }
 
 function AlreadyRememberedSection({
   items,
-  categories,
   focusedKey,
   editingId,
   submittingId,
@@ -601,7 +467,6 @@ function AlreadyRememberedSection({
   onVerify,
 }: {
   items: AlreadyRememberedItem[]
-  categories: BudgetCategory[]
   focusedKey: string | null
   editingId: string | null
   submittingId: string | null
@@ -614,9 +479,8 @@ function AlreadyRememberedSection({
 }) {
   const [open, setOpen] = useState(false)
   // Already-remembered context follows the active category focus
-  const shown = focusedKey === null
-    ? items
-    : items.filter(m => MEMORY_TYPE_TO_SECTION_KEY[m.memoryType] === focusedKey)
+  const shown =
+    focusedKey === null ? items : items.filter((m) => MEMORY_TYPE_TO_SECTION_KEY[m.memoryType] === focusedKey)
   if (shown.length === 0) return null
   return (
     <div className="queue-already-remembered" role="region" aria-label="Already remembered">
@@ -625,24 +489,23 @@ function AlreadyRememberedSection({
         type="button"
         className="queue-remembered-toggle"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
       >
         {open ? 'Hide remembered items' : `Show remembered items (${shown.length})`}
       </button>
       {open && (
         <ul className="queue-remembered-list">
-          {shown.map(m => (
+          {shown.map((m) => (
             <RememberedCard
               key={m.memoryItemId}
               item={m}
-              categories={categories}
               isEditing={editingId === m.memoryItemId}
               submitting={submittingId === m.memoryItemId}
               verifying={verifyingId === m.memoryItemId}
               errorMsg={itemErrors[m.memoryItemId] ?? null}
               onStartEdit={() => onStartEdit(m.memoryItemId)}
               onCancelEdit={onCancelEdit}
-              onSave={edit => onSave(m.memoryItemId, edit)}
+              onSave={(edit) => onSave(m.memoryItemId, edit)}
               onVerify={() => onVerify(m.memoryItemId)}
             />
           ))}
@@ -655,7 +518,6 @@ function AlreadyRememberedSection({
 function SectionBlock({
   section,
   showHeading = true,
-  categories,
   editingItemId,
   submittingId,
   itemErrors,
@@ -668,12 +530,11 @@ function SectionBlock({
 }: {
   section: QueueSection
   showHeading?: boolean
-  categories: BudgetCategory[]
   editingItemId: string | null
   submittingId: string | null
   itemErrors: Record<string, string>
-  onConfirm: (id: string, categoryId: string | null) => void
-  onConfirmStillUnsure: (id: string, categoryId: string | null) => void
+  onConfirm: (id: string) => void
+  onConfirmStillUnsure: (id: string) => void
   onStartEdit: (id: string) => void
   onSubmitCorrection: (id: string, corrected: ProposedMemory) => void
   onCancelEdit: () => void
@@ -683,18 +544,17 @@ function SectionBlock({
   return (
     <section className="queue-section">
       {showHeading && <h2 className="queue-section-heading">{section.label}</h2>}
-      {section.items.map(item => (
+      {section.items.map((item) => (
         <QueueItemCard
           key={item.id}
           item={item}
-          categories={categories}
           isEditing={editingItemId === item.id}
           submitting={submittingId === item.id}
           errorMsg={itemErrors[item.id] ?? null}
-          onConfirm={categoryId => onConfirm(item.id, categoryId)}
-          onConfirmStillUnsure={categoryId => onConfirmStillUnsure(item.id, categoryId)}
+          onConfirm={() => onConfirm(item.id)}
+          onConfirmStillUnsure={() => onConfirmStillUnsure(item.id)}
           onStartEdit={() => onStartEdit(item.id)}
-          onSubmitCorrection={corrected => onSubmitCorrection(item.id, corrected)}
+          onSubmitCorrection={(corrected) => onSubmitCorrection(item.id, corrected)}
           onCancelEdit={onCancelEdit}
           onDismiss={() => onDismiss(item.id)}
         />
@@ -724,9 +584,10 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
     setLoadState('loading')
     const requestedJobId = job.id
     getReviewQueue(requestedJobId)
-      .then(q => {
+      .then((q) => {
         if (currentJobIdRef.current !== requestedJobId) return
-        setQueue(q); setLoadState('ready')
+        setQueue(q)
+        setLoadState('ready')
       })
       .catch(() => {
         if (currentJobIdRef.current !== requestedJobId) return
@@ -734,160 +595,172 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
       })
   }, [job.id])
 
-  useEffect(() => { loadQueue() }, [loadQueue])
+  useEffect(() => {
+    setQueue(null)
+    setEditingItemId(null)
+    setEditingMemId(null)
+    setFocusedKey(null)
+    setSubmittingId(null)
+    setMemSubmittingId(null)
+    setMemVerifyingId(null)
+    loadQueue()
+  }, [loadQueue])
 
-  useEffect(() => { track('review_queue_opened', { job_id: job.id }) }, [job.id])
+  useEffect(() => {
+    track('review_queue_opened', { job_id: job.id })
+  }, [job.id])
 
-  const activeCategories: BudgetCategory[] = queue?.budgetCategories ?? []
-
-  const handleDecision = useCallback(async (
-    itemId: string,
-    action: QueueDecisionAction,
-    corrected?: ProposedMemory,
-    uncertaintyResolution?: UncertaintyResolution,
-    budgetCategoryId?: string | null,
-  ) => {
-    if (!queue) return
-    setSubmittingId(itemId)
-    setItemErrors(e => { const n = { ...e }; delete n[itemId]; return n })
-    try {
-      // Category applies only to bought/ordered memory, and only when the job has
-      // categories at all — otherwise omit it entirely (backwards-compatible).
-      const sourcePm = corrected ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory
-      const finalType = corrected?.memoryType ?? queue.sections.flatMap(s => s.items).find(it => it.id === itemId)?.proposedMemory.memoryType
-      const category = action === 'dismiss' || !(finalType === 'ordered_material' || finalType === 'budget_cost') || activeCategories.length === 0
-        ? undefined
-        : (budgetCategoryId ?? null)
-      // Persist the labour person + Budget treatment shown on the card (or the
-      // corrected values). Non-labour / dismiss → omitted (undefined dropped by
-      // JSON), so the backend's existing behaviour is unchanged.
-      const isLabourDecision = finalType === 'labour' && action !== 'dismiss'
-      // On a correction, re-resolve the person id from the (possibly edited)
-      // name against the queue's people — a renamed person must not keep a stale
-      // id; an unmatched name links to no person (backend may re-match/default).
-      const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
-      const labourPersonId = !isLabourDecision ? undefined
-        : action === 'correct'
-          ? ((queue.labourPeople ?? []).find(p => norm(p.name) === norm(corrected?.labourPerson ?? ''))?.id ?? null)
-          : (sourcePm?.labourPersonId ?? null)
-      const result = await submitQueueDecision(job.id, {
-        queueItemId: itemId,
-        action,
-        corrected: corrected
-          ? (category !== undefined ? { ...corrected, budgetCategoryId: category } : corrected)
-          : undefined,
-        reason: action === 'dismiss' ? 'Not about this job' : undefined,
-        // Confirming/correcting a Worth-checking draft settles its uncertainty.
-        uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
-        budgetCategoryId: category,
-        labourPersonId,
-        // Labour is hours-only: a confirmed labour draft never counts toward
-        // Budget. Cost arrives as its own budget_cost draft.
-        labourBudgetEnabled: isLabourDecision ? false : undefined,
+  const handleDecision = useCallback(
+    async (
+      itemId: string,
+      action: QueueDecisionAction,
+      corrected?: ProposedMemory,
+      uncertaintyResolution?: UncertaintyResolution,
+    ) => {
+      if (!queue) return
+      setSubmittingId(itemId)
+      setItemErrors((e) => {
+        const n = { ...e }
+        delete n[itemId]
+        return n
       })
-      track('review_decision_submitted', {
-        job_id: job.id,
-        section_key: queue.sections.find(s => s.items.some(it => it.id === itemId))?.key ?? null,
-        action,
-        memory_type: finalType ?? null,
-        has_correction: !!corrected,
-      })
-      setQueue(q => {
-        if (!q) return q
-        return {
-          ...q,
-          sections: q.sections.map(s => ({
-            ...s,
-            items: s.items.map(it => it.id !== itemId ? it : {
-              ...it,
-              status: result.status,
-              ...(corrected ? { summary: corrected.summary, proposedMemory: corrected } : {}),
-            }),
-          })),
-        }
-      })
-      if (editingItemId === itemId) setEditingItemId(null)
-    } catch {
-      setItemErrors(e => ({ ...e, [itemId]: 'Could not save — tap to retry' }))
-    } finally {
-      setSubmittingId(null)
-    }
-  }, [queue, job.id, editingItemId, activeCategories.length])
+      try {
+        const finalType =
+          corrected?.memoryType ??
+          queue.sections.flatMap((s) => s.items).find((it) => it.id === itemId)?.proposedMemory.memoryType
+        const result = await submitQueueDecision(job.id, {
+          queueItemId: itemId,
+          action,
+          corrected,
+          reason: action === 'dismiss' ? 'Not about this job' : undefined,
+          uncertaintyResolution: action === 'dismiss' ? undefined : uncertaintyResolution,
+        })
+        if (currentJobIdRef.current !== job.id) return
+        track('review_decision_submitted', {
+          job_id: job.id,
+          section_key: queue.sections.find((s) => s.items.some((it) => it.id === itemId))?.key ?? null,
+          action,
+          memory_type: finalType ?? null,
+          has_correction: !!corrected,
+        })
+        setQueue((q) => {
+          if (!q) return q
+          return {
+            ...q,
+            sections: q.sections.map((s) => ({
+              ...s,
+              items: s.items.map((it) =>
+                it.id !== itemId
+                  ? it
+                  : {
+                      ...it,
+                      status: result.status,
+                      ...(corrected ? { summary: corrected.summary, proposedMemory: corrected } : {}),
+                    },
+              ),
+            })),
+          }
+        })
+        if (editingItemId === itemId) setEditingItemId(null)
+      } catch {
+        if (currentJobIdRef.current === job.id)
+          setItemErrors((e) => ({ ...e, [itemId]: 'Could not save — tap to retry' }))
+      } finally {
+        if (currentJobIdRef.current === job.id) setSubmittingId(null)
+      }
+    },
+    [queue, job.id, editingItemId],
+  )
 
   // Correct an already-remembered (trusted) item in place via the same
   // updateMemoryItem path used in Job memory. Never re-queues the item.
-  const handleSaveRemembered = useCallback(async (memoryItemId: string, edit: MemoryItemEdit) => {
-    setMemSubmittingId(memoryItemId)
-    setMemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      // A normal Fix memory save also clears the Worth-checking warning.
-      const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
-      track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
-      setQueue(q => {
-        if (!q) return q
-        return {
-          ...q,
-          alreadyRemembered: q.alreadyRemembered.map(m =>
-            m.memoryItemId === memoryItemId ? applyEditToRemembered(m, updated) : m),
-        }
+  const handleSaveRemembered = useCallback(
+    async (memoryItemId: string, edit: MemoryItemEdit) => {
+      setMemSubmittingId(memoryItemId)
+      setMemErrors((e) => {
+        const n = { ...e }
+        delete n[memoryItemId]
+        return n
       })
-      setEditingMemId(null)
-    } catch (error) {
-      const message = error instanceof ApiError && error.message === PAID_LABOUR_COST_EDIT_MESSAGE
-        ? PAID_LABOUR_COST_EDIT_MESSAGE
-        : 'Could not save — tap to retry'
-      setMemErrors(e => ({ ...e, [memoryItemId]: message }))
-    } finally {
-      setMemSubmittingId(null)
-    }
-  }, [job.id])
+      try {
+        // A normal Fix memory save also clears the Worth-checking warning.
+        const updated = await updateMemoryItem(job.id, memoryItemId, edit)
+        if (updated.uncertaintyFlags?.length) await verifyMemoryItem(job.id, memoryItemId)
+        track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
+        if (currentJobIdRef.current !== job.id) return
+        setQueue((q) => {
+          if (!q) return q
+          return {
+            ...q,
+            alreadyRemembered: q.alreadyRemembered.map((m) =>
+              m.memoryItemId === memoryItemId
+                ? applyEditToRemembered(m, { ...updated, uncertaintyFlags: [] })
+                : m,
+            ),
+          }
+        })
+        setEditingMemId(null)
+      } catch {
+        if (currentJobIdRef.current === job.id)
+          setMemErrors((e) => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+      } finally {
+        if (currentJobIdRef.current === job.id) setMemSubmittingId(null)
+      }
+    },
+    [job.id],
+  )
 
   // Verify an already-remembered Worth-checking card as right (clears flag only).
-  const handleVerifyRemembered = useCallback(async (memoryItemId: string) => {
-    setMemVerifyingId(memoryItemId)
-    setMemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      await verifyMemoryItem(job.id, memoryItemId)
-      track('memory_verified', { job_id: job.id })
-      setQueue(q => {
-        if (!q) return q
-        return {
-          ...q,
-          alreadyRemembered: q.alreadyRemembered.map(m =>
-            m.memoryItemId === memoryItemId ? { ...m, uncertaintyFlags: [] } : m),
-        }
+  const handleVerifyRemembered = useCallback(
+    async (memoryItemId: string) => {
+      setMemVerifyingId(memoryItemId)
+      setMemErrors((e) => {
+        const n = { ...e }
+        delete n[memoryItemId]
+        return n
       })
-    } catch {
-      setMemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
-    } finally {
-      setMemVerifyingId(null)
-    }
-  }, [job.id])
+      try {
+        await verifyMemoryItem(job.id, memoryItemId)
+        track('memory_verified', { job_id: job.id })
+        if (currentJobIdRef.current !== job.id) return
+        setQueue((q) => {
+          if (!q) return q
+          return {
+            ...q,
+            alreadyRemembered: q.alreadyRemembered.map((m) =>
+              m.memoryItemId === memoryItemId ? { ...m, uncertaintyFlags: [] } : m,
+            ),
+          }
+        })
+      } catch {
+        if (currentJobIdRef.current === job.id)
+          setMemErrors((e) => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
+      } finally {
+        if (currentJobIdRef.current === job.id) setMemVerifyingId(null)
+      }
+    },
+    [job.id],
+  )
 
-  const totalPending = queue
-    ? queue.sections.reduce((n, s) => n + draftCount(s), 0)
-    : 0
+  const totalPending = queue ? queue.sections.reduce((n, s) => n + draftCount(s), 0) : 0
 
   const isEmpty = queue
-    ? queue.sections.every(s => s.items.length === 0) && queue.alreadyRemembered.length === 0
+    ? queue.sections.every((s) => s.items.length === 0) && queue.alreadyRemembered.length === 0
     : false
 
   // Keep focus stable across actions; only reset if the focused category
   // disappears entirely from the queue (it never does mid-session here).
-  const focusedSection = focusedKey
-    ? queue?.sections.find(s => s.key === focusedKey) ?? null
-    : null
+  const focusedSection = focusedKey ? (queue?.sections.find((s) => s.key === focusedKey) ?? null) : null
   const focusedEmpty = focusedKey !== null && (!focusedSection || focusedSection.items.length === 0)
-  const visibleSections = focusedKey === null
-    ? (queue?.sections ?? [])
-    : (focusedSection ? [focusedSection] : [])
+  const visibleSections =
+    focusedKey === null ? (queue?.sections ?? []) : focusedSection ? [focusedSection] : []
 
   const pendingLabel = totalPending === 0 ? 'Nothing waiting' : `${totalPending} waiting`
 
   // With a single category, chips and per-section headings only repeat the type.
-  const sectionsWithDrafts = (queue?.sections ?? []).filter(s => draftCount(s) > 0)
+  const sectionsWithDrafts = (queue?.sections ?? []).filter((s) => draftCount(s) > 0)
   const showChips = sectionsWithDrafts.length > 1
-  const showSectionHeadings = visibleSections.filter(s => s.items.length > 0).length > 1
+  const showSectionHeadings = visibleSections.filter((s) => s.items.length > 0).length > 1
 
   return (
     <div className="queue-page">
@@ -910,14 +783,14 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
         )}
       </div>
 
-      {loadState === 'loading' && (
-        <p className="queue-loading">Loading…</p>
-      )}
+      {loadState === 'loading' && <p className="queue-loading">Loading…</p>}
 
       {loadState === 'error' && (
         <div className="queue-load-error">
           <p>Could not load your queue.</p>
-          <button className="btn-queue-retry" onClick={loadQueue}>Try again</button>
+          <button className="btn-queue-retry" onClick={loadQueue}>
+            Try again
+          </button>
         </div>
       )}
 
@@ -929,7 +802,9 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
               <p className="queue-empty-sub">
                 Useful facts will appear here to check after you record on this job.
               </p>
-              <button className="btn-queue-retry" onClick={onClose}>Back to job</button>
+              <button className="btn-queue-retry" onClick={onClose}>
+                Back to job
+              </button>
             </div>
           ) : (
             <>
@@ -948,21 +823,22 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
               {focusedEmpty ? (
                 <p className="queue-empty-category">Nothing waiting here</p>
               ) : (
-                visibleSections.map(section => (
+                visibleSections.map((section) => (
                   <SectionBlock
                     key={section.key}
                     section={section}
                     showHeading={showSectionHeadings}
-                    categories={activeCategories}
                     editingItemId={editingItemId}
                     submittingId={submittingId}
                     itemErrors={itemErrors}
-                    onConfirm={(id, categoryId) => handleDecision(id, 'confirm', undefined, 'resolved', categoryId)}
-                    onConfirmStillUnsure={(id, categoryId) => handleDecision(id, 'confirm', undefined, 'still_unsure', categoryId)}
-                    onStartEdit={id => setEditingItemId(id)}
-                    onSubmitCorrection={(id, corrected) => handleDecision(id, 'correct', corrected, 'resolved', corrected.budgetCategoryId ?? null)}
+                    onConfirm={(id) => handleDecision(id, 'confirm', undefined, 'resolved')}
+                    onConfirmStillUnsure={(id) => handleDecision(id, 'confirm', undefined, 'still_unsure')}
+                    onStartEdit={(id) => setEditingItemId(id)}
+                    onSubmitCorrection={(id, corrected) =>
+                      handleDecision(id, 'correct', corrected, 'resolved')
+                    }
                     onCancelEdit={() => setEditingItemId(null)}
-                    onDismiss={id => handleDecision(id, 'dismiss')}
+                    onDismiss={(id) => handleDecision(id, 'dismiss')}
                   />
                 ))
               )}
@@ -971,7 +847,6 @@ export default function ReviewQueueScreen({ job, onClose }: { job: Job; onClose:
                   follows the active category focus, and is correctable in place */}
               <AlreadyRememberedSection
                 items={queue.alreadyRemembered}
-                categories={activeCategories}
                 focusedKey={focusedKey}
                 editingId={editingMemId}
                 submittingId={memSubmittingId}

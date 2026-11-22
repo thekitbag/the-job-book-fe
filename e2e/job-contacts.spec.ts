@@ -58,7 +58,7 @@ test.describe('Job details — contacts and site address', () => {
 
   test('is not repeated in section headers', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('button', { name: 'Open Budget' }).click()
+    await page.getByRole('button', { name: 'Open Hours' }).click()
     await expect(page.getByRole('button', { name: '‹ Job home' })).toBeVisible()
 
     // A section is one lens on the job; its header carries only the way back
@@ -157,7 +157,7 @@ test.describe('Job details — contacts and site address', () => {
 
     // Job home is unchanged: the same five sections, no Contacts/Customer card.
     const nav = page.getByRole('navigation', { name: 'Job sections' })
-    await expect(nav.getByRole('button')).toHaveCount(5)
+    await expect(nav.getByRole('button')).toHaveCount(3)
     await expect(nav.getByRole('button', { name: /contact|customer/i })).toHaveCount(0)
 
     const reopened = await openJobDetails(page)

@@ -36,8 +36,6 @@ initAnalytics()
 const posthogClient = analyticsClient()
 
 const inner = isSupportRoute ? <SupportModePage /> : isInspectionRoute ? <PilotInspectionPage /> : <App />
-// Toasts are app-wide: money actions (mark paid, returns) explain their Money
-// and Budget impact through this surface from anywhere in the workspace.
 const page = <ToastProvider>{inner}</ToastProvider>
 
 createRoot(document.getElementById('root')!).render(

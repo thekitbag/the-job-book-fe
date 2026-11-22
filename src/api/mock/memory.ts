@@ -1,336 +1,219 @@
-import type { CreateMemoryItemRequest, MemoryItemEdit, MemoryViewItem, MemoryViewResponse, ReturnMaterialRequest, ReturnMaterialResponse } from '../../types'
-import { deriveCostSummary, deriveEachTotal, deriveGrossKnownCost, deriveHourlyTotal, deriveLabourHoursSummary, deriveLabourSummary, deriveRefundsSummary, deriveTotalKnownCost } from '../../memoryScan'
+import type {
+  CreateMemoryItemRequest,
+  HoursSummary,
+  MemoryItemEdit,
+  MemoryViewItem,
+  MemoryViewResponse,
+  ReturnMaterialRequest,
+  ReturnMaterialResponse,
+} from '../../types'
+import { effectiveItemDate } from '../../memoryScan'
+import { londonToday } from '../../MemoryFields'
 import { ApiError } from '../client'
 import { MOCK_JOBS } from './jobs'
-import { mockFindLabourPerson } from './labourPeople'
-import { assertMockPaidEligible, recordMockPaid, recordMockRefund } from './money'
-import { findMockItem, mockBudgetCategoriesFor, mockSectionsFor, upsertMockItem } from './state'
+import { findMockItem, mockSectionsFor, upsertMockItem } from './state'
 import { mockDecorateWorkshopState } from './workshop'
-
+const decimal = (n: number) => String(Math.round(n * 10000) / 10000)
+const dateKey = (iso: string) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso))
+function mockHours(items: MemoryViewItem[]): HoursSummary {
+  const people = new Map<string, { name: string; hours: number }>(),
+    days = new Map<string, HoursSummary['days'][number]>()
+  for (const item of items.filter((i) => i.memoryType === 'labour' && i.labourHours)) {
+    const raw = item.labourPerson?.trim() ?? ''
+    const name = !raw || /^(me|i|myself)$/i.test(raw) ? 'Mike' : raw
+    const key = name.toLowerCase(),
+      hours = Number(item.labourHours)
+    const person = people.get(key) ?? { name, hours: 0 }
+    person.hours += hours
+    people.set(key, person)
+    const date = dateKey(effectiveItemDate(item)!)
+    const day = days.get(date) ?? { date, totalHours: '0', entries: [] }
+    day.totalHours = decimal(Number(day.totalHours) + hours)
+    day.entries.push({
+      memoryItemId: item.id,
+      person: person.name,
+      hours: item.labourHours!,
+      task: item.labourTask ?? null,
+      isManual: !!item.isManual,
+    })
+    days.set(date, day)
+  }
+  return {
+    totalHours: decimal([...people.values()].reduce((n, p) => n + p.hours, 0)),
+    people: [...people.values()]
+      .sort((a, b) => b.hours - a.hours)
+      .map((p) => ({ name: p.name, hours: decimal(p.hours) })),
+    days: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)),
+  }
+}
+function decorate(item: MemoryViewItem): MemoryViewItem {
+  return {
+    ...item,
+    memoryItemId: item.id,
+    item: item.materialName,
+    amount: [item.quantity, item.unit].filter(Boolean).join(' ') || null,
+    supplier: item.supplierName,
+    notes: item.locationOrUse,
+    date: dateKey(effectiveItemDate(item)!),
+  }
+}
 export function mockMemoryView(jobId: string): MemoryViewResponse {
-  const job = MOCK_JOBS.find(j => j.id === jobId) ?? MOCK_JOBS[0]
   const sections = mockSectionsFor(jobId)
   return {
-    job,
+    job: MOCK_JOBS.find((j) => j.id === jobId) ?? MOCK_JOBS[0],
     generatedAt: new Date().toISOString(),
-    // Deep-ish copy so callers cannot mutate the stored fixture in place.
-    // Leftovers additionally carry their current Workshop state, which the real
-    // backend serves as read-model fields on the same items — the source job is
-    // where a leftover's Workshop state is answered, not a second fetch.
-    sections: sections.map(s => ({
+    sections: sections.map((s) => ({
       ...s,
-      items: s.items.map(it => mockDecorateWorkshopState(jobId, { ...it })),
+      items: s.items.map((i) => decorate(mockDecorateWorkshopState(jobId, { ...i }))),
     })),
-    stillToCheck: {
-      count: 2,
-      items: [
-        {
-          id: 'queue-item-stc-001',
-          sectionKey: 'unclear_items',
-          summary: 'Something about extra cable in the workshop',
-          kind: 'unclear_prompt',
-          timeLabel: 'Today',
-        },
-      ],
-    },
-    // Authoritative known spend, derived from current state so an edit changes it.
-    // totalKnownCost is net of trusted refunds; grossKnownCost + refunds are what
-    // the Spend lens shows to explain the gap.
-    costSummary: {
-      orderedMaterials: deriveCostSummary(sections),
-      labour: deriveLabourSummary(sections),
-      totalKnownCost: deriveTotalKnownCost(sections),
-      grossKnownCost: deriveGrossKnownCost(sections),
-      refunds: deriveRefundsSummary(sections),
-    },
-    // Authoritative daily labour summary, derived from current state.
-    labourHoursSummary: deriveLabourHoursSummary(sections),
+    hours: mockHours(sections.flatMap((s) => s.items)),
+    stillToCheck: { count: 0, items: [] },
   }
 }
-
-export function mockUpdateMemoryItem(jobId: string, memoryItemId: string, edit: MemoryItemEdit): MemoryViewItem {
-  const sections = mockSectionsFor(jobId)
-  const existing = findMockItem(sections, memoryItemId)
-  const now = new Date().toISOString()
-  const costExpressionChanged = (
-    'costAmount' in edit ||
-    'costCurrency' in edit ||
-    'costQualifier' in edit ||
-    'labourHours' in edit
-  )
-  const draft: MemoryViewItem = {
-    id: memoryItemId,
-    memoryType: edit.memoryType,
-    summary: edit.summary ?? existing?.summary ?? '',
-    materialName: edit.materialName,
-    quantity: edit.quantity,
-    unit: edit.unit,
-    supplierName: edit.supplierName,
-    deliveryTiming: edit.deliveryTiming,
-    locationOrUse: edit.locationOrUse,
-    // PATCH cost inputs are partial. A text/date/person-only labour correction
-    // deliberately omits them so a paid row does not look like a cost change.
-    costAmount: 'costAmount' in edit ? (edit.costAmount ?? null) : (existing?.costAmount ?? null),
-    costCurrency: 'costCurrency' in edit ? (edit.costCurrency ?? null) : (existing?.costCurrency ?? null),
-    costQualifier: 'costQualifier' in edit ? (edit.costQualifier ?? null) : (existing?.costQualifier ?? null),
-    totalCostAmount: 'totalCostAmount' in edit ? (edit.totalCostAmount ?? null) : (existing?.totalCostAmount ?? null),
-    // Labour fields only meaningful for labour; cleared otherwise.
-    labourHours: edit.memoryType === 'labour'
-      ? ('labourHours' in edit ? (edit.labourHours ?? null) : (existing?.labourHours ?? null))
-      : null,
-    labourPerson: edit.memoryType === 'labour' ? (edit.labourPerson ?? null) : null,
-    labourTask: edit.memoryType === 'labour' ? (edit.labourTask ?? null) : null,
-    // Omitted preserves; for labour, honour explicit person/treatment changes.
-    labourPersonId: edit.memoryType === 'labour'
-      ? (edit.labourPersonId !== undefined ? edit.labourPersonId : (existing?.labourPersonId ?? null))
-      : null,
-    labourBudgetEnabled: edit.memoryType === 'labour'
-      ? (edit.labourBudgetEnabled !== undefined ? edit.labourBudgetEnabled : (existing?.labourBudgetEnabled ?? null))
-      : null,
-    // Present key → honour value/null (explicit set/clear). Omitted → preserve.
-    happenedAt: 'happenedAt' in edit ? (edit.happenedAt ?? null) : (existing?.happenedAt ?? null),
-    // A Fix-memory save also resolves any worth-checking flags.
+function summary(item: Partial<MemoryViewItem>): string {
+  if (item.memoryType === 'labour')
+    return [item.labourPerson, item.labourHours ? `${item.labourHours} hours` : null, item.labourTask]
+      .filter(Boolean)
+      .join(' · ')
+  if (item.memoryType?.endsWith('_material'))
+    return [
+      item.materialName,
+      [item.quantity, item.unit].filter(Boolean).join(' '),
+      item.supplierName,
+      item.locationOrUse,
+    ]
+      .filter(Boolean)
+      .join(', ')
+  return item.summary ?? ''
+}
+function validate(item: Partial<MemoryViewItem>, creating: boolean) {
+  const bad = () => {
+    throw new ApiError('Invalid memory item', 400)
+  }
+  if (item.memoryType === 'labour') {
+    if (
+      !item.labourPerson?.trim() ||
+      item.labourPerson.length > 60 ||
+      !/^\d+(\.\d+)?$/.test(item.labourHours ?? '') ||
+      Number(item.labourHours) <= 0 ||
+      Number(item.labourHours) > 24
+    )
+      bad()
+    if (item.happenedAt && dateKey(item.happenedAt) > londonToday()) bad()
+  } else if (item.memoryType?.endsWith('_material')) {
+    if (
+      !item.materialName?.trim() ||
+      item.materialName.length > 120 ||
+      !item.quantity?.trim() ||
+      item.quantity.length > 60 ||
+      (item.supplierName?.length ?? 0) > 80 ||
+      (item.locationOrUse?.length ?? 0) > 200
+    )
+      bad()
+    if (creating && item.memoryType === 'returned_material') bad()
+  } else if (!item.summary?.trim()) bad()
+}
+export function mockUpdateMemoryItem(jobId: string, id: string, edit: MemoryItemEdit): MemoryViewItem {
+  const sections = mockSectionsFor(jobId),
+    existing = findMockItem(sections, id)
+  if (!existing) throw new ApiError('Memory item not found', 404)
+  const next = {
+    ...existing,
+    ...edit,
+    summary: edit.summary ?? existing.summary,
+    updatedAt: new Date().toISOString(),
     uncertaintyFlags: [],
-    // Preserve the existing category unless this edit explicitly changes it.
-    budgetCategoryId: edit.budgetCategoryId !== undefined ? edit.budgetCategoryId : (existing?.budgetCategoryId ?? null),
-    sourceCandidateFactId: existing?.sourceCandidateFactId ?? null,
-    reviewDecisionId: existing?.reviewDecisionId ?? null,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-    source: existing?.source ?? null,
   }
-  const updated: MemoryViewItem = {
-    ...draft,
-    // Present key → honour value/null (explicit set/clear). Omitted → derive
-    // a fresh total when its inputs changed, else preserve the stored total.
-    totalCostAmount: 'totalCostAmount' in edit
-      ? draft.totalCostAmount
-      : edit.memoryType === 'labour' && costExpressionChanged
-        ? (draft.costQualifier === 'total' ? draft.costAmount : deriveHourlyTotal(draft))
-        : (deriveEachTotal(draft) ?? draft.totalCostAmount),
+  if ('quantity' in edit && existing.memoryType.endsWith('_material')) {
+    const amount = [existing.quantity, existing.unit].filter(Boolean).join(' ')
+    if (edit.quantity === amount) {
+      next.quantity = existing.quantity
+      next.unit = existing.unit
+    } else next.unit = null
   }
-  // Remove from its current section, then re-home by the (possibly new) type.
-  upsertMockItem(sections, updated)
-  return { ...updated }
+  validate(next, false)
+  next.summary = summary(next)
+  upsertMockItem(sections, next)
+  return decorate(next)
 }
-
-// Soft removal, mock-side: the item leaves the active sections (and therefore
-// every derived total, since the mock derives summaries live from sections).
-// The mock never had a separate source-note store to delete, which matches the
-// backend rule that removal must not touch source evidence.
-export function mockRemoveMemoryItem(jobId: string, memoryItemId: string): void {
-  const sections = mockSectionsFor(jobId)
-  if (!findMockItem(sections, memoryItemId)) throw new ApiError('Memory item not found', 404)
-  for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
-}
-
-// ── Returned materials ──────────────────────────────────────────────────────
-
-const POS_DECIMAL = /^\d+(\.\d+)?$/
-const isPositive = (s: string | null | undefined): boolean => !!s && POS_DECIMAL.test(s) && parseFloat(s) > 0
-
-let mockReturnSeq = 0
-
-function returnedSummary(materialName: string | null, quantity: string, unit: string | null, supplierName: string | null): string {
-  const what = [quantity, unit, materialName].filter(Boolean).join(' ')
-  return supplierName ? `Returned ${what} to ${supplierName}` : `Returned ${what}`
-}
-
-/**
- * Mirror of POST /memory-items/:id/return. Returning is not deleting: the
- * source leftover's evidence is preserved on the returned item, and nothing
- * touches the original bought row. Validation order and error codes follow the
- * backend rules so the UI's failure paths are exercised against the same
- * refusals the real API makes.
- */
-export function mockReturnMemoryItem(jobId: string, memoryItemId: string, req: ReturnMaterialRequest): ReturnMaterialResponse {
-  const sections = mockSectionsFor(jobId)
-  const source = findMockItem(sections, memoryItemId)
-  if (!source) throw new ApiError('Memory item not found', 404)
-  if (source.memoryType !== 'leftover_material') throw new ApiError('Only a left over item can be returned', 400)
-  if (!isPositive(req.quantity)) throw new ApiError('Invalid returned quantity', 400)
-  // An approximate leftover ("about half a bag") can't be safely compared
-  // against, so the return is refused rather than guessed at.
-  if (!isPositive(source.quantity)) throw new ApiError('Left over quantity is not a number', 400)
-  const returning = parseFloat(req.quantity)
-  const available = parseFloat(source.quantity!)
-  if (returning > available) throw new ApiError('More than is left over', 400)
-  if (req.refundAmount != null && req.refundAmount !== '' && !isPositive(req.refundAmount)) {
-    throw new ApiError('Invalid refund amount', 400)
-  }
-
-  const now = new Date().toISOString()
-  const hasRefund = !!(req.refundAmount && req.refundAmount !== '')
-  const unit = req.unit !== undefined ? req.unit : source.unit
-  const supplierName = req.supplierName?.trim() || null
-  const returnedItem: MemoryViewItem = {
-    id: `mem-returned-${++mockReturnSeq}`,
-    memoryType: 'returned_material',
-    summary: returnedSummary(source.materialName, req.quantity, unit, supplierName),
-    materialName: source.materialName,
-    quantity: req.quantity,
-    unit,
-    supplierName,
-    deliveryTiming: null,
-    locationOrUse: null,
-    // Refunds live in refundAmount, never costAmount — a returned item is not
-    // a bought line, and must not be totalled as one.
-    costAmount: null,
-    costCurrency: null,
-    costQualifier: null,
-    totalCostAmount: null,
-    refundAmount: hasRefund ? req.refundAmount! : null,
-    refundCurrency: hasRefund ? (req.refundCurrency ?? 'GBP') : null,
-    returnedFromMemoryItemId: source.id,
-    labourHours: null,
-    labourPerson: null,
-    labourTask: null,
-    uncertaintyFlags: [],
-    budgetCategoryId: null,
-    happenedAt: req.happenedAt ?? null,
-    isManual: true,
-    sourceCandidateFactId: source.sourceCandidateFactId,
-    reviewDecisionId: null,
-    createdAt: now,
-    updatedAt: now,
-    // The returned item inherits the leftover's evidence, so "where did this
-    // come from" still answers with the original note on a full return.
-    source: source.source,
-  }
-
-  let remainingLeftoverItem: MemoryViewItem | null = null
-  if (returning === available) {
-    // Full return: the leftover leaves the active record (soft-removed backend-side).
-    for (const s of sections) s.items = s.items.filter(it => it.id !== memoryItemId)
-  } else {
-    source.quantity = String(Math.round((available - returning) * 1000) / 1000)
-    source.updatedAt = now
-    remainingLeftoverItem = { ...source }
-  }
-  upsertMockItem(sections, returnedItem)
-  // A trusted GBP refund is actual money in — record it in Money, keeping the
-  // Budget refund behaviour above. No refund figure → Money is untouched.
-  if (hasRefund) recordMockRefund(jobId, returnedItem)
-  return { returnedItem: { ...returnedItem }, remainingLeftoverItem }
-}
-
-export function mockVerifyMemoryItem(jobId: string, memoryItemId: string): void {
-  const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
-  if (item) item.uncertaintyFlags = []
-}
-
-let mockManualSeq = 0
-
-// Backend guarantees a non-empty summary; mirror its derivation so the mock
-// never stores a blank note.
-function deriveManualSummary(req: CreateMemoryItemRequest): string {
-  if (req.summary && req.summary.trim()) return req.summary.trim()
-  const qtyUnit = [req.quantity, req.unit].filter(Boolean).join(' ')
-  const nameBit = [qtyUnit, req.materialName].filter(Boolean).join(' ').trim()
-  switch (req.memoryType) {
-    case 'ordered_material':
-      return nameBit ? `Bought ${nameBit}` : (req.materialName?.trim() || 'Bought item')
-    case 'used_material':
-    case 'leftover_material':
-      return nameBit ? `Used ${nameBit}` : (req.materialName?.trim() || 'Used item')
-    case 'labour': {
-      const base = [req.labourPerson?.trim(), req.labourHours ? `${req.labourHours} hours` : null].filter(Boolean).join(' — ') || 'Labour'
-      return req.labourTask?.trim() ? `${base} (${req.labourTask.trim()})` : base
-    }
-    case 'budget_cost':
-      return req.labourTask?.trim() || req.labourPerson?.trim() || req.materialName?.trim() || 'Cost'
-    default:
-      return req.materialName?.trim() || 'Note'
-  }
-}
-
 export function mockCreateMemoryItem(jobId: string, req: CreateMemoryItemRequest): MemoryViewItem {
-  if (!req.memoryType) throw new ApiError('memoryType required', 400)
-  const canCategorise = req.memoryType === 'ordered_material' || req.memoryType === 'labour' || req.memoryType === 'budget_cost'
-  if (req.budgetCategoryId) {
-    if (!canCategorise) throw new ApiError('Category not allowed for this type', 400)
-    const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === req.budgetCategoryId)
-    if (!cat || cat.isArchived) throw new ApiError('Invalid category assignment', 400)
-  }
-  const sections = mockSectionsFor(jobId)
   const now = new Date().toISOString()
-  const isLabour = req.memoryType === 'labour'
-
-  // Labour defaulting (mirrors the backend): a linked person supplies a default
-  // rate when none was sent, and a default Budget treatment when none was sent.
-  // With no person/default, new labour is hours-only rather than silently
-  // adding Budget cost.
-  const person = isLabour && req.labourPersonId ? mockFindLabourPerson(jobId, req.labourPersonId) : undefined
-  let costAmount = req.costAmount ?? null
-  let costCurrency = req.costCurrency ?? null
-  let costQualifier = req.costQualifier ?? null
-  if (isLabour && person && !req.costAmount && !req.totalCostAmount && person.defaultHourlyRateAmount) {
-    costAmount = person.defaultHourlyRateAmount
-    costCurrency = 'GBP'
-    costQualifier = 'per_hour'
-  }
-  // A budget_cost may describe a labour cost, so it can carry a person/task —
-  // but never hours (those live in Labour). Everything else keeps them null.
-  const carriesLabourContext = isLabour || req.memoryType === 'budget_cost'
-  const labourPerson = carriesLabourContext ? (req.labourPerson ?? person?.name ?? null) : null
-  const hasCost = !!(costAmount || req.totalCostAmount)
-  const derivedLabourTotal = isLabour && costQualifier === 'per_hour' && isPositive(req.labourHours) && isPositive(costAmount)
-    ? String(Math.round(parseFloat(req.labourHours!) * parseFloat(costAmount!) * 100) / 100) : null
-
   const item: MemoryViewItem = {
-    id: `mem-manual-${++mockManualSeq}`,
+    id: crypto.randomUUID(),
     memoryType: req.memoryType,
-    summary: deriveManualSummary(req),
+    summary: req.summary ?? '',
     materialName: req.materialName ?? null,
     quantity: req.quantity ?? null,
     unit: req.unit ?? null,
     supplierName: req.supplierName ?? null,
     deliveryTiming: req.deliveryTiming ?? null,
     locationOrUse: req.locationOrUse ?? null,
-    costAmount,
-    costCurrency: costCurrency ?? (hasCost ? 'GBP' : null),
-    costQualifier,
-    // Explicit total wins; otherwise derive an `each` line total (quantity × unit
-    // cost) so direct-added spend counts like the backend would.
-    totalCostAmount: req.totalCostAmount ??
-      (costQualifier === 'total' ? costAmount : null) ??
-      derivedLabourTotal ??
-      deriveEachTotal({ quantity: req.quantity ?? null, unit: req.unit ?? null, costAmount, costQualifier }),
-    labourHours: isLabour ? (req.labourHours ?? null) : null,
-    labourPerson,
-    labourTask: carriesLabourContext ? (req.labourTask ?? null) : null,
-    labourPersonId: isLabour ? (req.labourPersonId ?? null) : null,
-    labourBudgetEnabled: isLabour ? null : null,
+    labourPerson: req.labourPerson ?? null,
+    labourHours: req.labourHours ?? null,
+    labourTask: req.labourTask ?? null,
+    happenedAt: req.happenedAt ?? londonToday(),
     uncertaintyFlags: [],
-    budgetCategoryId: canCategorise ? (req.budgetCategoryId ?? null) : null,
-    happenedAt: req.happenedAt ?? null,
-    isManual: true,
     sourceCandidateFactId: null,
     reviewDecisionId: null,
     createdAt: now,
     updatedAt: now,
     source: null,
+    isManual: true,
   }
-  // Validate the paired money movement before persisting the source so a
-  // rejected "paid now" request cannot leave a partial Budget item behind.
-  if (req.markPaid) {
-    assertMockPaidEligible(item)
-  }
-  upsertMockItem(sections, item)
-  if (req.markPaid) {
-    recordMockPaid(jobId, item)
-  }
-  return { ...item }
+  validate(item, true)
+  item.summary = summary(item)
+  upsertMockItem(mockSectionsFor(jobId), item)
+  return decorate(item)
 }
-
-export function mockAssignMemoryItemCategory(jobId: string, memoryItemId: string, budgetCategoryId: string | null): MemoryViewItem {
-  const item = findMockItem(mockSectionsFor(jobId), memoryItemId)
-  if (!item) throw new ApiError('Memory item not found', 404)
-  if (budgetCategoryId) {
-    const cat = mockBudgetCategoriesFor(jobId).find(c => c.id === budgetCategoryId)
-    if (!cat || cat.isArchived) throw new ApiError('Invalid category assignment', 400)
+export function mockVerifyMemoryItem(jobId: string, id: string): void {
+  const item = findMockItem(mockSectionsFor(jobId), id)
+  if (!item) throw new ApiError('Not found', 404)
+  item.uncertaintyFlags = []
+}
+export function mockRemoveMemoryItem(jobId: string, id: string): void {
+  const sections = mockSectionsFor(jobId)
+  if (!findMockItem(sections, id)) throw new ApiError('Not found', 404)
+  for (const s of sections) s.items = s.items.filter((i) => i.id !== id)
+}
+export function mockReturnMemoryItem(
+  jobId: string,
+  id: string,
+  req: ReturnMaterialRequest,
+): ReturnMaterialResponse {
+  const sections = mockSectionsFor(jobId),
+    source = findMockItem(sections, id)
+  if (!source) throw new ApiError('Not found', 404)
+  const positive = (s: string | null | undefined) => /^\d+(\.\d+)?$/.test(s ?? '') && Number(s) > 0
+  if (
+    source.memoryType !== 'leftover_material' ||
+    !positive(source.quantity) ||
+    !positive(req.quantity) ||
+    Number(req.quantity) > Number(source.quantity)
+  )
+    throw new ApiError('Invalid return', 400)
+  const returned: MemoryViewItem = {
+    ...source,
+    id: crypto.randomUUID(),
+    memoryType: 'returned_material',
+    quantity: req.quantity,
+    unit: req.unit ?? source.unit,
+    supplierName: req.supplierName ?? null,
+    happenedAt: req.happenedAt ?? londonToday(),
+    returnedFromMemoryItemId: id,
+    updatedAt: new Date().toISOString(),
   }
-  item.budgetCategoryId = budgetCategoryId
-  item.updatedAt = new Date().toISOString()
-  return { ...item }
+  returned.summary = summary(returned)
+  const remaining = Number(source.quantity) - Number(req.quantity)
+  if (remaining > 0) {
+    source.quantity = decimal(remaining)
+    source.summary = summary(source)
+  } else mockRemoveMemoryItem(jobId, id)
+  upsertMockItem(sections, returned)
+  return { returnedItem: decorate(returned), remainingLeftoverItem: remaining > 0 ? decorate(source) : null }
 }

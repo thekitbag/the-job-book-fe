@@ -1,13 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ApiError,
-  PAID_LABOUR_COST_EDIT_MESSAGE,
-  assignMemoryItemCategory,
-  createBudgetCategory,
   createMemoryItem,
-  getBudgetSummary,
   getMemoryView,
-  patchBudgetCategory,
   removeMemoryItem,
   returnMemoryItem,
   updateMemoryItem,
@@ -15,613 +9,185 @@ import {
 } from './api'
 import { track } from './analytics'
 import type { MemoryCardProps } from './MemoryCard'
-import { memoryItemToEdit } from './memoryEdit'
-import {
-  budgetCostContribution,
-  deriveCostSummary,
-  deriveGrossKnownCost,
-  deriveLabourHoursSummary,
-  deriveLabourSpendGroupFromBudget,
-  deriveLabourSummary,
-  deriveRefundsSummary,
-  deriveTotalKnownCost,
-  findLabourBudgetCategory,
-  hasCostLikeAmount,
-  MEMORY_TYPE_TO_SECTION_KEY,
-  SECTION_FULL_LABELS,
-  SECTION_ORDER,
-} from './memoryScan'
 import type {
-  BudgetCategory,
-  BudgetSummaryResponse,
   CreateMemoryItemRequest,
-  GrossKnownCost,
   Job,
-  LabourCostSummary,
-  LabourHoursSummary,
-  LabourSpendSummary,
   MemoryItemEdit,
   MemoryType,
   MemoryViewItem,
   MemoryViewResponse,
-  OrderedCostSummary,
-  RefundsSummary,
   ReturnMaterialRequest,
-  TotalKnownCost,
 } from './types'
 
-type LoadState = 'loading' | 'ready' | 'error'
-
-// Shared props a tab passes to <MemoryCard> minus the item itself.
-type CardExtras = Omit<MemoryCardProps, 'item'>
-
-export interface UseJobMemoryOptions {
-  // Called after an item's Budget category changes, so surfaces that show
-  // category context sourced from elsewhere (Money) can refetch. Budget itself
-  // is refetched internally and needs no callback.
-  onCategoryChanged?: () => void
-}
-
-/**
- * Owns everything the job-memory lenses (Spend / Labour / Used / Notes) need:
- * memory-view + budget-summary loading with independent failure, the in-place
- * correction / verify / category / budget handlers, and the backend-preferred
- * cost derivations. Lifted out of the old JobMemoryScreen so the workspace tabs
- * can share one source of truth.
- */
-export function useJobMemory(job: Job, opts: UseJobMemoryOptions = {}) {
-  // Money out rows show their source item's Budget category, so a recategorised
-  // item leaves Money displaying the old one until it refetches. Held in a ref
-  // so passing an inline callback can't churn every memoized handler below.
-  const onCategoryChangedRef = useRef(opts.onCategoryChanged)
-  onCategoryChangedRef.current = opts.onCategoryChanged
-  // Latest loaded memory view, for handlers that need the pre-save item without
-  // taking `data` as a dependency.
-  const dataRef = useRef<MemoryViewResponse | null>(null)
+export function useJobMemory(job: Job) {
   const [data, setData] = useState<MemoryViewResponse | null>(null)
-  dataRef.current = data
-  const [loadState, setLoadState] = useState<LoadState>('loading')
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
   const [refreshError, setRefreshError] = useState(false)
-  const [budgetSummary, setBudgetSummary] = useState<BudgetSummaryResponse | null>(null)
-
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
-  const [assigningCategoryId, setAssigningCategoryId] = useState<string | null>(null)
   const [mutatingId, setMutatingId] = useState<string | null>(null)
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({})
-
-  // Budget management (Spend tab) UI state.
-  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({})
-  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null)
-  const [savingCatId, setSavingCatId] = useState<string | null>(null)
-  const [addingCategory, setAddingCategory] = useState(false)
-  const [savingNewCategory, setSavingNewCategory] = useState(false)
-  const [budgetError, setBudgetError] = useState('')
-  const [openMenuCatId, setOpenMenuCatId] = useState<string | null>(null)
-
-  const currentJobIdRef = useRef(job.id)
-  currentJobIdRef.current = job.id
-
-  const reload = useCallback(() => {
-    setLoadState('loading')
-    setErrorMsg('')
-    setRefreshError(false)
-    const requestedJobId = job.id
-    getMemoryView(requestedJobId)
-      .then(d => {
-        if (currentJobIdRef.current !== requestedJobId) return
-        setData(d); setLoadState('ready')
-      })
-      .catch((err: unknown) => {
-        if (currentJobIdRef.current !== requestedJobId) return
-        setErrorMsg(err instanceof Error ? err.message : 'Could not load job memory')
-        setLoadState('error')
-      })
-  }, [job.id])
-
-  useEffect(() => { reload() }, [reload])
-
-  const loadBudget = useCallback(async () => {
-    const requestedJobId = job.id
+  const current = useRef(job.id)
+  current.current = job.id
+  const requestVersion = useRef(0)
+  const refetch = useCallback(async () => {
+    if (current.current !== job.id) return
+    const version = ++requestVersion.current
     try {
-      const s = await getBudgetSummary(requestedJobId)
-      if (currentJobIdRef.current === requestedJobId) setBudgetSummary(s)
+      const fresh = await getMemoryView(job.id)
+      if (current.current !== job.id || version !== requestVersion.current) return
+      setData(fresh)
+      setLoadState('ready')
+      setRefreshError(false)
     } catch {
-      if (currentJobIdRef.current === requestedJobId) setBudgetSummary(null)
-    }
-  }, [job.id])
-
-  useEffect(() => { void loadBudget() }, [loadBudget])
-
-  const budgetCategories: BudgetCategory[] = useMemo(
-    () => budgetSummary?.categories.map(c => c.category) ?? [],
-    [budgetSummary],
-  )
-
-  // Pull the authoritative memory-view costSummary after an edit/verify. Stale-
-  // guarded against job switches; keep last confirmed figure + retry on failure.
-  const refreshSummary = useCallback(async () => {
-    const requestedJobId = job.id
-    setRefreshError(false)
-    try {
-      const fresh = await getMemoryView(requestedJobId)
-      if (currentJobIdRef.current !== requestedJobId) return
-      setData(prev => (prev ? { ...prev, costSummary: fresh.costSummary, labourHoursSummary: fresh.labourHoursSummary } : fresh))
-    } catch {
-      if (currentJobIdRef.current !== requestedJobId) return
+      if (current.current !== job.id || version !== requestVersion.current) return
       setRefreshError(true)
     }
   }, [job.id])
-
-  // Full silent memory-view refetch (no loading flash) — adopts authoritative
-  // backend state after a direct add. Stale-guarded; recoverable on failure.
-  const refetch = useCallback(async () => {
-    const requestedJobId = job.id
-    setRefreshError(false)
-    try {
-      const fresh = await getMemoryView(requestedJobId)
-      if (currentJobIdRef.current === requestedJobId) setData(fresh)
-    } catch {
-      if (currentJobIdRef.current === requestedJobId) setRefreshError(true)
-    }
-  }, [job.id])
-
-  // Create a trusted manual memory item, then adopt authoritative memory-view +
-  // budget totals. Throws on create failure so the form can keep the values.
-  const addMemoryItem = useCallback(async (req: CreateMemoryItemRequest): Promise<MemoryViewItem> => {
-    const created = await createMemoryItem(job.id, req)
-    track('manual_add_saved', {
-      job_id: job.id,
-      memory_type: req.memoryType,
-      has_cost: Boolean(req.costAmount || req.totalCostAmount),
-      has_budget_category: Boolean(req.budgetCategoryId),
-    })
-    await refetch()
-    await loadBudget()
-    return created
-  }, [job.id, refetch, loadBudget])
-
-  const handleAssignCategory = useCallback(async (memoryItemId: string, categoryId: string | null) => {
-    setAssigningCategoryId(memoryItemId)
-    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      const updated = await assignMemoryItemCategory(job.id, memoryItemId, categoryId)
-      track('budget_category_assigned', { job_id: job.id, memory_type: updated.memoryType })
-      if (currentJobIdRef.current !== job.id) return
-      setData(prev => prev ? {
-        ...prev,
-        sections: prev.sections.map(s => ({
-          ...s,
-          items: s.items.map(it => it.id === memoryItemId ? { ...it, budgetCategoryId: updated.budgetCategoryId ?? null } : it),
-        })),
-      } : prev)
-      void loadBudget()
-      onCategoryChangedRef.current?.()
-    } catch {
-      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not change category — tap to retry' }))
-    } finally {
-      setAssigningCategoryId(null)
-    }
-  }, [job.id, loadBudget])
-
-  const handleSaveEdit = useCallback(async (memoryItemId: string, edit: MemoryItemEdit) => {
-    setSubmittingId(memoryItemId)
-    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      // Read through a ref rather than the `data` closure: this handler is
-      // memoized on job id alone, and pulling `data` into its deps would
-      // rebuild every card's props on each load.
-      const before = dataRef.current?.sections
-        .flatMap(s => s.items)
-        .find(it => it.id === memoryItemId)
-      const updated = await updateMemoryItem(job.id, memoryItemId, { ...edit, uncertaintyResolution: 'resolved' })
-      track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
-      // A category correction is the one edit whose effect reaches outside
-      // Budget: Money out rows caption themselves with the source item's
-      // category. Compare against the pre-save item so an unrelated text fix
-      // doesn't trigger a needless refetch.
-      const categoryChanged = (before?.budgetCategoryId ?? null) !== (updated.budgetCategoryId ?? null)
-      setData(prev => {
-        if (!prev) return prev
-        let prevItem: MemoryViewItem | undefined
-        prev.sections.forEach(s => { const f = s.items.find(it => it.id === memoryItemId); if (f) prevItem = f })
-        const merged: MemoryViewItem = { ...updated, source: updated.source ?? prevItem?.source ?? null }
-        const targetKey = MEMORY_TYPE_TO_SECTION_KEY[merged.memoryType] ?? merged.memoryType
-        let sections = prev.sections.map(s => ({ ...s, items: s.items.filter(it => it.id !== memoryItemId) }))
-        if (!sections.some(s => s.key === targetKey)) {
-          sections = [...sections, { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }]
-        }
-        sections = sections.map(s => s.key === targetKey ? { ...s, items: [merged, ...s.items] } : s)
-        sections.sort((a, b) => ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
-        return { ...prev, sections }
+  const reload = useCallback(() => {
+    const version = ++requestVersion.current
+    setLoadState('loading')
+    setErrorMsg('')
+    getMemoryView(job.id)
+      .then((fresh) => {
+        if (current.current !== job.id || version !== requestVersion.current) return
+        setData(fresh)
+        setLoadState('ready')
+        setRefreshError(false)
       })
-      setEditingId(null)
-      void refreshSummary()
-      void loadBudget()
-      if (categoryChanged) onCategoryChangedRef.current?.()
-    } catch (error) {
-      const message = error instanceof ApiError && error.message === PAID_LABOUR_COST_EDIT_MESSAGE
-        ? PAID_LABOUR_COST_EDIT_MESSAGE
-        : 'Could not save — tap to retry'
-      setItemErrors(e => ({ ...e, [memoryItemId]: message }))
-    } finally {
-      setSubmittingId(null)
-    }
-  }, [job.id, refreshSummary, loadBudget])
-
-  const handleVerify = useCallback(async (memoryItemId: string) => {
-    setVerifyingId(memoryItemId)
-    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      await verifyMemoryItem(job.id, memoryItemId)
-      track('memory_verified', { job_id: job.id })
-      setData(prev => prev ? {
-        ...prev,
-        sections: prev.sections.map(s => ({
-          ...s,
-          items: s.items.map(it => it.id === memoryItemId ? { ...it, uncertaintyFlags: [] } : it),
-        })),
-      } : prev)
-      void refreshSummary()
-      void loadBudget()
-    } catch {
-      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not save — tap to retry' }))
-    } finally {
-      setVerifyingId(null)
-    }
-  }, [job.id, refreshSummary, loadBudget])
-
-  const findItem = useCallback((memoryItemId: string): MemoryViewItem | undefined => {
-    for (const s of data?.sections ?? []) {
-      const found = s.items.find(it => it.id === memoryItemId)
-      if (found) return found
-    }
-    return undefined
-  }, [data])
-
-  // Remove a confirmed item from the active job record. Nothing is removed
-  // locally up-front: the item stays on screen until the backend has accepted
-  // the delete, so a failure can never look like a successful removal. The
-  // authoritative memory-view (and budget, since any item may be carrying spend)
-  // is refetched rather than patched, so totals come back from the backend.
-  const handleRemoveItem = useCallback(async (memoryItemId: string) => {
-    setMutatingId(memoryItemId)
-    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      const item = findItem(memoryItemId)
-      await removeMemoryItem(job.id, memoryItemId)
-      track('memory_item_removed', { job_id: job.id, memory_type: item?.memoryType ?? null })
-      if (currentJobIdRef.current !== job.id) return
+      .catch(() => {
+        if (current.current !== job.id || version !== requestVersion.current) return
+        setLoadState('error')
+        setErrorMsg('Could not load job memory')
+      })
+  }, [job.id])
+  useEffect(() => {
+    setData(null)
+    setEditingId(null)
+    setSubmittingId(null)
+    setVerifyingId(null)
+    setMutatingId(null)
+    setItemErrors({})
+    reload()
+  }, [reload])
+  const addMemoryItem = useCallback(
+    async (req: CreateMemoryItemRequest) => {
+      const created = await createMemoryItem(job.id, req)
+      track('manual_add_saved', {
+        job_id: job.id,
+        memory_type: req.memoryType,
+        has_cost: false,
+        has_budget_category: false,
+      })
+      if (req.memoryType === 'labour') track('hours_added_by_hand')
+      const state = { ordered_material: 'bought', used_material: 'used', leftover_material: 'left_over' }[
+        req.memoryType as string
+      ]
+      if (state) track('material_added_by_hand', { state })
       await refetch()
-      void loadBudget()
-    } catch {
-      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not remove — tap to retry' }))
-    } finally {
-      setMutatingId(null)
-    }
-  }, [job.id, findItem, refetch, loadBudget])
-
-  // Move Used ↔ Left over: a reclassify through the normal item PATCH, sending
-  // the item's current fields with the new memoryType. Deliberately not routed
-  // through handleSaveEdit — that marks uncertainty 'resolved', and moving a
-  // misfiled item says nothing about whether its cost/quantity are right.
-  const handleMoveItem = useCallback(async (memoryItemId: string, memoryType: MemoryType) => {
-    const item = findItem(memoryItemId)
-    if (!item) return
-    setMutatingId(memoryItemId)
-    setItemErrors(e => { const n = { ...e }; delete n[memoryItemId]; return n })
-    try {
-      await updateMemoryItem(job.id, memoryItemId, { ...memoryItemToEdit(item), memoryType })
-      track('memory_item_moved', { job_id: job.id, from: item.memoryType, to: memoryType })
-      if (currentJobIdRef.current !== job.id) return
-      await refetch()
-      void loadBudget()
-    } catch {
-      setItemErrors(e => ({ ...e, [memoryItemId]: 'Could not move — tap to retry' }))
-    } finally {
-      setMutatingId(null)
-    }
-  }, [job.id, findItem, refetch, loadBudget])
-
-  // Return all or part of a Left over item to the merchant. Like removal,
-  // nothing moves locally first: the quantity stays on screen until the backend
-  // has accepted the return, so a failure can never look like a completed one.
-  // Both authoritative summaries are refetched — a trusted refund changes
-  // job-level spend, not just the Materials sections. Throws on failure so the
-  // return sheet can stay open with Mike's entered values.
-  const handleReturnItem = useCallback(async (memoryItemId: string, req: ReturnMaterialRequest) => {
-    const item = findItem(memoryItemId)
-    await returnMemoryItem(job.id, memoryItemId, req)
-    track('material_returned', {
-      job_id: job.id,
-      has_refund: Boolean(req.refundAmount),
-      has_supplier: Boolean(req.supplierName),
-      full_return: item?.quantity === req.quantity,
+      return created
+    },
+    [job.id, refetch],
+  )
+  const clearError = (id: string) =>
+    setItemErrors((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
     })
-    if (currentJobIdRef.current !== job.id) return
-    await refetch()
-    void loadBudget()
-  }, [job.id, findItem, refetch, loadBudget])
-
-  // ── Budget category management (Spend tab) ────────────────────────────────
-  const handleAddCategory = useCallback(async (name: string, amount: string) => {
-    setSavingNewCategory(true); setBudgetError('')
+  const save = async (item: MemoryViewItem, edit: MemoryItemEdit) => {
+    setSubmittingId(item.id)
+    clearError(item.id)
     try {
-      await createBudgetCategory(job.id, { name: name.trim(), budgetAmount: amount.trim() || null })
-      track('budget_category_created', { job_id: job.id, has_budget_amount: Boolean(amount.trim()) })
-      setAddingCategory(false)
-      await loadBudget()
-    } catch { setBudgetError('Could not add category — try again') }
-    finally { setSavingNewCategory(false) }
-  }, [job.id, loadBudget])
-
-  const handleEditBudget = useCallback(async (categoryId: string, name: string, amount: string) => {
-    setSavingCatId(categoryId); setBudgetError('')
-    try {
-      await patchBudgetCategory(job.id, categoryId, { name: name.trim(), budgetAmount: amount.trim() || null })
-      track('budget_category_updated', { job_id: job.id, has_budget_amount: Boolean(amount.trim()) })
-      setEditingBudgetId(null)
-      await loadBudget()
-    } catch { setBudgetError('Could not save category — try again') }
-    finally { setSavingCatId(null) }
-  }, [job.id, loadBudget])
-
-  const handleArchiveCategory = useCallback(async (categoryId: string) => {
-    setSavingCatId(categoryId); setBudgetError('')
-    try {
-      await patchBudgetCategory(job.id, categoryId, { isArchived: true })
-      track('budget_category_archived', { job_id: job.id })
-      await loadBudget()
-    } catch { setBudgetError('Could not remove category — try again') }
-    finally { setSavingCatId(null) }
-  }, [job.id, loadBudget])
-
-  // One user-facing Labour concept: setting a Labour budget when no Labour
-  // category exists creates a normal active category named "Labour" through
-  // the existing budget-category API; editing when one exists patches it. The
-  // persisted anchor is always the JobBudgetCategory row named Labour.
-  const handleSetLabourBudget = useCallback(async (amount: string, existing: BudgetCategory | null): Promise<boolean> => {
-    setBudgetError('')
-    try {
-      if (existing) await patchBudgetCategory(job.id, existing.id, { name: existing.name, budgetAmount: amount.trim() || null })
-      else await createBudgetCategory(job.id, { name: 'Labour', budgetAmount: amount.trim() || null })
-      track('labour_budget_updated', { job_id: job.id, has_budget_amount: Boolean(amount.trim()) })
-      await loadBudget()
-      return true
+      const updated = await updateMemoryItem(job.id, item.id, edit)
+      if (updated.uncertaintyFlags?.length) await verifyMemoryItem(job.id, item.id)
+      track('memory_edit_saved', { job_id: job.id, memory_type: updated.memoryType })
+      if (current.current !== job.id) return
+      await refetch()
+      setEditingId(null)
     } catch {
-      setBudgetError('Could not save the Labour budget — try again')
-      return false
+      if (current.current === job.id)
+        setItemErrors((e) => ({ ...e, [item.id]: 'Could not save — tap to retry' }))
+    } finally {
+      if (current.current === job.id) setSubmittingId(null)
     }
-  }, [job.id, loadBudget])
-
-  const toggleCat = useCallback((categoryId: string) => {
-    setExpandedCats(p => ({ ...p, [categoryId]: !p[categoryId] }))
-  }, [])
-
-  // Open a category outright (rather than flip it): used when something outside
-  // the job — a cross-job Money line — needs the item inside it to be on screen.
-  const expandCat = useCallback((categoryId: string) => {
-    setExpandedCats(p => (p[categoryId] ? p : { ...p, [categoryId]: true }))
-  }, [])
-
-  // ── Derivations ───────────────────────────────────────────────────────────
-  // Backend-authoritative summaries (fall back to local derivation for an older
-  // API without labour/total fields).
-  const ordered = useMemo<OrderedCostSummary | null>(
-    () => (data ? (data.costSummary?.orderedMaterials ?? deriveCostSummary(data.sections)) : null),
-    [data],
-  )
-  const labourSummary = useMemo<LabourCostSummary | null>(
-    () => (data ? (data.costSummary?.labour ?? deriveLabourSummary(data.sections)) : null),
-    [data],
-  )
-  // Net of trusted refunds since returned materials landed.
-  const totalKnownCost = useMemo<TotalKnownCost | null>(
-    () => (data ? (data.costSummary?.totalKnownCost ?? deriveTotalKnownCost(data.sections)) : null),
-    [data],
-  )
-  // The gross/refund pair that explains the net figure above. On a backend
-  // without them there are no returned materials either, so the local
-  // derivation yields no refunds and Spend shows no breakdown.
-  const grossKnownCost = useMemo<GrossKnownCost | null>(
-    () => (data ? (data.costSummary?.grossKnownCost ?? deriveGrossKnownCost(data.sections)) : null),
-    [data],
-  )
-  const refunds = useMemo<RefundsSummary | null>(
-    () => (data ? (data.costSummary?.refunds ?? deriveRefundsSummary(data.sections)) : null),
-    [data],
-  )
-  // Daily labour view: backend labourHoursSummary preferred; local fallback for
-  // an older API without it.
-  const labourHours = useMemo<LabourHoursSummary | null>(
-    () => (data ? (data.labourHoursSummary ?? deriveLabourHoursSummary(data.sections)) : null),
-    [data],
-  )
-  // Spend Labour group: backend budgetSummary.labour preferred; fallback derives
-  // labour rows from category/uncategorised rows (deduped by memoryItemId).
-  //
-  // Reconciliation: a backend labour summary can come back with
-  // budgetCategory: null even though an active "Labour" category genuinely
-  // exists in budgetSummary.categories (e.g. the category was created or
-  // resolved separately from the labour aggregate). The `??` below only
-  // covers a wholly-missing labour object — it doesn't catch that case — so
-  // trusting labour.budgetCategory at face value made the Spend tab's Labour
-  // "⋯" menu (gated on this field) flicker in and out for the same
-  // underlying state. Patch in the category from the categories list
-  // whenever the backend didn't attach one itself.
-  const labourSpendGroup = useMemo<LabourSpendSummary | null>(() => {
-    if (!budgetSummary) return null
-    const derived = deriveLabourSpendGroupFromBudget(budgetSummary)
-    const backendGroup = budgetSummary.labour
-    // The payment-state contract was added to normal Budget categories before
-    // the special Labour aggregate. Preserve backend Labour arithmetic, but
-    // fill absent aggregate/row payment metadata from those authoritative
-    // category and uncategorised rows.
-    const fallbackRows = new Map(derived.rows.map(row => [row.memoryItemId, row]))
-    const group: LabourSpendSummary = backendGroup ? {
-      ...backendGroup,
-      paymentState: backendGroup.paymentState === undefined ? derived.paymentState : backendGroup.paymentState,
-      paidAmount: backendGroup.paidAmount === undefined ? derived.paidAmount : backendGroup.paidAmount,
-      paidCurrency: backendGroup.paidCurrency === undefined ? derived.paidCurrency : backendGroup.paidCurrency,
-      paidLabel: backendGroup.paidLabel === undefined ? derived.paidLabel : backendGroup.paidLabel,
-      notPaidAmount: backendGroup.notPaidAmount === undefined ? derived.notPaidAmount : backendGroup.notPaidAmount,
-      notPaidCurrency: backendGroup.notPaidCurrency === undefined ? derived.notPaidCurrency : backendGroup.notPaidCurrency,
-      notPaidLabel: backendGroup.notPaidLabel === undefined ? derived.notPaidLabel : backendGroup.notPaidLabel,
-      paymentStateReason: backendGroup.paymentStateReason === undefined ? derived.paymentStateReason : backendGroup.paymentStateReason,
-      rows: backendGroup.rows.map(row => {
-        const fallback = fallbackRows.get(row.memoryItemId)
-        if (!fallback) return row
-        return {
-          ...row,
-          paymentState: row.paymentState === undefined ? fallback.paymentState : row.paymentState,
-          paidMoneyEventId: row.paidMoneyEventId === undefined ? fallback.paidMoneyEventId : row.paidMoneyEventId,
-          paidAt: row.paidAt === undefined ? fallback.paidAt : row.paidAt,
-          eligibleForPaymentState: row.eligibleForPaymentState === undefined
-            ? fallback.eligibleForPaymentState
-            : row.eligibleForPaymentState,
-        }
-      }),
-    } : derived
-    if (group.budgetCategory) return group
-    const reconciled = findLabourBudgetCategory(budgetSummary)
-    return reconciled ? { ...group, budgetCategory: reconciled.category } : group
-  }, [budgetSummary])
-
-  const sectionItems = useCallback(
-    (key: string) => data?.sections.find(s => s.key === key)?.items ?? [],
-    [data],
-  )
-
-  // Trusted general Budget costs — their contributing ids count as "in Budget"
-  // so a budget_cost row can be marked paid like any other trusted cost.
-  const budgetCostIds = useMemo(
-    () => (data ? budgetCostContribution(data.sections).ids : []),
-    [data],
-  )
-  const includedIds = useMemo(
-    () => new Set([
-      ...(ordered?.rows ?? []).flatMap(r => r.memoryItemIds),
-      ...(labourSummary?.rows ?? []).map(r => r.memoryItemId),
-      ...budgetCostIds,
-    ]),
-    [ordered, labourSummary, budgetCostIds],
-  )
-  const exclusionReason = useMemo(
-    () => new Map<string, string>([
-      ...(ordered?.excludedRows ?? []).map(r => [r.memoryItemId, r.reason] as [string, string]),
-      ...(labourSummary?.excludedRows ?? []).map(r => [r.memoryItemId, r.reason] as [string, string]),
-    ]),
-    [ordered, labourSummary],
-  )
-  const hasMemory = data ? data.sections.some(s => s.items.length > 0) : false
-
-  // Cost-basis attention: ordered items excluded from known spend for
-  // "cost worth checking" that carry a usable money amount Mike can classify
-  // (each vs total). No-cost exclusions are deliberately not included — there is
-  // no amount to classify. Source (voice vs direct-add) does not matter.
-  const orderedForCheck = useMemo(
-    () => data?.sections.find(s => s.key === 'ordered_materials')?.items ?? [],
-    [data],
-  )
-  const costCheckItems = useMemo(
-    () => orderedForCheck.filter(i => exclusionReason.get(i.id) === 'cost_worth_checking' && hasCostLikeAmount(i)),
-    [orderedForCheck, exclusionReason],
-  )
-
-  // Every ordered item that is bought but not in known spend and needs a nudge:
-  // priced-but-ambiguous (cost_worth_checking) and no-price (no_cost_remembered)
-  // together, so the Spend lens shows one "Not counted yet" area instead of two.
-  const notCountedItems = useMemo(
-    () => orderedForCheck.filter(i => {
-      const r = exclusionReason.get(i.id)
-      return (r === 'cost_worth_checking' || r === 'no_cost_remembered') && !includedIds.has(i.id)
-    }),
-    [orderedForCheck, exclusionReason, includedIds],
-  )
-
-  // Quick cost-basis resolution via the existing PATCH path (handleSaveEdit adds
-  // uncertaintyResolution: 'resolved' and refetches authoritative summaries).
-  const resolveCostBasis = useCallback((memoryItemId: string, basis: 'total' | 'each') => {
-    const item = orderedForCheck.find(i => i.id === memoryItemId)
-    if (!item || !hasCostLikeAmount(item)) return
-    const edit = memoryItemToEdit(item)
-    const costCurrency = item.costCurrency || 'GBP' // has a cost amount → default GBP
-    if (basis === 'total') {
-      void handleSaveEdit(memoryItemId, { ...edit, costQualifier: 'total', totalCostAmount: item.costAmount, costCurrency })
-    } else {
-      // Unit cost: omit totalCostAmount entirely so the backend derives/validates
-      // quantity × costAmount. Sending null would clear the total, not derive it.
-      const eachEdit: MemoryItemEdit = { ...edit, costQualifier: 'each', costAmount: item.costAmount, costCurrency }
-      delete eachEdit.totalCostAmount
-      void handleSaveEdit(memoryItemId, eachEdit)
+  }
+  const verify = async (item: MemoryViewItem) => {
+    setVerifyingId(item.id)
+    clearError(item.id)
+    try {
+      await verifyMemoryItem(job.id, item.id)
+      track('memory_verified', { job_id: job.id })
+      await refetch()
+    } catch {
+      if (current.current === job.id)
+        setItemErrors((e) => ({ ...e, [item.id]: 'Could not save — tap to retry' }))
+    } finally {
+      if (current.current === job.id) setVerifyingId(null)
     }
-  }, [orderedForCheck, handleSaveEdit])
-
-  // Add a price to a no-price ordered item. Defaults to an explicit total so the
-  // typed figure lands as totalCostAmount (+ GBP) and enters known spend; `each`
-  // stores the unit cost and lets the total be derived (omit totalCostAmount).
-  const addPrice = useCallback((memoryItemId: string, price: string, basis: 'total' | 'each') => {
-    const item = orderedForCheck.find(i => i.id === memoryItemId)
-    if (!item) return
-    const edit = memoryItemToEdit(item)
-    if (basis === 'total') {
-      void handleSaveEdit(memoryItemId, { ...edit, costAmount: price, costQualifier: 'total', totalCostAmount: price, costCurrency: 'GBP' })
-    } else {
-      const eachEdit: MemoryItemEdit = { ...edit, costAmount: price, costQualifier: 'each', costCurrency: 'GBP' }
-      delete eachEdit.totalCostAmount
-      void handleSaveEdit(memoryItemId, eachEdit)
+  }
+  const mutate = async (item: MemoryViewItem, type?: MemoryType) => {
+    setMutatingId(item.id)
+    clearError(item.id)
+    try {
+      if (type) {
+        await updateMemoryItem(job.id, item.id, { memoryType: type })
+        track('memory_item_moved', { job_id: job.id, from: item.memoryType, to: type })
+      } else {
+        await removeMemoryItem(job.id, item.id)
+        track('memory_item_removed', { job_id: job.id, memory_type: item.memoryType })
+      }
+      await refetch()
+    } catch {
+      if (current.current === job.id)
+        setItemErrors((e) => ({ ...e, [item.id]: 'Could not save — tap to retry' }))
+    } finally {
+      if (current.current === job.id) setMutatingId(null)
     }
-  }, [orderedForCheck, handleSaveEdit])
-
-  // Shared MemoryCard props for an item.
-  //
-  // Categories go to EVERY card, not just the ones offering the one-tap "Pick
-  // category" shortcut. Withholding them used to disable the Budget category
-  // field inside Fix memory as a side effect, so a cost item could be filed
-  // once and never corrected again. `withPicker` now controls only the
-  // shortcut — an affordance for items with no category yet — while
-  // recategorising an already-filed item stays where every other correction
-  // lives: inside Fix memory.
-  const cardProps = useCallback((item: MemoryViewItem, withPicker: boolean): CardExtras => ({
+  }
+  const cardProps = (item: MemoryViewItem): Omit<MemoryCardProps, 'item'> => ({
     isEditing: editingId === item.id,
     submitting: submittingId === item.id,
     verifying: verifyingId === item.id,
-    errorMsg: itemErrors[item.id] ?? null,
-    categories: budgetCategories,
-    canPickCategory: withPicker,
-    assigningCategory: assigningCategoryId === item.id,
     mutating: mutatingId === item.id,
+    errorMsg: itemErrors[item.id] ?? null,
     onStartEdit: () => setEditingId(item.id),
     onCancelEdit: () => setEditingId(null),
-    onSave: (edit: MemoryItemEdit) => handleSaveEdit(item.id, edit),
-    onVerify: () => handleVerify(item.id),
-    onAssignCategory: (c: string | null) => handleAssignCategory(item.id, c),
-    onRemove: () => handleRemoveItem(item.id),
-    onMove: (memoryType: MemoryType) => handleMoveItem(item.id, memoryType),
-    onReturn: (req: ReturnMaterialRequest) => handleReturnItem(item.id, req),
-  }), [editingId, submittingId, verifyingId, itemErrors, budgetCategories, assigningCategoryId, mutatingId, handleSaveEdit, handleVerify, handleAssignCategory, handleRemoveItem, handleMoveItem, handleReturnItem])
-
+    onSave: (edit) => {
+      void save(item, edit)
+    },
+    onVerify: () => {
+      void verify(item)
+    },
+    onRemove: () => {
+      void mutate(item)
+    },
+    onMove: (type) => {
+      void mutate(item, type)
+    },
+    onReturn: async (req: ReturnMaterialRequest) => {
+      await returnMemoryItem(job.id, item.id, req)
+      track('material_returned', {
+        job_id: job.id,
+        has_refund: false,
+        has_supplier: Boolean(req.supplierName),
+        full_return: item.quantity === req.quantity,
+      })
+      await refetch()
+    },
+  })
   return {
-    data, loadState, errorMsg, reload, refreshError, refreshSummary, refetch,
-    // Refetch the authoritative budget summary (e.g. after mark-paid, to
-    // confirm Budget cost is unchanged / pick up any paid metadata).
-    reloadBudget: loadBudget,
+    data,
+    loadState,
+    errorMsg,
+    refreshError,
+    reload,
+    refetch,
     addMemoryItem,
-    budgetSummary, budgetCategories,
-    ordered, labourSummary, totalKnownCost, grossKnownCost, refunds, labourHours, labourSpendGroup,
-    sectionItems, includedIds, exclusionReason, hasMemory,
-    costCheckItems, notCountedItems, resolveCostBasis, addPrice,
-    // budget CRUD state + handlers
-    expandedCats, toggleCat, expandCat,
-    editingBudgetId, setEditingBudgetId, savingCatId,
-    addingCategory, setAddingCategory, savingNewCategory, budgetError,
-    openMenuCatId, setOpenMenuCatId,
-    handleAddCategory, handleEditBudget, handleArchiveCategory, handleSetLabourBudget,
-    // card helper
     cardProps,
+    sectionItems: (key: string) => data?.sections.find((s) => s.key === key)?.items ?? [],
   }
 }
-
 export type JobMemory = ReturnType<typeof useJobMemory>

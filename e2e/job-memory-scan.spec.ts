@@ -1,92 +1,159 @@
 import { test, expect, type Page } from '@playwright/test'
-import { openRowActions } from './helpers'
 
-// New job-home navigation: sections are cards on home; Used/Left over live in
-// Materials, Notes/Photos live in Job log.
-async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+const banned =
+  /\b(budget|spend|cost|paid|to pay|money in|money out|account|settlement|allowance|category|rate)\b|£/i
+async function guard(page: Page) {
+  const text = await page.locator('body').evaluate((el) => {
+    const copy = el.cloneNode(true) as HTMLElement
+    copy.querySelectorAll('[data-builder-note],script,style').forEach((n) => n.remove())
+    return copy.textContent ?? ''
+  })
+  expect(text).not.toMatch(banned)
+  expect(await page.locator('body').evaluate((el) => el.scrollWidth > innerWidth)).toBe(false)
+}
+async function open(page: Page, section: string) {
   const back = page.getByRole('button', { name: /job home/i })
-  if (await back.isVisible().catch(() => false)) await back.click()
+  if (await back.count()) await back.click()
   await page.getByRole('button', { name: `Open ${section}` }).click()
-  if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
 }
-
-
-// 390px, VITE_USE_MOCK_API=true. Job memory now lives as lens tabs inside the
-// current-job workspace: Overview · Spend · Labour · Used · Notes. Mock
-// garden-room fixture: bought (hardcore/plasterboard/timber/insulation/
-// membrane), used OSB, leftover sand (worth checking), supplier note, watch-out,
-// labour, + pending review drafts.
-
-async function gotoApp(page: Page) {
+async function start(page: Page) {
   await page.goto('/')
-  const explainer = page.getByRole('button', { name: /got it/i })
-  if (await explainer.isVisible().catch(() => false)) await explainer.click()
-  const passcode = page.getByLabel(/passcode/i)
-  if (await passcode.isVisible().catch(() => false)) {
-    await passcode.fill('demo')
-    await page.getByRole('button', { name: /sign in/i }).click()
-    await page.waitForTimeout(400)
+  await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
+}
+
+test('legacy money-heavy job has no financial language on any reachable memory screen', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('job-book-e2e-seed', 'job-memory-legacy'))
+  await start(page)
+  await guard(page)
+  for (const section of ['Hours', 'Materials']) {
+    await open(page, section)
+    if (section === 'Hours') {
+      await expect(page.getByRole('region', { name: 'Hours total' })).toContainText('29h')
+      await guard(page)
+      await page.getByRole('button', { name: 'Add hours' }).click()
+      await expect(page.getByRole('dialog').locator('input')).toHaveCount(3)
+      await guard(page)
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    } else {
+      for (const tab of ['Bought', 'Used', 'Left over', 'Returned']) {
+        await page.getByRole('tab', { name: tab, exact: true }).click()
+        await guard(page)
+        const row = page.locator('.mem-row-tap').first()
+        if (await row.count()) {
+          await row.click()
+          await guard(page)
+          await page.getByRole('button', { name: 'Fix memory', exact: true }).click()
+          await expect(page.getByRole('dialog').getByRole('textbox')).toHaveCount(4)
+          await guard(page)
+          await page.getByRole('button', { name: 'Close', exact: true }).first().click()
+        }
+        const add = page.getByRole('button', { name: /^Add (bought item|used item|leftover)$/ })
+        if (await add.count()) {
+          await add.click()
+          await guard(page)
+          await expect(page.getByRole('dialog').getByRole('textbox')).toHaveCount(4)
+          await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+        }
+      }
+    }
   }
-}
+  await open(page, 'Job log')
+  await expect(page.getByText('Skip hire, £250.')).toBeVisible()
+  for (const tab of ['All', 'Notes', 'Photos']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click()
+    await guard(page)
+  }
+  await page.getByRole('button', { name: /job home/i }).click()
+  await page.getByRole('button', { name: 'Job details', exact: true }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await guard(page)
+  await page.getByRole('button', { name: 'Close', exact: true }).first().click()
+  await page.getByRole('button', { name: /things? to check/i }).click()
+  await expect(page.getByText(/waiting/)).toBeVisible()
+  await guard(page)
+  await page
+    .getByTestId('queue-item-queue-item-mock-001')
+    .getByRole('button', { name: 'Fix details' })
+    .click()
+  await guard(page)
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
+  await page.getByRole('button', { name: /the job book/i }).click()
+  await guard(page)
+  await expect(page.getByRole('button', { name: /^Workshop/ })).toBeVisible()
+})
 
-async function openSpend(page: Page) {
-  await gotoApp(page)
-  await goToSection(page, 'Budget')
-  await page.waitForTimeout(800)
-}
+test('typed hours and all material states update, edit stays four fields, and a leftover reaches Workshop', async ({
+  page,
+}) => {
+  await start(page)
+  await open(page, 'Hours')
+  await expect(page.getByRole('region', { name: 'Hours total' })).toContainText('29h')
+  await page.getByRole('button', { name: 'Add hours' }).click()
+  await page.getByLabel('Who', { exact: true }).fill('New builder')
+  await page.getByLabel('Which day', { exact: true }).fill('2026-11-21')
+  await page.getByLabel('How many hours', { exact: true }).fill('6')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(page.getByRole('region', { name: 'Hours total' })).toContainText('35h')
+  await expect(page.getByRole('button', { name: 'Open actions for New builder' })).toContainText('6h')
+  await open(page, 'Materials')
+  for (const [tab, add] of [
+    ['Bought', 'Add bought item'],
+    ['Used', 'Add used item'],
+    ['Left over', 'Add leftover'],
+  ]) {
+    await page.getByRole('tab', { name: tab, exact: true }).click()
+    await page.getByRole('button', { name: add, exact: true }).click()
+    await page.getByLabel('Item', { exact: true }).fill(`Typed ${tab}`)
+    await page.getByLabel('Number or amount', { exact: true }).fill('about half a pallet')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByRole('button', { name: `Open actions for Typed ${tab}` })).toBeVisible()
+  }
+  await page.getByRole('tab', { name: 'Bought', exact: true }).click()
+  await page.getByRole('button', { name: 'Open actions for Typed Bought' }).click()
+  await page.getByRole('button', { name: 'Fix memory', exact: true }).click()
+  await page.getByLabel('Notes (optional)', { exact: true }).fill('For the coving')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Open actions for Typed Bought' })).toContainText(
+    'For the coving',
+  )
+  await page.getByRole('tab', { name: 'Left over', exact: true }).click()
+  await page.getByRole('button', { name: 'Open actions for Typed Left over' }).click()
+  await page.getByRole('button', { name: /Move to the Workshop/ }).click()
+  await page.getByRole('button', { name: /See in the Workshop/ }).click()
+  await expect(page.getByRole('button', { name: 'Open Typed Left over' })).toContainText(
+    'about half a pallet',
+  )
+})
 
-test.describe('Job memory lens tabs', () => {
-  test('Overview surfaces pending review work (things to check)', async ({ page }) => {
-    await gotoApp(page)
-    await expect(page.getByRole('button', { name: /things to check/i })).toBeVisible()
-  })
-
-  test('opens the Budget tab with a single committed-cost figure', async ({ page }) => {
-    await openSpend(page)
-    await expect(page.locator('.ws-job-title')).toHaveText('Budget')
-    await expect(page.getByRole('region', { name: /^budget$/i }).locator('.mem-hero-amount')).toContainText('£2,270 cost')
-  })
-
-  test('Materials keeps used and leftover reachable, flagging worth-checking', async ({ page }) => {
-    await gotoApp(page)
-    await goToSection(page, 'Materials', 'Used')
-    await expect(page.getByText('OSB')).toBeVisible()
-    await page.getByRole('tab', { name: 'Left over' }).click()
-    const sand = page.locator('.mem-card', { hasText: 'in the van' })
-    await expect(sand.getByText('Worth checking')).toBeVisible()
-  })
-
-  test('Notes tab shows supplier notes and watch-outs', async ({ page }) => {
-    await gotoApp(page)
-    await goToSection(page, 'Job log', 'Notes')
-    await expect(page.getByText(/uneven floor near back door/i)).toBeVisible()
-  })
-
-  test('bought rows open an action drawer with Fix memory and source', async ({ page }) => {
-    await openSpend(page)
-    const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
-    // Tapping the row opens one action drawer; fix/source live inside it.
-    const drawer = await openRowActions(page, hardcore)
-    await expect(drawer.getByRole('button', { name: /fix memory/i })).toBeVisible()
-    // Source is never expanded inline on the underlying row.
-    await expect(hardcore.getByText('This came from your note')).toHaveCount(0)
-    // Show source pushes into the drawer's Source sub-state; Back returns.
-    await drawer.getByRole('button', { name: /show source/i }).click()
-    await expect(drawer.getByText(/this came from your note/i)).toBeVisible()
-    await expect(hardcore.getByText('This came from your note')).toHaveCount(0)
-    await drawer.getByRole('button', { name: /back/i }).click()
-    await expect(drawer.getByRole('button', { name: /fix memory/i })).toBeVisible()
-  })
-
-  test('editing a bought note updates it in place', async ({ page }) => {
-    await openSpend(page)
-    const hardcore = page.getByRole('region', { name: /uncategorised cost/i }).locator('.mem-card', { hasText: 'hardcore' })
-    const drawer = await openRowActions(page, hardcore)
-    await drawer.getByRole('button', { name: /fix memory/i }).click()
-    const form = page.getByRole('form', { name: /edit memory/i })
-    await form.locator('input[name="supplierName"]').fill('Selco')
-    await page.getByRole('button', { name: /save memory/i }).click()
-    await page.waitForTimeout(600)
-    await expect(page.getByRole('region', { name: /uncategorised cost/i }).getByText('Selco')).toBeVisible()
-  })
+test('log retains every recording and legacy file, filters work, and confirming a check updates the job', async ({
+  page,
+}) => {
+  await start(page)
+  await open(page, 'Job log')
+  await expect(page.getByText('Skip hire, £250.')).toBeVisible()
+  await expect(page.getByText('Recording saved — could not be transcribed.')).toBeVisible()
+  await expect(page.getByText('Recording saved — transcript pending.')).toBeVisible()
+  await expect(page.getByText('Customer wants extra lights by the door.')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Delivery slip' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Open file', exact: true })).toHaveAttribute(
+    'href',
+    /\/receipts\/legacy-file\/file$/,
+  )
+  await page.getByRole('tab', { name: 'Notes', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'Delivery slip' })).toHaveCount(0)
+  await expect(page.getByText('Skip hire, £250.')).toBeVisible()
+  await page.getByRole('tab', { name: 'Photos', exact: true }).click()
+  await expect(page.getByText('Skip hire, £250.')).toHaveCount(0)
+  await expect(page.getByRole('img', { name: 'Delivery slip' })).toBeVisible()
+  await page.getByRole('button', { name: /job home/i }).click()
+  await page.getByRole('button', { name: /things? to check/i }).click()
+  const card = page.getByTestId('queue-item-queue-item-mock-001')
+  await card.getByRole('button', { name: 'Remember this' }).click()
+  await expect(card).toContainText('Saved to trusted memory')
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
+  await open(page, 'Materials')
+  await expect(page.locator('.mem-row-tap').filter({ hasText: 'hardcore' })).toHaveCount(2)
 })

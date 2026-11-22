@@ -3937,8 +3937,9 @@ code {
 /* Actions: one compact row — Remember (wide) · Fix · Dismiss */
 .queue-item-actions { flex-direction: row; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
 .btn-queue-remember { flex: 2 1 7rem; min-width: 0; min-height: 42px; font-size: var(--text-sm); }
+/* Fix and Dismiss never shrink below their label; the row wraps instead. */
 .queue-item-actions .btn-queue-correct,
-.queue-item-actions .btn-queue-dismiss { flex: 1 1 0; min-width: 0; min-height: 42px; font-size: var(--text-sm); white-space: nowrap; padding-left: 0.4rem; padding-right: 0.4rem; }
+.queue-item-actions .btn-queue-dismiss { flex: 1 0 auto; min-width: max-content; min-height: 42px; font-size: var(--text-sm); white-space: nowrap; padding-left: 0.4rem; padding-right: 0.4rem; }
 .btn-queue-dismiss { color: var(--ink-500); }
 .btn-queue-unsure { flex: 1 1 100%; }
 .btn-queue-addcat {
@@ -4705,7 +4706,7 @@ code {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
   padding: 12px 14px;
 }
-.toast--money { border-left-color: var(--cobalt); }
+.toast--confirmation { border-left-color: var(--cobalt); }
 .toast--plain { border-left-color: var(--ink); }
 .toast-text { flex: 1; min-width: 0; }
 .toast-title { margin: 0; font-size: var(--text-md); font-weight: 800; color: var(--ink); }
@@ -6347,3 +6348,14 @@ a.row-sheet-opt { text-decoration: none; }
   text-transform: uppercase;
   color: var(--ink);
 }
+
+/* Job memory keeps the existing ledger type and spacing. */
+.memory-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.hours-people { display: grid; gap: 8px; margin-top: 16px; }
+.hours-people p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
+.job-log-entries { list-style: none; margin: 16px 0; padding: 0; }
+.job-log-entry blockquote { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.job-log-photo { display: block; width: 100%; max-height: 320px; object-fit: contain; margin: 12px 0; }
+.job-log-entry a { color: inherit; }
+
+.ws-home-card-figures .ws-home-card-denom { white-space: normal; text-align: right; }

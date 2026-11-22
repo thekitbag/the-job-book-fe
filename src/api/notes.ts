@@ -1,6 +1,7 @@
 import type { CandidateFact, ExtractionStatus, LocalNote, TranscriptStatus } from '../types'
 import { ApiError, apiFetch, USE_MOCK } from './client'
 import { delay } from './mock/util'
+import { mockRecordUploadedNote } from './mock/jobLog'
 
 export interface UploadNoteResponse {
   noteId: string
@@ -59,6 +60,7 @@ export async function getNoteTranscript(jobId: string, serverNoteId: string): Pr
 export async function uploadNote(note: LocalNote): Promise<UploadNoteResponse> {
   if (USE_MOCK) {
     await delay(1000 + Math.random() * 500)
+    mockRecordUploadedNote(note)
     return {
       noteId: `srv-${note.clientNoteId}`,
       clientNoteId: note.clientNoteId,

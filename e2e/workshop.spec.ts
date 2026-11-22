@@ -134,19 +134,19 @@ test.describe('Workshop', () => {
     await expectNoHorizontalOverflow(page)
   })
 
-  test('moves a leftover in from an active job and leaves Budget exactly as it was', async ({ page }) => {
+  test('moves a leftover in from an active job and keeps Hours exactly as they were', async ({ page }) => {
     await gotoApp(page)
     await openJob(page, GARDEN)
 
     // Budget's own figure, before anything moves.
-    await page.getByRole('button', { name: 'Open Budget' }).click()
-    const budgetBefore = await page.locator('.mem-tabpanel').innerText()
+    await page.getByRole('button', { name: 'Open Hours' }).click()
+    const hoursBefore = await page.locator('.mem-tabpanel').innerText()
     await page.getByRole('button', { name: /job home/i }).click()
 
     await openLeftovers(page)
     const drawer = await openLeftoverDrawer(page, 'fence posts')
     const move = drawer.getByRole('button', { name: /Move to the Workshop/ })
-    await expect(move).toContainText('No new cost. Budget and Money stay as they are.')
+    await expect(move).toContainText('Keep track of this material in the Workshop.')
     await move.click()
 
     const result = page.getByRole('dialog', { name: /Moved to the Workshop/ })
@@ -159,8 +159,8 @@ test.describe('Workshop', () => {
     await expect(leftoverRow(page, 'fence posts')).toContainText('IN WORKSHOP')
 
     await page.getByRole('button', { name: /job home/i }).click()
-    await page.getByRole('button', { name: 'Open Budget' }).click()
-    expect(await page.locator('.mem-tabpanel').innerText()).toBe(budgetBefore)
+    await page.getByRole('button', { name: 'Open Hours' }).click()
+    expect(await page.locator('.mem-tabpanel').innerText()).toBe(hoursBefore)
   })
 
   test('moves a leftover in from a Finished job without reopening the job', async ({ page }) => {

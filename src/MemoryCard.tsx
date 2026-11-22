@@ -1,534 +1,171 @@
 import { useState } from 'react'
+import ItemActionDrawer from './ItemActionDrawer'
 import MemoryEditForm from './MemoryEditForm'
 import ReturnMaterialSheet from './ReturnMaterialSheet'
-import BottomSheet from './BottomSheet'
-import ItemActionDrawer from './ItemActionDrawer'
 import { memoryItemToEdit } from './memoryEdit'
-import { formatSavedStamp } from './SourceHistory'
-import { CATEGORY_ASSIGNABLE_TYPES, costDetailRows, deriveEachTotal, effectiveItemDate, formatTotalLabel, itemDateLabel, labourExclusionCopy, safeRefund, spendExclusionCopy } from './memoryScan'
-import type { MarkPaidControls } from './markPaid'
-import { WORKSHOP_CHIP_LABEL, workshopState, workshopStateDetail, type WorkshopSourceControls } from './workshopSource'
-import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
-
-// Types shown with a structured type label + detail rows (not a prose summary).
-export const STRUCTURED_TYPES = new Set<string>(['ordered_material', 'budget_cost', 'used_material', 'leftover_material', 'returned_material', 'labour'])
-// Types that can carry a budget category (a picker is offered for these).
-// Single definition in memoryScan so the card and the edit form agree.
-export const CATEGORY_TYPES = CATEGORY_ASSIGNABLE_TYPES
-// Types that count towards known spend — these carry the date cue and the
-// "no longer count in known spend" warning when removed.
-const SPEND_TYPES = new Set<string>(['ordered_material', 'labour', 'budget_cost'])
-// Types whose date is worth showing on the card. A return is a dated event in
-// its own right ("Returned 8 Jul"), even though it is not spend.
-const DATED_TYPES = new Set<string>([...SPEND_TYPES, 'returned_material'])
-// A Used item is really a Left over misheard, and vice versa — the one
-// correction worth a dedicated one-tap move rather than a trip through Fix.
-const MOVE_TARGET: Record<string, { type: MemoryType; label: string }> = {
-  used_material: { type: 'leftover_material', label: 'Move to Left over' },
-  leftover_material: { type: 'used_material', label: 'Move to Used' },
-}
-
-// What removing this item actually costs Mike, in his terms. The source line
-// matters most: removing a fact must never read as deleting the voice note.
-function removalConsequences(item: MemoryViewItem): string[] {
-  const lines: string[] = []
-  if (SPEND_TYPES.has(item.memoryType)) lines.push('It will no longer count towards Budget.')
-  else if (item.memoryType === 'returned_material') {
-    // Removing a return is for a return that never happened. Say what comes
-    // back, so it can't be mistaken for undoing the purchase.
-    lines.push('It will no longer show as returned.')
-    if (safeRefund(item)) lines.push('Its refund will stop coming off your Budget.')
-  }
-  else if (item.memoryType === 'general_note') lines.push('It will be removed from the job log.')
-  else lines.push('It will be removed from this job.')
-  if (item.source) lines.push('The original voice note will be kept.')
-  return lines
-}
-
-// Returned-item rows in builder language: what went back, where to, and what
-// came back. A refund is labelled as a refund — never folded in with the cost
-// rows, where it would read as more money out.
-function returnedRows(item: MemoryViewItem, named: boolean): [string, string][] {
-  const rows: [string, string][] = []
-  if (item.materialName && !named) rows.push(['Item', item.materialName])
-  const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
-  if (qty) rows.push(['Returned', qty])
-  if (item.supplierName) rows.push(['Returned to', item.supplierName])
-  const refund = formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
-  if (refund) rows.push(['Refund', `${refund} refund`])
-  // No refund figure yet: say so, rather than leave a silent gap that looks
-  // like the money simply vanished from the job.
-  else rows.push(['Refund', 'None recorded — cost is unchanged'])
-  return rows
-}
-
-// The row's headline identity and its money, which the ledger puts on one
-// baseline: what it is, left; what it cost, right.
-function itemName(item: MemoryViewItem): string | null {
-  if (item.memoryType === 'labour') return item.labourTask?.trim() || item.labourPerson?.trim() || null
-  return item.materialName?.trim() || null
-}
-
-// Line total for the head. Deliberately not the refund on a returned item: a
-// refund is money back and stays labelled as such in the meta line, where it
-// cannot be mistaken for a price paid.
-function itemPrice(item: MemoryViewItem): string | null {
-  if (item.memoryType === 'returned_material') return null
-  const total = item.totalCostAmount ?? deriveEachTotal(item)
-  return formatTotalLabel(total, item.costCurrency)
-}
-
-function StructuredFields({ item, dateLabel }: { item: MemoryViewItem; dateLabel?: string | null }) {
-  const rows: [string, string][] = []
-  const named = !!itemName(item)
-  if (item.memoryType === 'labour') {
-    if (item.labourHours) rows.push(['Hours', item.labourHours])
-    if (item.labourPerson) rows.push(['Person', item.labourPerson])
-    if (item.labourTask && !named) rows.push(['Task', item.labourTask])
-  } else if (item.memoryType === 'returned_material') {
-    rows.push(...returnedRows(item, named))
-  } else {
-    // Name and price are in the head now; the rest composes the meta line.
-    if (item.materialName && !named) rows.push(['Item', item.materialName])
-    const qty = [item.quantity, item.unit].filter(Boolean).join(' ')
-    if (qty) rows.push(['Quantity', qty])
-    if (item.supplierName) rows.push(['Supplier', item.supplierName])
-    if (item.deliveryTiming) rows.push(['Delivery', item.deliveryTiming])
-    if (item.locationOrUse) rows.push(['Location', item.locationOrUse])
-  }
-  if (item.memoryType !== 'returned_material') {
-    // Drop the Total row when the head already shows that exact figure — the
-    // ledger states each number once.
-    const price = itemPrice(item)
-    rows.push(...costDetailRows(item).filter(([label, value]) => !(label === 'Total' && value === price)))
-  }
-  // Row variant: the date joins the end of the one meta line rather than
-  // sitting on a line of its own ("… — Jewson · yesterday").
-  if (dateLabel) rows.push(['Date', dateLabel])
-  const uncertain = (item.uncertaintyFlags ?? []).length > 0
-
-  if (rows.length === 0 && !uncertain) return null
-  return (
-    <dl className="card-detail-fields">
-      {rows.map(([label, value]) => (
-        <div key={label} className="card-detail-row">
-          <dt className="card-detail-label">{label}</dt>
-          <dd className="card-detail-value">{value}</dd>
-        </div>
-      ))}
-      {uncertain && (
-        <div className="card-detail-row card-uncertainty">
-          <dt className="card-detail-label">Worth checking</dt>
-          <dd className="card-detail-value">cost or quantity may need confirming</dd>
-        </div>
-      )}
-    </dl>
-  )
-}
-
-function SourceContext({ item }: { item: MemoryViewItem }) {
-  const [open, setOpen] = useState(false)
-  if (!item.source) return null
-  return (
-    <div className="mem-source">
-      <button className="mem-source-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        {open ? 'Hide source' : 'Show source'}
-      </button>
-      {open && (
-        <div className="mem-source-body">
-          <p className="mem-source-label">This came from your note</p>
-          <p className="mem-source-time">Saved {formatSavedStamp(item.source.capturedAt)}</p>
-          {item.source.transcriptText && (
-            <>
-              <p className="mem-source-label">What the system heard</p>
-              <blockquote className="mem-source-quote">{item.source.transcriptText}</blockquote>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
+import { effectiveItemDate, itemDateLabel } from './memoryScan'
+import {
+  WORKSHOP_CHIP_LABEL,
+  workshopState,
+  workshopStateDetail,
+  type WorkshopSourceControls,
+} from './workshopSource'
+import type { MemoryItemEdit, MemoryType, MemoryViewItem, ReturnMaterialRequest } from './types'
 export interface MemoryCardProps {
   item: MemoryViewItem
   isEditing: boolean
   submitting: boolean
   verifying: boolean
   errorMsg: string | null
-  categories: BudgetCategory[]
-  // Whether this surface offers the one-tap "Choose category" shortcut for an
-  // item with no category yet. Independent of `categories`, which is always
-  // supplied so Fix memory can correct a category that is already set.
-  canPickCategory?: boolean
-  assigningCategory: boolean
-  excludedReason?: string | null
   mutating: boolean
   onStartEdit: () => void
   onCancelEdit: () => void
   onSave: (edit: MemoryItemEdit) => void
   onVerify: () => void
-  onAssignCategory: (categoryId: string | null) => void
   onRemove: () => void
-  onMove: (memoryType: MemoryType) => void
-  // Left over items only. Rejects on failure so the sheet keeps Mike's values.
+  onMove: (type: MemoryType) => void
   onReturn: (req: ReturnMaterialRequest) => Promise<unknown>
-  // Budget cost items only (sheet variant): mark-as-paid capability, when the
-  // surrounding tab wires Money. Absent everywhere else.
-  markPaid?: MarkPaidControls
-  // Left over items only (sheet variant): move to / put back in the Workshop,
-  // when the surrounding tab wires it. Absent everywhere else.
   workshop?: WorkshopSourceControls
-  // 'row' is the compact item scale used where rows must not be confusable with
-  // the category bands above them (Spend → not in a category yet): a smaller
-  // name, one primary action, everything else behind the row's "…".
-  // 'row'   — compact item scale with one primary action (Spend, uncategorised).
-  // 'sheet'  — a plain tappable ledger row: every action lives in one bottom
-  //            sheet opened by tapping the row, instead of five links competing
-  //            for attention on the item itself (Materials).
   variant?: 'card' | 'row' | 'sheet'
-  // Sheet variant only: open this row's action drawer on arrival, for the one
-  // item a cross-job route sent Mike here to correct.
   autoOpen?: boolean
 }
-
 export default function MemoryCard({
   item,
   isEditing,
   submitting,
   verifying,
   errorMsg,
-  categories,
-  canPickCategory: offerCategoryShortcut = false,
-  assigningCategory,
-  excludedReason,
   mutating,
-  onStartEdit,
   onCancelEdit,
   onSave,
   onVerify,
-  onAssignCategory,
   onRemove,
   onMove,
   onReturn,
-  markPaid,
   workshop,
-  variant = 'card',
   autoOpen = false,
 }: MemoryCardProps) {
-  const uncertain = (item.uncertaintyFlags ?? []).length > 0
-  const excludedCopy = excludedReason
-    ? (item.memoryType === 'labour' ? labourExclusionCopy(excludedReason) : spendExclusionCopy(excludedReason))
-    : null
-  const [ackUnsure, setAckUnsure] = useState(false)
-  const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const [picking, setPicking] = useState(false)
-  const [overflowOpen, setOverflowOpen] = useState(false)
-  const [showSource, setShowSource] = useState(false)
-  // autoOpen: this card is the item another screen sent Mike here to correct,
-  // so its drawer is already open when he arrives — the correction is the
-  // reason he tapped, and making him find the row again would waste the trip.
-  const [drawerOpen, setDrawerOpen] = useState(autoOpen)
-  const [returning, setReturning] = useState(false)
-  const dateLabel = DATED_TYPES.has(item.memoryType) ? itemDateLabel(effectiveItemDate(item)) : null
-  const name = itemName(item)
-  const price = itemPrice(item)
-  // Material believed to be in the Workshop is no longer stock sitting on this
-  // job, so the two actions that claim it is — reclassifying it as Used, and
-  // taking it back to the merchant — are withheld until it comes back out. That
-  // keeps the job and the Workshop from stating contradictory things about the
-  // same physical pile; both actions return the moment the move is undone.
-  const inWorkshop = workshopState(item) !== 'not_moved'
-  const move = inWorkshop ? undefined : MOVE_TARGET[item.memoryType]
-  // Returning is a real job event, so it is only offered where one can happen:
-  // a Left over item Mike still has. Delete stays for mistakes.
-  const canReturn = item.memoryType === 'leftover_material' && !inWorkshop
-
-  if (isEditing) {
+  const [open, setOpen] = useState(autoOpen),
+    [returning, setReturning] = useState(false),
+    [unsure, setUnsure] = useState(false)
+  const isHours = item.memoryType === 'labour'
+  const isMaterial = item.memoryType.endsWith('_material')
+  const label = isHours
+    ? item.labourPerson || 'Hours'
+    : isMaterial
+      ? (item.item ?? item.materialName ?? 'Material')
+      : item.summary
+  const state = workshopState(item),
+    linked = state !== 'not_moved'
+  const meta = (
+    isHours
+      ? [item.labourHours ? `${item.labourHours}h` : null, item.labourTask]
+      : [
+          linked
+            ? item.workshopRoughAmount
+            : (item.amount ?? [item.quantity, item.unit].filter(Boolean).join(' ')),
+          item.supplier ?? item.supplierName,
+          item.notes ?? item.locationOrUse,
+        ]
+  )
+    .concat([itemDateLabel(item.date ?? effectiveItemDate(item)), workshopStateDetail(item)])
+    .filter(Boolean)
+    .join(' · ')
+  const move = linked
+    ? undefined
+    : item.memoryType === 'leftover_material'
+      ? { type: 'used_material' as const, label: 'Move to Used' }
+      : item.memoryType === 'used_material'
+        ? { type: 'leftover_material' as const, label: 'Move to Left over' }
+        : undefined
+  const canReturn = item.memoryType === 'leftover_material' && !linked
+  if (isEditing)
     return (
-      <div className="mem-card mem-card--editing">
+      <div className="mem-card">
         <MemoryEditForm
           initial={memoryItemToEdit(item)}
           submitting={submitting}
-          categories={categories}
-          isPaid={markPaid?.isPaid(item) ?? false}
           onSubmit={onSave}
           onCancel={onCancelEdit}
         />
-        {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+        {errorMsg && <p role="alert">{errorMsg}</p>}
       </div>
     )
-  }
-
-  const isRow = variant === 'row'
-
-  // ── Tappable ledger row + one action drawer (state machine) ──
-  if (variant === 'sheet') {
-    // "3 packs · from Jewson" — quantity and where it came from. Spend-dated
-    // types keep their date here (it is the only place it now shows, and a
-    // bought line without a date is a worse record). A returned item's money is
-    // its refund, which is never a price, so it rides in the meta too.
-    const refund = item.memoryType === 'returned_material'
-      ? formatTotalLabel(item.refundAmount ?? null, item.refundCurrency ?? null)
-      : null
-    // Labour reads "Paul · 6h · £20/hour"; everything else "3 packs · from Jewson".
-    const isLabour = item.memoryType === 'labour'
-    const rateLabel = isLabour && item.costQualifier === 'per_hour' && item.costAmount ? `£${item.costAmount}/hour` : null
-    const meta = (isLabour
-      ? [item.labourPerson, item.labourHours ? `${item.labourHours}h` : null, rateLabel]
-      : [
-          // While a leftover is linked to the Workshop, the Workshop's current
-          // wording is the current amount — one memory, one amount, wherever
-          // Mike is looking at it.
-          (inWorkshop ? item.workshopRoughAmount : null)
-            ?? ([item.quantity, item.unit].filter(Boolean).join(' ') || null),
-          item.supplierName ? `from ${item.supplierName}` : null,
-          // Where a leftover actually is ("in the van") is the point of recording it.
-          item.locationOrUse,
-          refund ? `${refund} refund` : null,
-        ]
-    ).concat(dateLabel ? [dateLabel] : [])
-      // Where the material now stands with the Workshop, dated: "in the
-      // workshop since 6 Aug", "used up 12 Aug". The state itself is a chip
-      // above; this is the when.
-      .concat([workshopStateDetail(item)])
-      .filter(Boolean).join(' · ')
-    const label = name ?? item.summary
-    const workshopChip = WORKSHOP_CHIP_LABEL[workshopState(item)]
-    // Uncategorised cost entries can be filed to a category from the drawer.
-    // Already-categorised items deliberately do NOT get this shortcut: changing
-    // an existing category is a correction, and corrections live in Fix memory.
-    const canPickCategory = offerCategoryShortcut && CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId
-    // Cost stated in cost language — never "paid": Budget tracks committed cost.
-    const costLine = price ? `${price} cost` : null
-    const isPaid = markPaid?.isPaid(item) ?? false
-
-    return (
-      <div className={`mem-card mem-card--sheet${uncertain ? ' mem-card--unresolved' : ''}`}>
-        <button type="button" className="mem-row-tap" aria-label={`Open actions for ${label}`} onClick={() => setDrawerOpen(true)}>
-          <span className="mem-row-tap-text">
-            <span className="mem-row-tap-name">
-              {label}
-              {/* A small paid tag — the money moved — without turning the row
-                  into a payments line. Budget inclusion is unaffected. */}
-              {isPaid && <span className="mem-row-paid-tag">Paid</span>}
-            </span>
-            {/* Workshop state in words on its own line, never by fading the row:
-                a used-up leftover is still something Mike recorded, and the job
-                still keeps every cost it ever counted for it. */}
-            {workshopChip && <span className="mem-row-workshop-chip">{workshopChip}</span>}
-            {meta && <span className="mem-row-tap-meta">{meta}</span>}
-          </span>
-          {price && <span className="mem-row-tap-price">{price}</span>}
-          <span className="mem-row-tap-chev" aria-hidden="true">›</span>
-        </button>
-
-        {/* A cost item that isn't counted in Budget yet — still said on the
-            row, not hidden in the drawer: it explains a figure Mike can see. */}
-        {excludedCopy && (
-          <p className="mem-card-notcounted">Not counted yet · {excludedCopy}</p>
-        )}
-
-        {/* Worth checking is a question, not an action, so it stays in front of
-            him rather than moving behind the row's drawer. */}
-        {uncertain && <p className="mem-row-check">Worth checking</p>}
-        {uncertain && !ackUnsure && (
-          <div className="mem-resolve">
-            <button type="button" className="btn-mem-verify" onClick={onVerify} disabled={verifying}>
-              {verifying ? 'Saving…' : 'This is right'}
-            </button>
-            <button type="button" className="btn-mem-unsure" onClick={() => setAckUnsure(true)} disabled={verifying}>
-              Still unsure
-            </button>
-          </div>
-        )}
-
-        {/* One drawer, whose content pushes/replaces between actions and the
-            Show source / Fix memory / Remove item sub-states. */}
-        <ItemActionDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          item={item}
-          title={label}
-          meta={meta || null}
-          costLine={costLine}
-          categories={categories}
-          canPickCategory={canPickCategory}
-          onAssignCategory={onAssignCategory}
-          assigningCategory={assigningCategory}
-          onReturnStart={canReturn ? () => { setDrawerOpen(false); setReturning(true) } : undefined}
-          markPaid={markPaid}
-          workshop={workshop}
-          move={move}
-          onMove={onMove}
-          mutating={mutating}
-          submitting={submitting}
-          errorMsg={errorMsg}
-          onSave={onSave}
-          onRemove={onRemove}
-        />
-
-        {/* The return form is its own flow, opened after the action drawer
-            closes — a transition, never a stacked second drawer. */}
-        {canReturn && (
-          <ReturnMaterialSheet item={item} onReturn={onReturn} controlledOpen={returning} onOpenChange={setReturning} />
-        )}
-        {errorMsg && !drawerOpen && <p className="queue-item-error" role="alert">{errorMsg}</p>}
-      </div>
-    )
-  }
-
   return (
-    <div className={`mem-card${uncertain ? ' mem-card--unresolved' : ''}${isRow ? ' mem-card--row' : ''}`}>
-      {/* Name left, price right, one baseline — the ledger's defining line.
-          A row with no name (a plain note) leads with its summary instead, and
-          the type is stated by the section it sits in, not a label on the row. */}
-      <div className="mem-card-head">
-        {name
-          ? <p className="mem-card-item-name">{name}</p>
-          : <p className="mem-card-summary">{item.summary}</p>
-        }
-        {price && <b className="mem-card-price">{price}</b>}
-      </div>
-      <StructuredFields item={item} dateLabel={isRow ? dateLabel : undefined} />
-      {!isRow && dateLabel && <p className="mem-card-date">{dateLabel}</p>}
-
-      {/* Cost item that isn't counted in Budget yet — say so explicitly. */}
-      {excludedCopy && (
-        <p className="mem-card-notcounted">Not counted yet · {excludedCopy}</p>
-      )}
-
-      {uncertain && !ackUnsure && (
-        <div className="mem-resolve">
-          <button type="button" className="btn-mem-verify" onClick={onVerify} disabled={verifying}>
-            {verifying ? 'Saving…' : 'This is right'}
-          </button>
-          <button type="button" className="btn-mem-unsure" onClick={() => setAckUnsure(true)} disabled={verifying}>
-            Still unsure
-          </button>
-        </div>
-      )}
-
-      {isRow && offerCategoryShortcut && CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && !item.budgetCategoryId && (
-        <button
-          type="button"
-          className="mem-card-pick"
-          disabled={assigningCategory}
-          aria-label={`Pick a category for ${item.materialName ?? item.summary}`}
-          onClick={() => setPicking(true)}
-        >
-          {assigningCategory ? 'Saving…' : 'Pick category ›'}
-        </button>
-      )}
-
-      {/* One action per row: the picker opens directly rather than putting a
-          dropdown in the middle of the ledger. */}
-      {picking && (
-        <BottomSheet title="Pick a category" onClose={() => setPicking(false)}>
-          <div className="pick-cat-list">
-            {categories.map(c => (
-              <button
-                key={c.id}
-                type="button"
-                className="pick-cat-opt"
-                onClick={() => { onAssignCategory(c.id); setPicking(false) }}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
-        </BottomSheet>
-      )}
-
-      {!isRow && CATEGORY_TYPES.has(item.memoryType) && categories.length > 0 && (
-        <label className="mem-card-category">
-          <span className="mem-card-category-label">Budget category</span>
-          <select
-            className="mem-card-category-select"
-            aria-label={`Budget category for ${item.labourTask ?? item.materialName ?? item.summary}`}
-            value={item.budgetCategoryId ?? ''}
-            disabled={assigningCategory}
-            onChange={e => onAssignCategory(e.target.value || null)}
+    <div className="mem-card mem-card--sheet">
+      <button
+        type="button"
+        className="mem-row-tap"
+        aria-label={`Open actions for ${label}`}
+        onClick={() => setOpen(true)}
+      >
+        <span className="mem-row-tap-text">
+          <span
+            className="mem-row-tap-name"
+            {...(!isMaterial && !isHours ? { 'data-builder-note': true } : {})}
           >
-            <option value="">Choose category</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-      )}
-
-      {confirmingRemove ? (
-        // Explicit but lightweight: name the consequence, then two plain buttons.
-        // No modal — the card Mike is about to remove stays in front of him.
-        <div className="mem-remove-confirm">
-          <p className="mem-remove-question">Remove this item?</p>
-          {removalConsequences(item).map(line => (
-            <p key={line} className="mem-remove-consequence">{line}</p>
-          ))}
-          <div className="mem-remove-actions">
-            <button type="button" className="btn-mem-remove-confirm" disabled={mutating} onClick={onRemove}>
-              {mutating ? 'Removing…' : 'Remove'}
-            </button>
-            <button type="button" className="btn-mem-cancel" disabled={mutating} onClick={() => setConfirmingRemove(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : isRow ? (
-        // On a row, source/fix/remove sit behind "…" so the row carries exactly
-        // one visible action and stays at item scale.
-        <div className="mem-row-overflow-wrap">
-          <button
-            type="button"
-            className="btn-row-overflow"
-            aria-label={`More actions for ${item.materialName ?? item.summary}`}
-            aria-haspopup="menu"
-            aria-expanded={overflowOpen}
-            onClick={() => setOverflowOpen(o => !o)}
-          >⋯</button>
-          {overflowOpen && (
-            <div className="mem-row-menu" role="menu">
-              {item.source && (
-                <button type="button" role="menuitem" onClick={() => { setOverflowOpen(false); setShowSource(s => !s) }}>
-                  {showSource ? 'Hide source' : 'Show source'}
-                </button>
-              )}
-              <button type="button" role="menuitem" onClick={() => { setOverflowOpen(false); onStartEdit() }}>Fix memory</button>
-              <button type="button" role="menuitem" className="mem-row-menu-danger" disabled={mutating} onClick={() => { setOverflowOpen(false); setConfirmingRemove(true) }}>
-                Remove item
+            {label}
+          </span>
+          {WORKSHOP_CHIP_LABEL[state] && (
+            <span className="mem-row-workshop-chip">{WORKSHOP_CHIP_LABEL[state]}</span>
+          )}
+          {meta && <span className="mem-row-tap-meta">{meta}</span>}
+        </span>
+        <span className="mem-row-tap-chev" aria-hidden="true">
+          ›
+        </span>
+      </button>
+      {item.uncertaintyFlags?.length > 0 && (
+        <>
+          <p className="mem-row-check">Worth checking</p>
+          {!unsure && (
+            <div className="mem-resolve">
+              <button type="button" className="btn-mem-verify" disabled={verifying} onClick={onVerify}>
+                This is right
+              </button>
+              <button type="button" className="btn-mem-unsure" onClick={() => setUnsure(true)}>
+                Still unsure
               </button>
             </div>
           )}
-        </div>
-      ) : (
-        <div className="mem-card-footer">
-          <SourceContext item={item} />
-          <div className="mem-card-actions">
-            {canReturn && <ReturnMaterialSheet item={item} onReturn={onReturn} />}
-            {move && (
-              <button type="button" className="btn-mem-move" disabled={mutating} onClick={() => onMove(move.type)}>
-                {mutating ? 'Moving…' : move.label}
-              </button>
-            )}
-            <button type="button" className="btn-mem-fix" onClick={onStartEdit}>Fix memory</button>
-            <button type="button" className="btn-mem-remove" disabled={mutating} onClick={() => setConfirmingRemove(true)}>
-              Remove item
-            </button>
-          </div>
-        </div>
+        </>
       )}
-      {isRow && showSource && item.source && (
-        <div className="mem-source-body mem-row-source">
-          <p className="mem-source-label">This came from your note</p>
-          <p className="mem-source-time">Saved {formatSavedStamp(item.source.capturedAt)}</p>
-          {item.source.transcriptText && (
-            <>
-              <p className="mem-source-label">What the system heard</p>
-              <blockquote className="mem-source-quote">{item.source.transcriptText}</blockquote>
-            </>
-          )}
-        </div>
+      <ItemActionDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        item={item}
+        title={label}
+        meta={meta}
+        workshop={workshop}
+        move={move}
+        onMove={onMove}
+        mutating={mutating}
+        submitting={submitting}
+        errorMsg={errorMsg}
+        onSave={onSave}
+        onRemove={onRemove}
+        onReturnStart={
+          canReturn
+            ? () => {
+                setOpen(false)
+                setReturning(true)
+              }
+            : undefined
+        }
+      />
+      {canReturn && (
+        <ReturnMaterialSheet
+          item={item}
+          onReturn={onReturn}
+          controlledOpen={returning}
+          onOpenChange={setReturning}
+        />
       )}
-      {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+      {errorMsg && !open && (
+        <p className="queue-item-error" role="alert">
+          {errorMsg}
+        </p>
+      )}
     </div>
   )
 }

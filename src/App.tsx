@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getBookMoney, getCurrentUser, getJobs, getWorkshop, logout, onUnauthorized, ApiError } from './api'
+import { getCurrentUser, getJobs, getWorkshop, logout, onUnauthorized, ApiError } from './api'
 import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
 import BookHomeScreen from './BookHomeScreen'
-import BookMoneyScreen from './BookMoneyScreen'
 import AllJobsScreen from './AllJobsScreen'
 import WorkshopScreen from './WorkshopScreen'
-import type { AuthUser, BookMoneyResponse, Job, WorkshopResponse } from './types'
+import type { AuthUser, Job, WorkshopResponse } from './types'
 import type { JobEntry } from './CurrentJobWorkspace'
 
 const SELECTED_JOB_ID_KEY = 'job-book-selected-job-id'
@@ -48,7 +47,7 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 type AppState = 'loading' | 'ready' | 'unauthenticated' | 'error' | 'noJobs'
 // The app still launches into the last selected Job Home. Book Home is the
 // level above it, reached from a job — never the default screen.
-type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'bookMoney' | 'workshop'
+type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'workshop'
 
 export default function App() {
   // A password-reset link must work even for a browser that still has a valid
@@ -61,28 +60,8 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('')
   const [view, setView] = useState<AppView>('workspace')
   const [online, setOnline] = useState(navigator.onLine)
-  // Cross-job Money (GET /api/book/money) — one response behind both the Book
-  // Home row and the Money page, loaded at the book level rather than per job.
-  // A failure only costs the Money row: the jobs index never depends on it.
-  const [bookMoney, setBookMoney] = useState<BookMoneyResponse | null>(null)
-  const [bookMoneyState, setBookMoneyState] = useState<'loading' | 'ready' | 'error'>('loading')
-  // Cross-job Workshop (GET /api/workshop) — one response behind both the Book
-  // Home row and the Workshop page, for the same reason Money has one: the
-  // count on the cover and the list inside it must be the same read. Loaded at
-  // the book level, and a failure only costs the Workshop row.
   const [workshopData, setWorkshopData] = useState<WorkshopResponse | null>(null)
   const [workshopState, setWorkshopState] = useState<'loading' | 'ready' | 'error'>('loading')
-  // Settling a supplier account is gated by backend config while real-account
-  // validation is outstanding. Enablement is the backend's statement, never a
-  // guess from this build's environment, and the frontend fails closed: only an
-  // explicit capability of true offers the controls, so a backend too old to
-  // send the field shows no settlement UI rather than a button that cannot work.
-  // The latch below is the second line — the gate can be switched off between
-  // the read and the write — and holds for the session so Mike is never offered
-  // the same unavailable action twice.
-  const [settlementUnavailable, setSettlementUnavailable] = useState(false)
-  // Where a job should open when something outside it sent Mike there — a
-  // supplier line (Budget, that item) or an owed row (that job's Money).
   const [jobEntry, setJobEntry] = useState<JobEntry | null>(null)
   // Current account (for role-gated UI like the internal Support entry).
   // Best-effort: the app works without it; only INTERNAL extras depend on it.
@@ -164,17 +143,6 @@ export default function App() {
       .catch(() => setCurrentUser(null))
   }, [appState])
 
-  // Cross-job Money. Fetched when the book level is opened rather than kept
-  // permanently fresh: it is a summary of facts corrected inside jobs, so every
-  // arrival at Book Home or Money re-reads it and a correction made moments ago
-  // is already reflected.
-  const loadBookMoney = useCallback(() => {
-    setBookMoneyState(prev => (prev === 'ready' ? 'ready' : 'loading'))
-    getBookMoney()
-      .then(res => { setBookMoney(res); setBookMoneyState('ready') })
-      .catch(() => setBookMoneyState('error'))
-  }, [])
-
   // Workshop is availability memory changed from two places — the Workshop page
   // itself and any job's leftover — so it is re-read on every arrival at the
   // book level rather than cached. A leftover moved in a moment ago is already
@@ -187,10 +155,9 @@ export default function App() {
   }, [])
 
   const openBookHome = useCallback(() => {
-    loadBookMoney()
     loadWorkshop()
     setView('bookHome')
-  }, [loadBookMoney, loadWorkshop])
+  }, [loadWorkshop])
 
   const openWorkshop = useCallback(() => {
     track('workshop_opened')
@@ -242,30 +209,12 @@ export default function App() {
     if (cause === 'switch' && selectedJob && selectedJob.id !== job.id) {
       track('job_switched', { job_id: job.id })
     }
-    // Opening a job plainly lands on its home; only an explicit entry (from a
-    // Money row) says otherwise, and it never outlives this one navigation.
     setJobEntry(entry)
     setSelectedJob(job)
     localStorage.setItem(SELECTED_JOB_ID_KEY, job.id)
     setView('workspace')
   }
 
-  // Cross-job Money hands Mike back to the job that owns the fact: a supplier
-  // or missing-price line to the source item in Budget, an owed row to that
-  // job's Money. The job must be one of his current jobs — Money never shows
-  // rows from anywhere else, so a miss here means the jobs list is stale, and
-  // staying put is better than opening the wrong job.
-  function openSourceItem(target: { jobId: string; sourceMemoryItemId: string }) {
-    const job = jobs.find(j => j.id === target.jobId)
-    if (!job) return
-    track('book_money_source_opened', { job_id: job.id })
-    // Which lens shows this item is the job's call, not Money's — see JobEntry.
-    handleSelectJob(job, 'switch', { jobId: job.id, focusItemId: target.sourceMemoryItemId })
-  }
-
-  // Workshop hands Mike back to the job the material came from, at the leftover
-  // itself. Same rule as Money's source routing: the job must be one of his
-  // current jobs, and if it isn't, staying put beats opening the wrong job.
   function openWorkshopSource(target: { jobId: string; sourceMemoryItemId: string | null }) {
     const job = jobs.find(j => j.id === target.jobId)
     if (!job) return
@@ -273,13 +222,6 @@ export default function App() {
       jobId: job.id,
       focusItemId: target.sourceMemoryItemId ?? undefined,
     })
-  }
-
-  function openJobMoney(jobId: string) {
-    const job = jobs.find(j => j.id === jobId)
-    if (!job) return
-    track('book_money_owed_opened', { job_id: job.id })
-    handleSelectJob(job, 'switch', { jobId: job.id, section: 'money' })
   }
 
   function handleJobAdded(job: Job) {
@@ -371,26 +313,9 @@ export default function App() {
     return (
       <BookHomeScreen
         jobs={jobs}
-        money={bookMoney?.bookHome ?? null}
         workshop={workshopData?.bookHome ?? null}
         onOpenAllJobs={() => setView('allJobs')}
-        onOpenMoney={() => { track('book_money_opened'); loadBookMoney(); setView('bookMoney') }}
         onOpenWorkshop={openWorkshop}
-      />
-    )
-  }
-
-  if (view === 'bookMoney') {
-    return (
-      <BookMoneyScreen
-        data={bookMoney}
-        loadState={bookMoneyState}
-        onBack={() => setView('bookHome')}
-        onReload={loadBookMoney}
-        settlementAvailable={bookMoney?.capabilities?.supplierAccountSettlement === true && !settlementUnavailable}
-        onSettlementUnavailable={() => setSettlementUnavailable(true)}
-        onOpenSource={openSourceItem}
-        onOpenJobMoney={openJobMoney}
       />
     )
   }

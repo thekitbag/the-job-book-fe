@@ -14,11 +14,12 @@ vi.mock('../api', () => ({
   getDraftFacts: vi.fn(() => Promise.resolve([])),
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-x', photos: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-x', receipts: [] })),
   getNoteTranscript: vi.fn(),
   getReviewQueue: vi.fn(),
-  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
+  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-001' }, generatedAt: '', sections: [], hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] } })),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
 }))
 
