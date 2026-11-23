@@ -26,7 +26,7 @@ it('snapshots in-progress order at open, last-recorded first, despite a refresh'
   const rows = () =>
     screen
       .getAllByRole('button', { name: /^(A|B|C)$/ })
-      .map((b) => b.textContent)
+      .map((b) => b.querySelector('strong')?.textContent)
   expect(rows()).toEqual(['B', 'A', 'C'])
   rerender(
     <CaptureJobPicker
@@ -74,7 +74,7 @@ it('fills an initially empty picker when jobs arrive, then freezes those rows', 
   expect(
     screen
       .getAllByRole('button', { name: /^(A|B)$/ })
-      .map((b) => b.textContent),
+      .map((b) => b.querySelector('strong')?.textContent),
   ).toEqual(['B', 'A'])
   rerender(
     <CaptureJobPicker
@@ -86,6 +86,30 @@ it('fills an initially empty picker when jobs arrive, then freezes those rows', 
   expect(
     screen
       .getAllByRole('button', { name: /^(A|B)$/ })
-      .map((b) => b.textContent),
+      .map((b) => b.querySelector('strong')?.textContent),
   ).toEqual(['B', 'A'])
+})
+
+it('confirms the capture is saved and shows when each job was last touched', () => {
+  render(
+    <CaptureJobPicker
+      jobs={[job('A'), job('Planned', 'planning')]}
+      order={['A']}
+      lastJobId={null}
+      online
+      savedLabel="Recording saved"
+      lastActivity={{ A: new Date().toISOString() }}
+      onChoose={vi.fn()}
+      onClose={vi.fn()}
+      onJobAdded={vi.fn()}
+    />,
+  )
+  expect(screen.getByText('Recording saved')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'A' })).toHaveTextContent('Today')
+  fireEvent.click(
+    screen.getByRole('button', { name: /Planning and finished jobs/ }),
+  )
+  expect(screen.getByRole('button', { name: 'Planned' })).toHaveTextContent(
+    'Planning',
+  )
 })

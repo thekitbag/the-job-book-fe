@@ -211,6 +211,16 @@ export default function CaptureFlow({
         onChoose={choose}
         onJobAdded={onJobAdded}
         title={flow.mode === 'move' ? 'Move to which job?' : 'Which job?'}
+        savedLabel={
+          flow.mode === 'picker'
+            ? target.kind === 'photo'
+              ? 'Photo saved'
+              : 'Recording saved'
+            : undefined
+        }
+        lastActivity={Object.fromEntries(
+          (home?.inProgressJobs ?? []).map((j) => [j.id, j.lastActivityAt]),
+        )}
         onClose={close}
       />
     )

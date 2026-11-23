@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import BottomSheet from './BottomSheet'
 import NewJobSheet from './NewJobSheet'
+import { formatJobDay } from './SourceHistory'
 import type { Job } from './types'
 export default function CaptureJobPicker({
   jobs,
@@ -11,6 +12,8 @@ export default function CaptureJobPicker({
   onClose,
   onJobAdded,
   title = 'Which job?',
+  savedLabel,
+  lastActivity = {},
 }: {
   jobs: Job[]
   order: string[]
@@ -20,6 +23,8 @@ export default function CaptureJobPicker({
   onClose: () => void
   onJobAdded: (job: Job) => void
   title?: string
+  savedLabel?: string
+  lastActivity?: Record<string, string>
 }) {
   const initialOrder = useRef(order),
     initialLast = useRef(lastJobId)
@@ -77,51 +82,99 @@ export default function CaptureJobPicker({
     )
   return (
     <BottomSheet title={title} onClose={onClose}>
+      {savedLabel && (
+        <p className="capture-picker-saved">
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4.5 12.5l5 5L19.5 7" />
+          </svg>
+          {savedLabel}
+        </p>
+      )}
       <div className="capture-picker-list">
         {snapshot
           .filter((j) => j.status === 'started' || other)
-          .map((job) => (
+          .map((job) => {
+            const detail =
+              job.status === 'planning'
+                ? 'Planning'
+                : job.status === 'finished'
+                  ? 'Finished'
+                  : lastActivity[job.id]
+                    ? formatJobDay(lastActivity[job.id])
+                    : ''
+            return (
+              <button
+                className="capture-job-choice"
+                type="button"
+                key={job.id}
+                aria-label={job.title}
+                disabled={saving}
+                onClick={() => {
+                  void choose(job, 'picker')
+                }}
+              >
+                <span>
+                  <strong>{job.title}</strong>
+                  {detail && <small>{detail}</small>}
+                </span>
+                <span className="capture-chevron" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+            )
+          })}
+        {!other &&
+          snapshot.some(
+            (j) => j.status === 'planning' || j.status === 'finished',
+          ) && (
             <button
-              className="capture-job-choice"
+              className="capture-job-choice capture-picker-more"
               type="button"
-              key={job.id}
-              disabled={saving}
-              onClick={() => {
-                void choose(job, 'picker')
-              }}
+              onClick={() => setOther(true)}
             >
-              {job.title}
+              <span>Planning and finished jobs</span>
+              <span className="capture-chevron" aria-hidden="true">
+                ›
+              </span>
             </button>
-          ))}
-      </div>
-      {!other &&
-        snapshot.some(
-          (j) => j.status === 'planning' || j.status === 'finished',
-        ) && (
+          )}
+        {online ? (
           <button
-            className="capture-link"
+            className="capture-job-choice capture-picker-new"
             type="button"
-            onClick={() => setOther(true)}
+            disabled={saving}
+            onClick={() => setAdding(true)}
           >
-            Planning and finished jobs
+            <span>
+              <span aria-hidden="true">+ </span>New job
+            </span>
           </button>
+        ) : (
+          <p className="capture-picker-note">
+            New job needs signal. You can still choose a saved job.
+          </p>
         )}
-      {online ? (
-        <button
-          className="capture-link"
-          type="button"
-          disabled={saving}
-          onClick={() => setAdding(true)}
-        >
-          New job
-        </button>
-      ) : (
-        <p>New job needs signal. You can still choose a saved job.</p>
-      )}
+      </div>
       {error && <p role="alert">{error}</p>}
-      <button className="capture-secondary" type="button" onClick={onClose}>
-        Later
-      </button>
+      <div className="capture-picker-footer">
+        <button
+          className="capture-picker-later"
+          type="button"
+          onClick={onClose}
+        >
+          Later
+        </button>
+      </div>
     </BottomSheet>
   )
 }
