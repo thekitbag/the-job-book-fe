@@ -30,6 +30,23 @@ export function formatSavedStamp(iso: string, now: Date = new Date()): string {
   return `${date}, ${time}`
 }
 
+// A job row only needs roughly when it was last touched, in the builder's terms.
+export function formatJobDay(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const day = (x: Date) => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate())
+  const daysAgo = Math.round((day(now) - day(d)) / 86_400_000)
+  if (daysAgo === 0) return 'Today'
+  if (daysAgo === 1) return 'Yesterday'
+  if (daysAgo > 1 && daysAgo < 7)
+    return d.toLocaleDateString('en-GB', { weekday: 'short' })
+  return d.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  })
+}
+
 export function TranscriptSection({ note }: { note: LocalNote }) {
   const [open, setOpen] = useState(false)
   const { transcriptStatus, transcriptText } = note

@@ -1,9 +1,47 @@
 import { claimUnmatchedNote } from './db'
 import { getLocalOwnerId } from './localOwner'
 import { useLocalCaptures } from './useLocalCaptures'
-import { formatDuration, formatSavedStamp } from './SourceHistory'
+import { formatDuration, formatJobDay, formatSavedStamp } from './SourceHistory'
 import type { CaptureHome } from './captureTypes'
 import type { AuthUser, Job } from './types'
+function MicIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="30"
+      height="30"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="2.5" width="6" height="11.5" rx="3" />
+      <path d="M5 10.5a7 7 0 0 0 14 0" />
+      <path d="M12 17.5v4" />
+    </svg>
+  )
+}
+
+function CameraIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="26"
+      height="26"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3.5 7.5h3.5l2-3h6l2 3h3.5v12h-17z" />
+      <circle cx="12" cy="13.2" r="3.8" />
+    </svg>
+  )
+}
+
 export default function HomeScreen({
   jobs,
   home,
@@ -57,14 +95,32 @@ export default function HomeScreen({
           toCheckCount: 0,
         })),
     count =
-      Math.max(home?.unfiledCount ?? 0, localUploadedUnfiled) + localUnfiled
+      Math.max(home?.unfiledCount ?? 0, localUploadedUnfiled) + localUnfiled,
+    workshopCount = home?.workshop.availableCount ?? 0,
+    workshopCountLabel =
+      workshopCount > 0
+        ? `${workshopCount} ${workshopCount === 1 ? 'thing' : 'things'}`
+        : '',
+    workshopPreview = home?.workshop.preview.length
+      ? home.workshop.preview.join(' · ') +
+        (workshopCount > home.workshop.preview.length
+          ? ` · +${workshopCount - home.workshop.preview.length} more`
+          : '')
+      : '',
+    otherJobsSummary = home
+      ? [
+          home.otherJobs.planningCount > 0 &&
+            `${home.otherJobs.planningCount} planning`,
+          home.otherJobs.finishedCount > 0 &&
+            `${home.otherJobs.finishedCount} finished`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : ''
   return (
     <main className="capture-home">
       <header className="capture-home-header">
         <h1>The Job Book</h1>
-        <button type="button" className="capture-link" onClick={onLogout}>
-          Log out
-        </button>
       </header>
       {user?.role === 'INTERNAL' && (
         <a className="btn-support-entry" href="/internal/support">
@@ -79,8 +135,13 @@ export default function HomeScreen({
           disabled={!supported}
           onClick={onRecord}
         >
-          <span aria-hidden="true">●</span> Record
-          <small>Tap · say it · done</small>
+          <span className="capture-home-mic">
+            <MicIcon />
+          </span>
+          <span className="capture-home-record-text">
+            Record
+            <small>About any job</small>
+          </span>
         </button>
       ) : (
         <div className="capture-home-recording" role="status">
@@ -99,8 +160,31 @@ export default function HomeScreen({
         </p>
       )}
       <button type="button" className="capture-photo-action" onClick={onPhoto}>
+        <CameraIcon />
         Add photo
       </button>
+      {count > 0 && (
+        <button
+          type="button"
+          className="capture-home-unfiled"
+          onClick={onOpenUnfiled}
+        >
+          <span>
+            <strong>Not filed yet</strong>
+            <small>
+              {count === 1
+                ? '1 waiting for a job'
+                : `${count} waiting for a job`}
+            </small>
+          </span>
+          <span className="capture-home-row-end">
+            <b>{count}</b>
+            <span className="capture-chevron" aria-hidden="true">
+              ›
+            </span>
+          </span>
+        </button>
+      )}
       <section aria-label="In progress jobs" className="capture-home-jobs">
         <h2>In progress</h2>
         {!known && !home && !rows.length && (
@@ -119,60 +203,79 @@ export default function HomeScreen({
           >
             <span>
               <strong>{j.title}</strong>
-              <small>{formatSavedStamp(j.lastActivityAt)}</small>
+              <small>{formatJobDay(j.lastActivityAt)}</small>
             </span>
-            <span>
-              {j.toCheckCount > 0 && <small>{j.toCheckCount} to check</small>}
-              <span aria-hidden="true">›</span>
+            <span className="capture-home-row-end">
+              {j.toCheckCount > 0 && (
+                <span className="capture-home-tag">
+                  {j.toCheckCount} to check
+                </span>
+              )}
+              <span className="capture-chevron" aria-hidden="true">
+                ›
+              </span>
             </span>
           </button>
         ))}
       </section>
-      {count > 0 && (
+      <section aria-label="Workshop" className="capture-home-section">
+        <h2>Workshop</h2>
         <button
           type="button"
-          className="capture-home-destination"
-          onClick={onOpenUnfiled}
+          className="capture-home-job"
+          aria-label={[
+            'Workshop, what’s in there',
+            workshopCountLabel,
+            workshopPreview,
+          ]
+            .filter(Boolean)
+            .join(', ')}
+          onClick={onWorkshop}
         >
-          Not filed yet <span>{count} ›</span>
+          <span>
+            <strong>What’s in there</strong>
+            {workshopPreview && <small>{workshopPreview}</small>}
+          </span>
+          <span className="capture-home-row-end">
+            {workshopCountLabel && (
+              <span className="capture-home-count">{workshopCountLabel}</span>
+            )}
+            <span className="capture-chevron" aria-hidden="true">
+              ›
+            </span>
+          </span>
         </button>
-      )}
-      <button
-        type="button"
-        className="capture-home-destination"
-        onClick={onWorkshop}
-      >
-        <span>
-          Workshop
-          {home && home.workshop.preview.length > 0 && (
-            <small className="capture-workshop-preview">
-              {home.workshop.preview.join(' · ')}
-              {home.workshop.availableCount > home.workshop.preview.length
-                ? ` · +${home.workshop.availableCount - home.workshop.preview.length} more`
-                : ''}
-            </small>
-          )}
-        </span>
-        <span>
-          {home && home.workshop.availableCount > 0
-            ? `${home.workshop.availableCount} ${home.workshop.availableCount === 1 ? 'thing' : 'things'}`
-            : ''}{' '}
-          ›
-        </span>
-      </button>
+      </section>
       {known && (
-        <div className="capture-home-other">
+        <section
+          aria-label="Other jobs and new job"
+          className="capture-home-section capture-home-more"
+        >
           <button
             type="button"
-            className="capture-link"
+            className="capture-home-job"
             onClick={onOpenAllJobs}
           >
-            Other jobs
+            <span>
+              <strong>Other jobs</strong>
+              {otherJobsSummary && <small>{otherJobsSummary}</small>}
+            </span>
+            <span className="capture-home-row-end">
+              <span className="capture-chevron" aria-hidden="true">
+                ›
+              </span>
+            </span>
           </button>
-          <button type="button" className="capture-link" onClick={onNewJob}>
-            New job
+          <button
+            type="button"
+            className="capture-home-job capture-home-new"
+            onClick={onNewJob}
+          >
+            <span>
+              <span aria-hidden="true">+ </span>New job
+            </span>
           </button>
-        </div>
+        </section>
       )}
       {unmatched.length > 0 && (
         <section
@@ -201,6 +304,11 @@ export default function HomeScreen({
           ))}
         </section>
       )}
+      <footer className="capture-home-footer">
+        <button type="button" className="capture-link" onClick={onLogout}>
+          Log out
+        </button>
+      </footer>
     </main>
   )
 }
