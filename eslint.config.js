@@ -12,6 +12,7 @@ export default tseslint.config(
       'coverage',
       'playwright-report',
       'test-results',
+      'integration-results',
       'dev-dist',
     ],
   },
@@ -49,7 +50,7 @@ export default tseslint.config(
   },
   {
     // Node-context files: configs, scripts, and Playwright specs run under Node.
-    files: ['*.{js,ts}', 'scripts/**/*.js', 'e2e/**/*.ts'],
+    files: ['*.{js,ts}', 'scripts/**/*.js', 'e2e/**/*.ts', 'integration/**/*.{ts,mts}'],
     languageOptions: {
       globals: globals.node,
     },

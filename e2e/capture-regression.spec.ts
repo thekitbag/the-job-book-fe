@@ -1,6 +1,12 @@
+import { openPilotJob } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
 test.use({
-  launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
+  launchOptions: {
+    args: [
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+    ],
+  },
   permissions: ['microphone'],
 })
 async function notes(page: Page) {
@@ -11,7 +17,13 @@ async function notes(page: Page) {
       r.onerror = () => reject(r.error)
     })
     const values = await new Promise<
-      { jobId: string; clientNoteId: string; localState: string; mimeType: string; blob: Blob }[]
+      {
+        jobId: string
+        clientNoteId: string
+        localState: string
+        mimeType: string
+        blob: Blob
+      }[]
     >((resolve, reject) => {
       const r = db.transaction('notes').objectStore('notes').getAll()
       r.onsuccess = () => resolve(r.result)
@@ -32,13 +44,15 @@ for (const offline of [false, true])
     page,
     context,
   }) => {
-    await page.goto('/')
+    await openPilotJob(page)
     await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
     await page.getByRole('button', { name: 'Open Job log' }).click()
-    await expect(page.getByText('Recording saved — transcript pending.')).toHaveCount(1)
+    const count = await page.locator('.job-log-entry').count()
     if (offline) await context.setOffline(true)
     await page.getByRole('button', { name: 'Start recording' }).click()
-    await expect(page.getByRole('button', { name: 'Stop recording' })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Stop recording' }),
+    ).toBeVisible()
     await page.waitForTimeout(500)
     await page.getByRole('button', { name: 'Stop recording' }).click()
     await expect.poll(async () => (await notes(page)).length).toBe(1)
@@ -51,10 +65,13 @@ for (const offline of [false, true])
       await expect(page.getByText('Saved on this phone').first()).toBeVisible()
       await context.setOffline(false)
     }
-    await expect.poll(async () => (await notes(page))[0]?.state).toBe('uploaded')
+    await expect
+      .poll(async () => (await notes(page))[0]?.state)
+      .toBe('uploaded')
     expect((await notes(page))[0].id).toBe(saved.id)
-    await expect(page.getByText('Recording saved — transcript pending.')).toHaveCount(2)
+    await expect(page.locator('.job-log-entry')).toHaveCount(count + 1)
     await page.reload()
+    await page.getByRole('button', { name: /^Garden Room/ }).click()
     await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
     expect((await notes(page))[0].id).toBe(saved.id)
   })

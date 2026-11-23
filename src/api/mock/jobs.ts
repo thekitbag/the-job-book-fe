@@ -1,9 +1,14 @@
 import type { CreateJobRequest, EditableJobStatus, Job } from '../../types'
 import { ApiError } from '../client'
 import { delay } from './util'
-import { getMockSession, MOCK_MIKE_EMAIL } from './auth'
+import { getMockSession } from './auth'
 
-const EDITABLE_STATUSES: EditableJobStatus[] = ['planning', 'started', 'finished', 'archived']
+const EDITABLE_STATUSES: EditableJobStatus[] = [
+  'planning',
+  'started',
+  'finished',
+  'archived',
+]
 
 const SEED_JOBS: Job[] = [
   {
@@ -40,7 +45,8 @@ const SEED_JOBS: Job[] = [
     id: 'job-pilot-planning-004',
     title: 'Full re-roof and rear extension at the Hollybush Farmhouse annexe',
     jobType: 'other',
-    roughLocationOrLabel: 'The Hollybush Farmhouse annexe, Lower Wraxall Lane, Bradford-on-Avon',
+    roughLocationOrLabel:
+      'The Hollybush Farmhouse annexe, Lower Wraxall Lane, Bradford-on-Avon',
     status: 'planning',
     createdAt: '2026-05-12T08:00:00Z',
     updatedAt: '2026-06-02T16:00:00Z',
@@ -74,10 +80,16 @@ const SEED_JOBS: Job[] = [
     updatedAt: '2026-02-01T09:00:00Z',
   },
 ]
-export const MOCK_JOBS: Job[] = SEED_JOBS.map(job => ({ ...job }))
+const owners = new Map(SEED_JOBS.map((j) => [j.id, 'user-mock-mike']))
+export function mockOwnsJob(id: string) {
+  return owners.get(id) === getMockSession()?.id
+}
+export const MOCK_JOBS: Job[] = SEED_JOBS.map((job) => ({ ...job }))
 
 export function _resetMockJobsForTesting(): void {
-  MOCK_JOBS.splice(0, MOCK_JOBS.length, ...SEED_JOBS.map(job => ({ ...job })))
+  MOCK_JOBS.splice(0, MOCK_JOBS.length, ...SEED_JOBS.map((job) => ({ ...job })))
+  owners.clear()
+  SEED_JOBS.forEach((j) => owners.set(j.id, 'user-mock-mike'))
 }
 
 // Prefers the most recently updated started job, then planning, then
@@ -87,8 +99,11 @@ export function _resetMockJobsForTesting(): void {
 export async function mockGetCurrentJob(): Promise<Job> {
   await delay(200)
   const byStatus = (s: Job['status']) =>
-    [...MOCK_JOBS].filter(j => j.status === s).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
-  const job = byStatus('started') ?? byStatus('planning') ?? byStatus('finished')
+    [...MOCK_JOBS]
+      .filter((j) => j.status === s)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+  const job =
+    byStatus('started') ?? byStatus('planning') ?? byStatus('finished')
   if (!job) throw new ApiError('No jobs', 404)
   return job
 }
@@ -97,10 +112,10 @@ export async function mockGetJobs(): Promise<Job[]> {
   await delay(300)
   // A signed-up mock account other than seeded Mike starts with no jobs.
   const session = getMockSession()
-  if (session && session.email !== MOCK_MIKE_EMAIL) return []
+  if (!session) throw new ApiError('Unauthorized', 401)
   // Planning/started/finished jobs stay visible; archived never appears in
   // the normal job list — it's an archive action, not a delete.
-  return MOCK_JOBS.filter(j => j.status !== 'archived')
+  return MOCK_JOBS.filter((j) => j.status !== 'archived' && mockOwnsJob(j.id))
 }
 
 // Mirrors the backend create contract: title required after trimming, Where
@@ -115,7 +130,8 @@ export async function mockCreateJob(req: CreateJobRequest): Promise<Job> {
   const where = (req.roughLocationOrLabel ?? '').trim()
   if (where.length > 160) throw new ApiError('Where is too long', 400)
   const status = req.status ?? 'started'
-  if (status !== 'planning' && status !== 'started') throw new ApiError('Invalid status', 400)
+  if (status !== 'planning' && status !== 'started')
+    throw new ApiError('Invalid status', 400)
   const newJob: Job = {
     id: `job-mock-${Date.now()}`,
     title,
@@ -125,17 +141,22 @@ export async function mockCreateJob(req: CreateJobRequest): Promise<Job> {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
+  owners.set(newJob.id, getMockSession()?.id ?? '')
   MOCK_JOBS.unshift(newJob)
   return newJob
 }
 
 // Owner-scoped title/status edit, mirroring backend validation (title:
 // trim, non-blank, ≤80; status: one of planning/started/finished/archived).
-export async function mockPatchJob(jobId: string, req: { title?: string; status?: EditableJobStatus }): Promise<Job> {
+export async function mockPatchJob(
+  jobId: string,
+  req: { title?: string; status?: EditableJobStatus },
+): Promise<Job> {
   await delay(300)
-  const job = MOCK_JOBS.find(j => j.id === jobId)
+  const job = MOCK_JOBS.find((j) => j.id === jobId)
   if (!job) throw new ApiError('Job not found', 404)
-  if (req.title === undefined && req.status === undefined) throw new ApiError('No editable fields', 400)
+  if (req.title === undefined && req.status === undefined)
+    throw new ApiError('No editable fields', 400)
   if (req.title !== undefined) {
     const title = req.title.trim()
     if (!title) throw new ApiError('Title is required', 400)
@@ -143,7 +164,8 @@ export async function mockPatchJob(jobId: string, req: { title?: string; status?
     job.title = title
   }
   if (req.status !== undefined) {
-    if (!EDITABLE_STATUSES.includes(req.status)) throw new ApiError('Invalid status', 400)
+    if (!EDITABLE_STATUSES.includes(req.status))
+      throw new ApiError('Invalid status', 400)
     job.status = req.status
   }
   job.updatedAt = new Date().toISOString()

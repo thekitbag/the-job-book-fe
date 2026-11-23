@@ -8,7 +8,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react'
-import { useRecorder } from './useRecorder'
+import type { CaptureFlowState, CaptureTarget } from './captureTypes'
+import { useRecorder, isRecordingSupported } from './useRecorder'
 import { useSync } from './useSync'
 import {
   captureIdentity,
@@ -24,16 +25,34 @@ import {
   getLatestSavedCapture,
   persistCapturedNote,
   subscribeCaptureSaves,
+  getLatestSavedPhoto,
+  createCapturedPhoto,
+  persistCapturedPhoto,
+  getFailedPhotos,
 } from './capturePersistence'
 import { durationBucket, mimeTypeFamily, track } from './analytics'
 import RecordingControls from './RecordingControls'
 
 function useCaptureRoot() {
   const [syncEnabled, setSyncEnabled] = useState(true)
+  const [revision, setRevision] = useState(0),
+    [flowState, setFlowState] = useState<
+      (CaptureFlowState & { boundary: string }) | null
+    >(null),
+    [photoError, setPhotoError] = useState(''),
+    [message, setMessage] = useState('')
   const sync = useSync(
-    useCallback(() => {}, []),
+    useCallback(() => {
+      setRevision((v) => v + 1)
+    }, []),
     syncEnabled,
   )
+  const setFlow = useCallback(
+    (flow: CaptureFlowState | null) =>
+      setFlowState(flow ? { ...flow, boundary: getCaptureSessionId() } : null),
+    [],
+  )
+  const flow = flowState?.boundary === getCaptureSessionId() ? flowState : null
   const recorder = useRecorder()
   const ownerSnapshot = useSyncExternalStore(
     subscribeLocalOwner,
@@ -51,6 +70,59 @@ function useCaptureRoot() {
     )
       recorder.stop()
   }, [ownerSnapshot, recorder])
+  const latestNote = getLatestSavedCapture(),
+    latestPhoto = getLatestSavedPhoto()
+  useEffect(() => {
+    const saved = latestNote ?? latestPhoto
+    if (!saved) return
+    if (saved.captureSessionId === getCaptureSessionId()) {
+      const target: CaptureTarget =
+        'clientNoteId' in saved
+          ? {
+              kind: 'note',
+              localId: saved.clientNoteId,
+              jobId: saved.jobId,
+              at: saved.capturedAt,
+              context: saved.captureContext ?? 'job',
+            }
+          : {
+              kind: 'photo',
+              localId: saved.clientPhotoId,
+              jobId: saved.jobId,
+              at: saved.capturedAt,
+              context: saved.captureContext ?? 'home',
+            }
+      setFlow({ mode: saved.jobId ? 'saved' : 'picker', target })
+    }
+    dismissSavedCapture()
+  }, [latestNote, latestPhoto, setFlow])
+  const previousBoundary = useRef(getCaptureSessionId())
+  useEffect(() => {
+    const boundary = getCaptureSessionId()
+    if (previousBoundary.current !== boundary) {
+      previousBoundary.current = boundary
+      setFlow(null)
+      setMessage('')
+      setPhotoError('')
+    }
+  }, [ownerSnapshot, setFlow])
+  const pickPhoto = useCallback(
+    async (file: File, jobId: string | null = null) => {
+      setPhotoError('')
+      try {
+        const photo = await createCapturedPhoto(file, jobId)
+        return await persistCapturedPhoto(photo)
+      } catch (e) {
+        setPhotoError(
+          e instanceof Error
+            ? e.message
+            : 'Could not save that photo. Try again.',
+        )
+        return false
+      }
+    },
+    [],
+  )
   const record = useCallback(
     async ({
       jobId,
@@ -68,6 +140,7 @@ function useCaptureRoot() {
         const started = await recorder.start(async (result) => {
           track('record_completed', {
             ...(jobId ? { job_id: jobId } : {}),
+            context: jobId ? 'job' : 'home',
             duration_bucket: durationBucket(result.durationMs),
             mime_type_family: mimeTypeFamily(result.mimeType),
           })
@@ -76,7 +149,10 @@ function useCaptureRoot() {
           if (await persistCapturedNote(note)) void sync.syncAll()
         })
         if (started) {
-          track('record_started', jobId ? { job_id: jobId } : {})
+          track('record_started', {
+            context: jobId ? 'job' : 'home',
+            ...(jobId ? { job_id: jobId } : {}),
+          })
           if (identity.captureSessionId !== getCaptureSessionId())
             recorder.stop()
         } else
@@ -92,6 +168,17 @@ function useCaptureRoot() {
   )
   return {
     ...sync,
+    supported: isRecordingSupported,
+    revision,
+    flow,
+    setFlow,
+    message,
+    setMessage,
+    pickPhoto,
+    photoError,
+    clearPhotoError: () => setPhotoError(''),
+    openFile: (target: CaptureTarget) => setFlow({ mode: 'picker', target }),
+    openMove: (target: CaptureTarget) => setFlow({ mode: 'move', target }),
     recorder,
     record,
     recordingTitle,
@@ -116,9 +203,9 @@ export function CaptureSyncProvider({ children }: { children: ReactNode }) {
 function CaptureSaveNotice() {
   useSyncExternalStore(subscribeCaptureSaves, captureSaveSnapshot)
   useSyncExternalStore(subscribeLocalOwner, localOwnerSnapshot)
-  const failures = getFailedCaptures(),
-    saved = getLatestSavedCapture()
-  if (!failures.length && saved?.jobId !== null) return null
+  const failures = getFailedCaptures()
+  const photos = getFailedPhotos()
+  if (!failures.length && !photos.length) return null
   return (
     <div className="capture-save-notice">
       {failures.map(({ note, error, saving }) => (
@@ -146,14 +233,26 @@ function CaptureSaveNotice() {
           </button>
         </div>
       ))}
-      {saved?.jobId === null && (
-        <div role="status">
-          <p>Recording saved on this phone.</p>
-          <button type="button" onClick={dismissSavedCapture}>
-            Dismiss
+      {photos.map(({ photo, saving }) => (
+        <div
+          className="capture-save-failure"
+          role="alert"
+          key={photo.clientPhotoId}
+        >
+          <p>
+            This photo wasn’t saved. Keep this page open and try saving again.
+          </p>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              void persistCapturedPhoto(photo)
+            }}
+          >
+            {saving ? 'Trying to save…' : 'Try saving photo again'}
           </button>
         </div>
-      )}
+      ))}
     </div>
   )
 }

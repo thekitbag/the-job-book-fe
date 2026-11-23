@@ -6,7 +6,10 @@ import type { Locator, Page } from '@playwright/test'
  * memory, remove item) lives in one bottom sheet opened by tapping it. Opens
  * that sheet for a given card and returns it.
  */
-export async function openRowActions(page: Page, card: Locator): Promise<Locator> {
+export async function openRowActions(
+  page: Page,
+  card: Locator,
+): Promise<Locator> {
   await card.locator('.mem-row-tap').click()
   return page.getByRole('dialog').first()
 }
@@ -30,4 +33,10 @@ export async function openNotCounted(page: Page): Promise<Locator> {
   const toggle = area.getByRole('button', { name: /add prices/i })
   if (await toggle.count()) await toggle.click()
   return area
+}
+
+export async function openPilotJob(page: Page) {
+  await page.goto('/')
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
+  await page.getByRole('button', { name: 'Open Hours' }).waitFor()
 }

@@ -1,171 +1,135 @@
 import { useCallback, useEffect, useRef } from 'react'
 import {
   getNote,
+  getPhoto,
   getPendingNotes,
+  getPendingPhotos,
   patchNote,
+  patchPhoto,
   resetInterruptedUploads,
   subscribeLocalCaptures,
 } from './db'
-import { uploadNote as apiUploadNote } from './api'
-import { ApiError } from './api/client'
 import {
   canSyncCapture,
   getCaptureSessionId,
   isCurrentCaptureSession,
   subscribeLocalOwner,
 } from './localOwner'
-import { mimeTypeFamily, safeErrorKind, track } from './analytics'
-import type { LocalNote } from './types'
-const MAX_ATTEMPTS = 5
-const pending = (n: LocalNote) =>
-  n.localState === 'saved_local' || n.localState === 'upload_failed'
-
-/** The single engine is mounted by CaptureSyncProvider above the app screens. */
+import { syncNote, syncPhoto, terminal, needsSync } from './captureSync'
+import { safeErrorKind, track } from './analytics'
+/** Exactly one production engine, mounted by CaptureSyncProvider. */
 export function useSync(onNotesChanged: () => void, enabled = true) {
-  const inFlight = useRef(new Set<string>())
-  const enabledRef = useRef(enabled)
+  const inFlight = useRef(new Set<string>()),
+    enabledRef = useRef(enabled)
   enabledRef.current = enabled
-  const onChangedRef = useRef(onNotesChanged)
-  onChangedRef.current = onNotesChanged
+  const changed = useRef(onNotesChanged)
+  changed.current = onNotesChanged
   const notify = useCallback(() => {
-    void Promise.resolve(onChangedRef.current()).catch(() => {})
+    void Promise.resolve(changed.current()).catch(() => {})
   }, [])
-  const uploadOne = useCallback(
-    async (id: string) => {
-      if (!enabledRef.current || !navigator.onLine || inFlight.current.has(id))
+  const process = useCallback(
+    async function process(kind: 'note' | 'photo', id: string): Promise<void> {
+      const key = kind === 'note' ? id : 'photo:' + id
+      if (!enabledRef.current || !navigator.onLine || inFlight.current.has(key))
         return
-      inFlight.current.add(id)
-      const session = getCaptureSessionId()
-      let sent: LocalNote | undefined
+      inFlight.current.add(key)
+      const boundary = getCaptureSessionId(),
+        alive = () => enabledRef.current && isCurrentCaptureSession(boundary)
+      const read = () => (kind === 'note' ? getNote(id) : getPhoto(id))
+      const patch = (value: Parameters<typeof patchNote>[1]) =>
+        kind === 'note' ? patchNote(id, value) : patchPhoto(id, value)
+      let started = false,
+        succeeded = false
       try {
-        let fresh = await getNote(id)
-        if (
-          !fresh ||
-          !pending(fresh) ||
-          !fresh.jobId ||
-          !canSyncCapture(fresh) ||
-          !isCurrentCaptureSession(session) ||
-          !enabledRef.current
-        )
+        const item = await read()
+        if (!item || !needsSync(item) || !canSyncCapture(item) || !alive())
           return
-        await patchNote(id, {
+        if (kind === 'photo' && !item.ownerUserId) return
+        started = true
+        await patch({
           localState: 'uploading',
           lastUploadAttemptAt: new Date().toISOString(),
         })
         notify()
-        // A picker/save may have changed the row while the transaction waited.
-        fresh = await getNote(id)
-        if (
-          !fresh ||
-          !canSyncCapture(fresh) ||
-          !isCurrentCaptureSession(session) ||
-          !enabledRef.current
-        )
-          return
-        if (!fresh.jobId) {
-          await patchNote(id, { localState: 'saved_local' })
-          return
-        }
-        sent = fresh
-        track('note_upload_started', {
-          job_id: sent.jobId,
-          mime_type_family: mimeTypeFamily(sent.mimeType),
-        })
-        const { noteId } = await apiUploadNote(sent)
-        // Never merge a pre-request object back into storage. Only patch the
-        // upload fields of the row that is there now, retaining its job choice.
-        const latest = await getNote(id)
-        if (
-          !latest ||
-          !isCurrentCaptureSession(session) ||
-          !canSyncCapture(latest) ||
-          !enabledRef.current
-        )
-          return
-        await patchNote(id, {
-          localState: 'uploaded',
-          serverNoteId: noteId,
-          serverJobId: sent.jobId,
-          lastErrorCode: null,
-        })
-        track('note_upload_succeeded', {
-          job_id: sent.jobId,
-          mime_type_family: mimeTypeFamily(sent.mimeType),
-        })
+        await (kind === 'note' ? syncNote(id, alive) : syncPhoto(id, alive))
+        succeeded = true
       } catch (error) {
-        if (!sent || !isCurrentCaptureSession(session) || !enabledRef.current)
-          return
-        try {
-          const latest = await getNote(id)
-          if (!latest || !canSyncCapture(latest)) return
-          const status = error instanceof ApiError ? error.status : 0
-          const terminal =
-            status >= 400 &&
-            status < 500 &&
-            status !== 408 &&
-            status !== 429 &&
-            status !== 401
-          const count = terminal
-            ? latest.uploadAttemptCount
-            : latest.uploadAttemptCount + 1
-          const code =
-            (error as { code?: string })?.code ??
-            (error instanceof Error ? error.message : 'UNKNOWN')
-          await patchNote(id, {
-            localState:
-              terminal || count >= MAX_ATTEMPTS
-                ? 'upload_needs_attention'
-                : 'upload_failed',
-            uploadAttemptCount: count,
-            lastUploadAttemptAt: new Date().toISOString(),
-            lastErrorCode: code,
-          })
+        if (!started || !alive()) return
+        const item = await read()
+        if (!item || !canSyncCapture(item)) return
+        const count = terminal(error)
+          ? item.uploadAttemptCount
+          : item.uploadAttemptCount + 1
+        const code = (error as { code?: string })?.code ?? 'NETWORK_ERROR'
+        await patch({
+          localState:
+            terminal(error) || count >= 5
+              ? 'upload_needs_attention'
+              : 'upload_failed',
+          uploadAttemptCount: count,
+          lastErrorCode: code,
+          lastUploadAttemptAt: new Date().toISOString(),
+        }).catch(() => {})
+        if (kind === 'note')
           track('note_upload_failed', {
-            job_id: sent.jobId,
+            ...(item.jobId ? { job_id: item.jobId } : {}),
             error_kind: safeErrorKind(code),
           })
-        } catch {
-          /* Storage failure is never treated as a network attempt. The blob remains on the phone. */
-        }
       } finally {
-        inFlight.current.delete(id)
+        inFlight.current.delete(key)
         notify()
+        // A last-moment choice may have arrived while the id was locked. Retry that
+        // successful unfiled upload once through filing, without looping failures.
+        if (succeeded && alive()) {
+          const item = await read()
+          if (item?.localState === 'uploaded' && needsSync(item))
+            void process(kind, id)
+        }
       }
     },
     [notify],
   )
   const syncAll = useCallback(async () => {
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.onLine ||
-      !enabledRef.current
-    )
-      return
+    if (!enabledRef.current || !navigator.onLine) return
     try {
-      const notes = await getPendingNotes()
-      await Promise.all(
-        notes
-          .filter((n) => n.jobId !== null && canSyncCapture(n))
-          .map((n) => uploadOne(n.clientNoteId)),
-      )
+      const [notes, photos] = await Promise.all([
+        getPendingNotes(),
+        getPendingPhotos(),
+      ])
+      await Promise.all([
+        ...notes
+          .filter(canSyncCapture)
+          .map((n) => process('note', n.clientNoteId)),
+        ...photos
+          .filter((p) => p.ownerUserId && canSyncCapture(p))
+          .map((p) => process('photo', p.clientPhotoId)),
+      ])
     } catch {
-      /* Saving/listing surfaces storage failures; background sync must not reject unhandled. */
+      /* Capture remains available if storage cannot open. */
     }
-  }, [uploadOne])
-  const retryNote = useCallback(
-    async (id: string) => {
-      const note = await getNote(id)
-      if (!note || !canSyncCapture(note) || !enabledRef.current) return
-      await patchNote(id, {
+  }, [process])
+  const retry = useCallback(
+    async (kind: 'note' | 'photo', id: string) => {
+      const item = await (kind === 'note' ? getNote(id) : getPhoto(id))
+      if (
+        !item ||
+        !canSyncCapture(item) ||
+        !enabledRef.current ||
+        (kind === 'photo' && item.lastErrorCode === 'PHOTO_NOT_FOUND')
+      )
+        return
+      const patch = kind === 'note' ? patchNote : patchPhoto
+      await patch(id, {
         localState: 'saved_local',
         uploadAttemptCount: 0,
         lastErrorCode: null,
       })
-      notify()
-      await uploadOne(id)
+      await process(kind, id)
     },
-    [notify, uploadOne],
+    [process],
   )
+  const retryNote = useCallback((id: string) => retry('note', id), [retry]),
+    retryPhoto = useCallback((id: string) => retry('photo', id), [retry])
   useEffect(() => {
     if (!enabled) return
     let alive = true
@@ -177,36 +141,35 @@ export function useSync(onNotesChanged: () => void, enabled = true) {
           await syncAll()
         }
       } catch {
-        /* Do not block capture on opening storage. */
+        /* Save failure UI handles storage errors. */
       }
     }
     void resume()
     const online = () => {
-      void resume()
-    }
-    const foreground = () => {
-      if (document.visibilityState === 'visible') void resume()
-    }
-    const unsubscribeOwner = subscribeLocalOwner(() => {
-      void resume()
-    })
-    const unsubscribeCaptures = subscribeLocalCaptures((change) => {
-      if (
-        change.kind === 'saved' ||
-        change.kind === 'ownership' ||
-        change.jobChanged
-      )
-        void syncAll()
-    })
+        void resume()
+      },
+      foreground = () => {
+        if (document.visibilityState === 'visible') void resume()
+      }
+    const owner = subscribeLocalOwner(online),
+      captures = subscribeLocalCaptures((change) => {
+        notify()
+        if (
+          change.kind === 'saved' ||
+          change.kind === 'ownership' ||
+          change.jobChanged
+        )
+          void syncAll()
+      })
     window.addEventListener('online', online)
     document.addEventListener('visibilitychange', foreground)
     return () => {
       alive = false
-      unsubscribeOwner()
-      unsubscribeCaptures()
+      owner()
+      captures()
       window.removeEventListener('online', online)
       document.removeEventListener('visibilitychange', foreground)
     }
   }, [enabled, notify, syncAll])
-  return { syncAll, retryNote }
+  return { syncAll, retryNote, retryPhoto }
 }

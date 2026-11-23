@@ -63,11 +63,32 @@ async function fixture(
       path = new URL(req.url()).pathname
     if (path === '/api/auth/me' && options.failMe)
       return route.abort('internetdisconnected')
-    if (path === '/api/jobs' && options.hangJobs) return // intentionally unresolved until context closes
-    if (path === '/api/jobs' && options.failJobs)
+    if ((path === '/api/jobs' || path === '/api/home') && options.hangJobs)
+      return // intentionally unresolved until context closes
+    if ((path === '/api/jobs' || path === '/api/home') && options.failJobs)
       return route.abort('internetdisconnected')
-    if (path.endsWith('/notes') && req.method() === 'POST') {
+    if (
+      (path === '/api/notes' || path.endsWith('/notes')) &&
+      req.method() === 'POST'
+    ) {
       uploads.push({ url: path, body: req.postDataBuffer()?.toString() ?? '' })
+      if (path === '/api/notes') {
+        const jobId = uploads[uploads.length - 1].body.includes('name="jobId"')
+          ? JOB.id
+          : null
+        return route.fulfill({
+          json: {
+            note: {
+              id: 'server-note-exact',
+              clientNoteId: 'unused',
+              jobId,
+              filedAt: jobId ? 'now' : null,
+              captureContext: 'home',
+              serverStatus: 'UPLOADED',
+            },
+          },
+        })
+      }
       return route.fulfill({
         json: {
           noteId: 'server-note-exact',
@@ -77,40 +98,81 @@ async function fixture(
         },
       })
     }
+    if (path.endsWith('/draft'))
+      return route.fulfill({
+        json: {
+          noteId: 'server-note-exact',
+          jobId: JOB.id,
+          state: 'ready',
+          transcriptText: '',
+          items: [],
+          moreToCheckCount: 0,
+        },
+      })
+    if (path.endsWith('/file') && req.method() === 'POST')
+      return route.fulfill({
+        json: {
+          note: {
+            id: 'server-note-exact',
+            clientNoteId: 'unused',
+            jobId: JOB.id,
+            filedAt: 'now',
+            captureContext: 'home',
+            serverStatus: 'UPLOADED',
+          },
+        },
+      })
     const body =
-      path === '/api/auth/me'
-        ? { user: USER }
-        : path === '/api/jobs'
-          ? [JOB]
-          : path.endsWith('/memory-view')
-            ? {
-                job: JOB,
-                generatedAt: '',
-                sections: [],
-                hours: { totalHours: '0', people: [], days: [] },
-                stillToCheck: { count: 0, items: [] },
-              }
-            : path.endsWith('/review-queue')
-              ? {
-                  jobId: JOB.id,
-                  generatedAt: '',
-                  sections: [],
-                  alreadyRemembered: [],
-                }
-              : path.endsWith('/log')
-                ? { entries: [] }
-                : path === '/api/workshop'
+      path === '/api/home'
+        ? {
+            inProgressJobs: [
+              {
+                id: JOB.id,
+                title: JOB.title,
+                lastActivityAt: new Date().toISOString(),
+                toCheckCount: 0,
+              },
+            ],
+            otherJobs: { planningCount: 0, finishedCount: 0 },
+            unfiledCount: 0,
+            lastRecordedJobId: null,
+            workshop: { availableCount: 0, preview: [] },
+          }
+        : path === '/api/unfiled'
+          ? { notes: [], photos: [] }
+          : path === '/api/auth/me'
+            ? { user: USER }
+            : path === '/api/jobs'
+              ? [JOB]
+              : path.endsWith('/memory-view')
+                ? {
+                    job: JOB,
+                    generatedAt: '',
+                    sections: [],
+                    hours: { totalHours: '0', people: [], days: [] },
+                    stillToCheck: { count: 0, items: [] },
+                  }
+                : path.endsWith('/review-queue')
                   ? {
+                      jobId: JOB.id,
                       generatedAt: '',
-                      availableItems: [],
-                      bookHome: {
-                        showWorkshopRow: true,
-                        availableCount: 0,
-                        availableLabel: null,
-                        previewItems: [],
-                      },
+                      sections: [],
+                      alreadyRemembered: [],
                     }
-                  : []
+                  : path.endsWith('/log')
+                    ? { entries: [] }
+                    : path === '/api/workshop'
+                      ? {
+                          generatedAt: '',
+                          availableItems: [],
+                          bookHome: {
+                            showWorkshopRow: true,
+                            availableCount: 0,
+                            availableLabel: null,
+                            previewItems: [],
+                          },
+                        }
+                      : []
     await route.fulfill({ json: body })
   })
   return uploads
@@ -176,6 +238,7 @@ test('offline recording survives an offline reload and uploads once from Book Ho
 }) => {
   const uploads = await fixture(page)
   await page.goto('/')
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
   await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready
@@ -193,6 +256,7 @@ test('offline recording survives an offline reload and uploads once from Book Ho
   expect(before.mime).toMatch(/^audio\/webm/)
   expect(before.owner).toBe(USER.id)
   await page.reload()
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
   await expect(
     page.getByRole('button', { name: 'Start recording' }),
   ).toBeVisible()
@@ -202,7 +266,7 @@ test('offline recording survives an offline reload and uploads once from Book Ho
   await context.setOffline(false)
   await expect.poll(async () => (await stored(page))[0]?.state).toBe('uploaded')
   expect(uploads).toHaveLength(1)
-  expect(uploads[0].url).toBe(`/api/jobs/${JOB.id}/notes`)
+  expect(['/api/notes', `/api/jobs/${JOB.id}/notes`]).toContain(uploads[0].url)
   expect(uploads[0].body).toContain(before.id)
   const [uploaded] = await stored(page)
   expect(uploaded.serverId).toBe('server-note-exact')
@@ -214,6 +278,7 @@ test('cached Record works while GET /api/jobs never resolves', async ({
 }) => {
   await fixture(page, { hangJobs: true })
   await page.goto('/')
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
   await page.screenshot({
     path: 'docs/verification/capture-foundation/cached-job-390.png',
   })
@@ -227,12 +292,13 @@ test('offline without jobs still records locally without inventing a job or uplo
   const uploads = await fixture(page, { failJobs: true, cached: false })
   await page.goto('/')
   await record(page)
-  await expect(page.getByText('Recording saved on this phone.')).toBeVisible()
+  await page.getByRole('button', { name: 'Later', exact: true }).click()
+  await page.getByRole('button', { name: /Not filed yet/ }).click()
   const [note] = await stored(page)
   expect(note.jobId).toBeNull()
   expect(note.owner).toBe(USER.id)
-  expect(note.state).toBe('saved_local')
-  expect(uploads).toHaveLength(0)
+  await expect.poll(async () => (await stored(page))[0]?.state).toBe('uploaded')
+  expect(uploads).toHaveLength(1)
   await noClipping(page)
   await page.screenshot({
     path: 'docs/verification/capture-foundation/no-jobs-390.png',
@@ -244,6 +310,7 @@ test('write failure holds audio in memory for an exact-byte retry after navigati
 }) => {
   const uploads = await fixture(page)
   await page.goto('/')
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
   await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
   await page.evaluate(() => {
     const original = IDBObjectStore.prototype.put
@@ -331,6 +398,7 @@ test('old v1 tab blocks upgrade visibly; close and retry preserves existing audi
     })
   })
   await page.goto('/')
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
   await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
   await record(page)
   await expect(page.getByRole('alert')).toContainText(
@@ -358,6 +426,7 @@ test('unknown-owner job recording is stamped, listed and uploaded after closing 
   )
   await page.goto('/')
   await meFailed
+  await page.getByRole('button', { name: /^Garden Room/ }).click()
   await expect(page.getByRole('button', { name: 'Open Hours' })).toBeVisible()
   expect(
     await page.evaluate(() => localStorage.getItem('job-book-owner-user-id')),
@@ -390,12 +459,14 @@ test('unknown-owner job recording is stamped, listed and uploaded after closing 
   expect(after.id).toBe(before.id)
   expect(after.bytes).toEqual(before.bytes)
   expect(uploads).toHaveLength(1)
-  expect(uploads[0].url).toBe(`/api/jobs/${JOB.id}/notes`)
-  const history = reopened.getByRole('region', {
-    name: 'Recordings on this phone',
-  })
-  await expect(history.locator('.note-card')).toHaveCount(1)
-  await expect(history.getByText('Voice note saved')).toBeVisible()
+  expect(['/api/notes', `/api/jobs/${JOB.id}/notes`]).toContain(uploads[0].url)
+  await reopened.getByRole('button', { name: /^Garden Room/ }).click()
+  await reopened.getByRole('button', { name: 'Open Job log' }).click()
+  await expect(
+    reopened
+      .getByRole('list', { name: 'Job log' })
+      .getByText('Voice note saved'),
+  ).toBeVisible()
 })
 
 test('another account signing in after a new-page launch cannot claim an ownerless unfiled recording', async ({
@@ -415,7 +486,8 @@ test('another account signing in after a new-page launch cannot claim an ownerle
   await page.goto('/')
   await meFailed
   await record(page)
-  await expect(page.getByText('Recording saved on this phone.')).toBeVisible()
+  await page.getByRole('button', { name: 'Later', exact: true }).click()
+  await page.getByRole('button', { name: /Not filed yet/ }).click()
   const [before] = await stored(page)
   expect(before.owner).toBeNull()
   expect(before.jobId).toBeNull()
@@ -451,14 +523,19 @@ test('another account signing in after a new-page launch cannot claim an ownerle
     )
     .toBe(otherUser.id)
   await expect(
-    reopened.getByRole('heading', { name: 'All jobs' }),
+    reopened.getByRole('heading', { name: 'The Job Book' }),
   ).toBeVisible()
   const [after] = await stored(reopened)
   expect(after).toEqual(before)
   expect(uploads).toHaveLength(0)
   await expect(
-    reopened.getByText('Recording saved on this phone.'),
-  ).toHaveCount(0)
+    reopened.getByRole('heading', { name: 'Unmatched recordings' }),
+  ).toBeVisible()
+  await expect(
+    reopened.getByRole('button', { name: 'This is mine' }),
+  ).toBeVisible()
+  await expect(reopened.locator('audio')).toHaveCount(0)
+  await expect(reopened.getByText('Saved — not filed yet')).toHaveCount(0)
 })
 
 test('uncached pending jobs stay unknown while Record remains usable', async ({
@@ -472,9 +549,115 @@ test('uncached pending jobs stay unknown while Record remains usable', async ({
   await expect(page.getByRole('heading', { name: 'All jobs' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'New job' })).toHaveCount(0)
   await record(page)
-  await expect(page.getByText('Recording saved on this phone.')).toBeVisible()
+  await page.getByRole('button', { name: 'Later', exact: true }).click()
+  await page.getByRole('button', { name: /Not filed yet/ }).click()
   await noClipping(page)
   await page.screenshot({
     path: 'docs/verification/capture-foundation/jobs-loading-390.png',
   })
+})
+
+test('offline Home capture survives closing the page before choosing a job and files later', async ({
+  page,
+  context,
+}) => {
+  const uploads = await fixture(page)
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: /^Garden Room/ })).toBeVisible()
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true)
+  await context.setOffline(true)
+  await record(page)
+  await expect(page.getByRole('dialog', { name: 'Which job?' })).toBeVisible()
+  const [before] = await stored(page)
+  expect(before.jobId).toBeNull()
+  await page.close()
+  const reopened = await context.newPage()
+  await reopened.goto('https://localhost:5176/')
+  await expect(
+    reopened.getByRole('heading', { name: 'The Job Book' }),
+  ).toBeVisible()
+  await reopened.getByRole('button', { name: /Not filed yet/ }).click()
+  expect((await stored(reopened))[0]).toEqual(before)
+  await expect(
+    reopened.getByText('Saved on this phone', { exact: true }),
+  ).toBeVisible()
+  await context.setOffline(false)
+  await expect
+    .poll(async () => (await stored(reopened))[0]?.state)
+    .toBe('uploaded')
+  expect(uploads).toHaveLength(1)
+  await reopened.getByRole('button', { name: 'Choose job' }).click()
+  await reopened
+    .getByRole('dialog', { name: 'Which job?' })
+    .getByRole('button', { name: 'Garden Room', exact: true })
+    .click()
+  await expect(
+    reopened.getByText('Saved to Garden Room', { exact: true }),
+  ).toBeVisible()
+})
+
+test('choosing a job while the unfiled upload is in flight files the exact returned server id', async ({
+  page,
+  context,
+}) => {
+  await fixture(page)
+  let release!: () => void
+  const gate = new Promise<void>((r) => {
+    release = r
+  })
+  let started!: () => void
+  const began = new Promise<void>((r) => {
+    started = r
+  })
+  const filed: string[] = []
+  await context.route('**/api/notes', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback()
+    started()
+    await gate
+    await route.fulfill({
+      json: {
+        note: {
+          id: 'racing-server-id',
+          clientNoteId: 'unused',
+          jobId: null,
+          filedAt: null,
+          captureContext: 'home',
+          serverStatus: 'UPLOADED',
+        },
+      },
+    })
+  })
+  await context.route('**/api/notes/*/file', async (route) => {
+    filed.push(new URL(route.request().url()).pathname)
+    await route.fulfill({
+      json: {
+        note: {
+          id: 'racing-server-id',
+          clientNoteId: 'unused',
+          jobId: JOB.id,
+          filedAt: 'now',
+          captureContext: 'home',
+          serverStatus: 'UPLOADED',
+        },
+      },
+    })
+  })
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: /^Garden Room/ })).toBeVisible()
+  await record(page)
+  await began
+  await page
+    .getByRole('dialog', { name: 'Which job?' })
+    .getByRole('button', { name: 'Garden Room', exact: true })
+    .click()
+  await expect.poll(async () => (await stored(page))[0]?.jobId).toBe(JOB.id)
+  release()
+  await expect.poll(async () => (await stored(page))[0]?.state).toBe('uploaded')
+  expect((await stored(page))[0].serverId).toBe('racing-server-id')
+  expect(filed).toEqual(['/api/notes/racing-server-id/file'])
 })

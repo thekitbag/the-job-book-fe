@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  getDraftFacts,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import {
   getReviewQueue,
   isAlreadyInWorkshop,
   moveLeftoverToWorkshop,
@@ -10,16 +16,18 @@ import {
 import { getNotesForJob, subscribeLocalCaptures } from './db'
 import { getCaptureSessionId, subscribeLocalOwner } from './localOwner'
 import RecordingControls from './RecordingControls'
-import { dismissSavedCapture } from './capturePersistence'
 import { CaptureSyncProvider, useCaptureContext } from './CaptureSyncProvider'
+import { useCaptureUpdates } from './captureEvents'
 import { useTranscriptPoll } from './useTranscriptPoll'
 import { usePwaInstall } from './usePwaInstall'
 import { useJobMemory } from './useJobMemory'
 import JobLog from './JobLog'
 import HoursTab from './HoursTab'
 import MemorySectionTab from './MemorySectionTab'
-import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
-import SourceHistory from './SourceHistory'
+import JobPhotosSection, {
+  photoLinkTargetLabel,
+  type PhotoLinkTarget,
+} from './JobPhotosSection'
 import BottomSheet from './BottomSheet'
 import JobDetailsSheet from './JobDetailsSheet'
 import { useToast } from './Toast'
@@ -29,7 +37,6 @@ import { track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
 import type {
   AuthUser,
-  CandidateFact,
   EditableJobStatus,
   Job,
   HoursSummary,
@@ -73,7 +80,11 @@ function HomeSectionCards({
     <nav className="ws-home-cards" aria-label="Job sections">
       {(
         [
-          ['hours', 'Hours', hours ? `${hours.totalHours}h logged` : 'None yet'],
+          [
+            'hours',
+            'Hours',
+            hours ? `${hours.totalHours}h logged` : 'None yet',
+          ],
           ['materials', 'Materials', 'Bought · used · left · returned'],
           ['joblog', 'Job log', 'Notes · photos'],
         ] as const
@@ -88,7 +99,13 @@ function HomeSectionCards({
           <span className="ws-home-card-text">
             <span className="ws-home-card-title">{title}</span>
             <span className="ws-home-card-figures">
-              <span className={section === 'hours' ? 'ws-home-card-value' : 'ws-home-card-denom'}>
+              <span
+                className={
+                  section === 'hours'
+                    ? 'ws-home-card-value'
+                    : 'ws-home-card-denom'
+                }
+              >
                 {detail}
               </span>
             </span>
@@ -108,7 +125,8 @@ function StorageExplainer({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="explainer" role="region" aria-label="About your recordings">
       <p className="explainer-text">
-        We save the recording during the pilot so we can check what was captured and improve the job memory.
+        We save the recording during the pilot so we can check what was captured
+        and improve the job memory.
       </p>
       <button className="explainer-dismiss" onClick={onDismiss}>
         Got it
@@ -130,10 +148,13 @@ function InstallBanner({
     <div className="install-banner" role="region" aria-label="Install app">
       {isIosSafari ? (
         <p className="install-banner-text">
-          Add to your home screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>
+          Add to your home screen: tap <strong>Share</strong> then{' '}
+          <strong>Add to Home Screen</strong>
         </p>
       ) : (
-        <p className="install-banner-text">Install The Job Book on your phone for quick access</p>
+        <p className="install-banner-text">
+          Install The Job Book on your phone for quick access
+        </p>
       )}
       <div className="install-banner-actions">
         {!isIosSafari && (
@@ -141,7 +162,11 @@ function InstallBanner({
             Install
           </button>
         )}
-        <button className="install-banner-dismiss" onClick={onDismiss} aria-label="Dismiss install banner">
+        <button
+          className="install-banner-dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss install banner"
+        >
           Not now
         </button>
       </div>
@@ -152,104 +177,6 @@ function InstallBanner({
 // Interstitial shown after a recording stops. Confirms the note is safe and
 // reflects live progress (saving → saved → looking for facts) without making
 // Mike wait — he can tap Done and carry on at any point.
-function CaptureConfirmation({
-  note,
-  online,
-  onClose,
-  onOpenReviewQueue,
-}: {
-  note: LocalNote | undefined
-  online: boolean
-  onClose: () => void
-  onOpenReviewQueue: () => void
-}) {
-  const state = note?.localState
-  const uploaded = state === 'uploaded'
-  const failedSend = state === 'upload_failed' || state === 'upload_needs_attention'
-  const stillSending = !uploaded && !failedSend // saved_local / uploading
-
-  let title = 'Voice note saved'
-  let sub = "I'll pull out anything useful for this job."
-  let ready = false
-
-  if (stillSending) {
-    if (!online) {
-      title = 'Saved on this phone'
-      sub = "I'll send it through when there's signal."
-    } else {
-      title = 'Saving your note…'
-      sub = 'Keeping it safe on your phone too.'
-    }
-  } else if (failedSend) {
-    title = 'Saved on this phone'
-    sub = "Couldn't send it yet — I'll keep trying automatically."
-  } else if (note?.transcriptStatus === 'failed') {
-    sub = "Couldn't make out this recording, but it's safe."
-  } else if (note?.extractionStatus === 'ready') {
-    sub = 'Job facts are ready to check.'
-    ready = true
-  } else if (note?.extractionStatus === 'failed') {
-    sub = "Saved — I couldn't pull job facts from this one."
-  } else if (uploaded) {
-    sub = 'Looking for useful job facts…'
-  }
-
-  // Spinner only while the note is actively being sent; a saved note (locally or
-  // uploaded) shows a reassuring tick even while facts are still being found.
-  const spinner = title === 'Saving your note…'
-
-  return (
-    // Scrim click-to-dismiss is a pointer convenience duplicating the visible
-    // Done/close button, which stays keyboard-reachable; the inner card's
-    // onClick only stops propagation. TODO(a11y follow-up): add an Escape-key
-    // handler and focus trap for this dialog.
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <div
-      className="ws-capture-scrim"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Recording saved"
-      onClick={onClose}
-    >
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-      <div className="ws-capture-card" onClick={(e) => e.stopPropagation()}>
-        <div className="ws-capture-icon" aria-hidden="true">
-          {spinner ? (
-            <span className="ws-capture-spinner" />
-          ) : (
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
-          )}
-        </div>
-        <p className="ws-capture-title" aria-live="polite">
-          {title}
-        </p>
-        <p className="ws-capture-sub" aria-live="polite">
-          {sub}
-        </p>
-        <div className="ws-capture-actions">
-          {ready && (
-            <button type="button" className="ws-capture-review" onClick={onOpenReviewQueue}>
-              See things to check
-            </button>
-          )}
-          <button type="button" className="ws-capture-done" onClick={onClose}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function Workspace({
   job,
   entry = null,
@@ -281,13 +208,13 @@ function Workspace({
   const [section, setSection] = useState<Section>('home')
   const [materialsTab, setMaterialsTab] = useState<MaterialsTab>('bought')
   // clientNoteId of the note just recorded — drives the capture confirmation.
-  const [justCapturedId, setJustCapturedId] = useState<string | null>(null)
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
-  const [showExplainer, setShowExplainer] = useState(() => localStorage.getItem(EXPLAINER_KEY) !== 'true')
+  const [showExplainer, setShowExplainer] = useState(
+    () => localStorage.getItem(EXPLAINER_KEY) !== 'true',
+  )
   // Open by default so a freshly recorded note confirms capture without hunting,
   // but it stays below the job summary — secondary, not a primary card.
-  const [showSourceHistory, setShowSourceHistory] = useState(true)
   // Job title rename (PATCH /api/jobs/:jobId). Failure keeps the old title.
   const [renaming, setRenaming] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -306,7 +233,9 @@ function Workspace({
   // never sit on the path that carries Record.
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
-  const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(null)
+  const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(
+    null,
+  )
   const [statusError, setStatusError] = useState<string | null>(null)
 
   // Switching jobs always lands on the new job's home — never a section of
@@ -321,7 +250,8 @@ function Workspace({
 
   const mem = useJobMemory(job)
   const toast = useToast()
-  const focusItemId = entry?.jobId === job.id ? (entry.focusItemId ?? null) : null
+  const focusItemId =
+    entry?.jobId === job.id ? (entry.focusItemId ?? null) : null
   const entryReady = !!mem.data
   useEffect(() => {
     if (!focusItemId || !entryReady) return
@@ -333,7 +263,9 @@ function Workspace({
     setSection(s)
   }, [])
 
-  const [workshopPendingId, setWorkshopPendingId] = useState<string | null>(null)
+  const [workshopPendingId, setWorkshopPendingId] = useState<string | null>(
+    null,
+  )
   const [moveResult, setMoveResult] = useState<WorkshopItem | null>(null)
   const memRefetch = mem.refetch
 
@@ -343,7 +275,10 @@ function Workspace({
       setWorkshopPendingId(item.id)
       try {
         const res = await moveLeftoverToWorkshop(job.id, item.id)
-        track('workshop_move_recorded', { job_id: job.id, job_status: job.status })
+        track('workshop_move_recorded', {
+          job_id: job.id,
+          job_status: job.status,
+        })
         await memRefetch()
         setMoveResult(res.workshopItem)
       } catch (err: unknown) {
@@ -385,7 +320,11 @@ function Workspace({
           tone: 'plain',
         })
       } catch {
-        toast({ title: 'Could not put it back', body: 'Nothing changed. Try again.', tone: 'plain' })
+        toast({
+          title: 'Could not put it back',
+          body: 'Nothing changed. Try again.',
+          tone: 'plain',
+        })
       } finally {
         setWorkshopPendingId(null)
       }
@@ -458,7 +397,11 @@ function Workspace({
       if (status === 'archived') {
         track('job_archived', { job_id: job.id })
       } else {
-        track('job_status_changed', { job_id: job.id, from_status: job.status, to_status: status })
+        track('job_status_changed', {
+          job_id: job.id,
+          from_status: job.status,
+          to_status: status,
+        })
       }
       onJobUpdated(updated)
       closeStatusSheet()
@@ -468,21 +411,26 @@ function Workspace({
       setSavingStatus(null)
     }
   }
-  const { showBanner, isIosSafari, triggerInstall, dismiss: dismissInstall } = usePwaInstall()
-
-  const [facts, setFacts] = useState<CandidateFact[]>([])
-  const [factsLoadFailed, setFactsLoadFailed] = useState(false)
+  const {
+    showBanner,
+    isIosSafari,
+    triggerInstall,
+    dismiss: dismissInstall,
+  } = usePwaInstall()
 
   // Things to check — draft queue count. Loads independently; never blocks record.
   const [draftCount, setDraftCount] = useState(0)
-  const [queueLoadState, setQueueLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [queueLoadState, setQueueLoadState] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading')
 
   const activeJob = useRef(job.id)
   activeJob.current = job.id
   const refreshNotes = useCallback(async () => {
     const session = getCaptureSessionId()
     const fresh = await getNotesForJob(job.id)
-    if (activeJob.current !== job.id || session !== getCaptureSessionId()) return
+    if (activeJob.current !== job.id || session !== getCaptureSessionId())
+      return
     fresh.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
     setNotes(fresh)
   }, [job.id])
@@ -516,15 +464,24 @@ function Workspace({
     }
   }, [])
 
+  const queueRequest = useRef(0)
   const loadQueue = useCallback(() => {
+    const request = ++queueRequest.current
     setQueueLoadState('loading')
     getReviewQueue(job.id)
       .then((q) => {
-        const count = q.sections.flatMap((s) => s.items).filter((it) => it.status === 'draft').length
+        if (activeJob.current !== job.id || request !== queueRequest.current)
+          return
+        const count = q.sections
+          .flatMap((s) => s.items)
+          .filter((it) => it.status === 'draft').length
         setDraftCount(count)
         setQueueLoadState('ready')
       })
-      .catch(() => setQueueLoadState('error'))
+      .catch(() => {
+        if (activeJob.current === job.id && request === queueRequest.current)
+          setQueueLoadState('error')
+      })
   }, [job.id])
 
   useEffect(() => {
@@ -538,41 +495,41 @@ function Workspace({
     (n) => n.localState === 'uploaded' && n.extractionStatus === 'ready',
   ).length
 
-  const fetchFacts = useCallback(() => {
-    getDraftFacts(job.id)
-      .then((data) => {
-        setFacts(data)
-        setFactsLoadFailed(false)
-      })
-      .catch(() => setFactsLoadFailed(true))
-  }, [job.id])
-
+  const { recorder, record, recordingTitle } = useCaptureContext()!
+  useTranscriptPoll(notes, job.id, refreshNotes)
+  const updates = useCaptureUpdates()
+  const refreshMemory = mem.refetch
+  const previousCaptureUpdate = useRef({
+    jobId: job.id,
+    updates,
+    count: readyExtractionCount,
+  })
   useEffect(() => {
-    if (readyExtractionCount === 0) return
-    fetchFacts()
-  }, [readyExtractionCount, fetchFacts])
-
-  const { retryNote, recorder, record, lastSavedNote } = useCaptureContext()!
-  const { refreshNow: refreshStatus } = useTranscriptPoll(notes, job.id, refreshNotes)
-
-  const handleRefresh = useCallback(() => {
-    refreshStatus()
-    if (readyExtractionCount > 0) fetchFacts()
-  }, [refreshStatus, readyExtractionCount, fetchFacts])
-
+    const previous = previousCaptureUpdate.current
+    previousCaptureUpdate.current = {
+      jobId: job.id,
+      updates,
+      count: readyExtractionCount,
+    }
+    if (
+      previous.jobId === job.id &&
+      (previous.updates !== updates || previous.count !== readyExtractionCount)
+    ) {
+      void refreshMemory()
+      loadQueue()
+      loadPhotos()
+    }
+  }, [
+    job.id,
+    updates,
+    readyExtractionCount,
+    refreshMemory,
+    loadQueue,
+    loadPhotos,
+  ])
   const handleRecord = useCallback(() => {
     void record({ jobId: job.id, title: job.title })
   }, [record, job.id, job.title])
-  useEffect(() => {
-    if (!lastSavedNote) {
-      setJustCapturedId(null)
-      return
-    }
-    if (lastSavedNote.jobId !== job.id) return
-    void refreshNotes().catch(() => {})
-    setJustCapturedId(lastSavedNote.clientNoteId)
-    loadQueue()
-  }, [lastSavedNote, job.id, refreshNotes, loadQueue])
 
   const dismissExplainer = useCallback(() => {
     localStorage.setItem(EXPLAINER_KEY, 'true')
@@ -595,12 +552,17 @@ function Workspace({
   )
 
   const hasUrgent = queueLoadState === 'ready' && draftCount > 0
-  const thingsCopy = draftCount === 1 ? '1 thing to check' : `${draftCount} things to check`
+  const thingsCopy =
+    draftCount === 1 ? '1 thing to check' : `${draftCount} things to check`
 
   function renderThingsToCheck() {
     if (hasUrgent) {
       return (
-        <button type="button" className="ws-ttc ws-ttc--urgent" onClick={onOpenReviewQueue}>
+        <button
+          type="button"
+          className="ws-ttc ws-ttc--urgent"
+          onClick={onOpenReviewQueue}
+        >
           <span className="ws-ttc-dot" aria-hidden="true" />
           <span className="ws-ttc-label">{thingsCopy}</span>
           <span className="ws-ttc-action">Review ›</span>
@@ -653,7 +615,11 @@ function Workspace({
         // job title kept as context. No global tab strip anywhere.
         <header className="ws-header ws-header--section">
           <div className="ws-header-top">
-            <button type="button" className="btn-switch-job" onClick={() => setSection('home')}>
+            <button
+              type="button"
+              className="btn-switch-job"
+              onClick={() => setSection('home')}
+            >
               ‹ Job home
             </button>
 
@@ -674,7 +640,11 @@ function Workspace({
             {/* The route up to the book level is named after where it goes. "Switch
               job" described a picker; this is the cover of the book, and Mike
               gets there the same way from every job. */}
-            <button type="button" className="btn-switch-job" onClick={onOpenBookHome}>
+            <button
+              type="button"
+              className="btn-switch-job"
+              onClick={onOpenBookHome}
+            >
               ‹ The Job Book
             </button>
             <div className="ws-header-top-right">
@@ -707,11 +677,19 @@ function Workspace({
                       Rename job
                     </button>
 
-                    <button type="button" role="menuitem" onClick={openDetailsSheet}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openDetailsSheet}
+                    >
                       Job details
                     </button>
                     {user?.role === 'INTERNAL' && (
-                      <a role="menuitem" href="/internal/support" onClick={() => setHeaderMenuOpen(false)}>
+                      <a
+                        role="menuitem"
+                        href="/internal/support"
+                        onClick={() => setHeaderMenuOpen(false)}
+                      >
                         Support
                       </a>
                     )}
@@ -778,12 +756,16 @@ function Workspace({
             ) : (
               <>
                 <h1 className="ws-job-title">{job.title}</h1>
-                {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
+                {job.roughLocationOrLabel && (
+                  <p className="ws-job-location">{job.roughLocationOrLabel}</p>
+                )}
                 {!job.roughLocationOrLabel &&
                   job.jobType &&
                   job.jobType !== 'other' &&
                   JOB_TYPE_LABELS[job.jobType] && (
-                    <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
+                    <p className="ws-job-location">
+                      {JOB_TYPE_LABELS[job.jobType]}
+                    </p>
                   )}
                 <div className="ws-status-block">
                   <span className="ws-status-label">Status</span>
@@ -803,7 +785,11 @@ function Workspace({
                     are things Mike goes looking for, and an unlabelled "⋯" is
                     not somewhere anyone looks for a phone number. The menu
                     item stays, but it is no longer the only way in. */}
-                  <button type="button" className="btn-job-details" onClick={openDetailsSheet}>
+                  <button
+                    type="button"
+                    className="btn-job-details"
+                    onClick={openDetailsSheet}
+                  >
                     Job details
                     <span className="btn-job-details-chev" aria-hidden="true">
                       ›
@@ -824,8 +810,9 @@ function Workspace({
             // it never fires from a single tap.
             <div className="status-sheet-confirm">
               <p className="status-sheet-confirm-copy">
-                Archive “{job.title}”? It will be removed from your normal job list. Its data is kept —
-                nothing is deleted, and it stays visible to Support.
+                Archive “{job.title}”? It will be removed from your normal job
+                list. Its data is kept — nothing is deleted, and it stays
+                visible to Support.
               </p>
               <div className="status-sheet-confirm-actions">
                 <button
@@ -888,7 +875,11 @@ function Workspace({
       )}
 
       {detailsSheetOpen && (
-        <JobDetailsSheet jobId={job.id} jobTitle={job.title} onClose={() => setDetailsSheetOpen(false)} />
+        <JobDetailsSheet
+          jobId={job.id}
+          jobTitle={job.title}
+          onClose={() => setDetailsSheetOpen(false)}
+        />
       )}
 
       {/* The move result. It replaces the item drawer rather than stacking on
@@ -915,9 +906,15 @@ function Workspace({
             Spend screen in particular is specified as hero + rows and nothing
             else, with its header and hero running together as one ink band. */}
         {section === 'home' && showBanner && (
-          <InstallBanner isIosSafari={isIosSafari} onInstall={triggerInstall} onDismiss={dismissInstall} />
+          <InstallBanner
+            isIosSafari={isIosSafari}
+            onInstall={triggerInstall}
+            onDismiss={dismissInstall}
+          />
         )}
-        {section === 'home' && showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
+        {section === 'home' && showExplainer && (
+          <StorageExplainer onDismiss={dismissExplainer} />
+        )}
 
         {section === 'home' && (
           <div className="ws-overview">
@@ -937,17 +934,9 @@ function Workspace({
               <p className="mem-loading">Loading…</p>
             ) : null}
 
-            <HomeSectionCards hours={mem.data?.hours ?? null} onOpen={openSection} />
-
-            <SourceHistory
-              notes={notes}
-              online={online}
-              onRetry={retryNote}
-              facts={facts}
-              factsLoadFailed={factsLoadFailed}
-              onRefresh={handleRefresh}
-              open={showSourceHistory}
-              onToggle={() => setShowSourceHistory((h) => !h)}
+            <HomeSectionCards
+              hours={mem.data?.hours ?? null}
+              onOpen={openSection}
             />
           </div>
         )}
@@ -956,7 +945,11 @@ function Workspace({
 
         {section === 'materials' && (
           <>
-            <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Materials views">
+            <div
+              className="ws-tabs ws-tabs--inner"
+              role="tablist"
+              aria-label="Materials views"
+            >
               {(
                 [
                   ['bought', 'Bought'],
@@ -982,7 +975,12 @@ function Workspace({
                   mem={mem}
                   sectionKeys={['ordered_materials']}
                   ariaLabel="Bought materials"
-                  sectionAdds={{ ordered_materials: { kind: 'bought', label: 'Add bought item' } }}
+                  sectionAdds={{
+                    ordered_materials: {
+                      kind: 'bought',
+                      label: 'Add bought item',
+                    },
+                  }}
                   focusItemId={focusItemId}
                 />
               ) : materialsTab === 'used' ? (
@@ -990,14 +988,18 @@ function Workspace({
                   mem={mem}
                   sectionKeys={['used_materials']}
                   ariaLabel="Used materials"
-                  sectionAdds={{ used_materials: { kind: 'used', label: 'Add used item' } }}
+                  sectionAdds={{
+                    used_materials: { kind: 'used', label: 'Add used item' },
+                  }}
                 />
               ) : materialsTab === 'leftover' ? (
                 <MemorySectionTab
                   mem={mem}
                   sectionKeys={['leftovers']}
                   ariaLabel="Left over materials"
-                  sectionAdds={{ leftovers: { kind: 'leftover', label: 'Add leftover' } }}
+                  sectionAdds={{
+                    leftovers: { kind: 'leftover', label: 'Add leftover' },
+                  }}
                   focusItemId={focusItemId}
                   workshop={workshop}
                 />
@@ -1024,34 +1026,37 @@ function Workspace({
             onAddNote={mem.addMemoryItem}
             onEditNote={mem.cardProps}
             photos={
-              <JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />
+              <JobPhotosSection
+                jobId={job.id}
+                linkTargets={photoLinkTargets}
+                onPhotosChanged={loadPhotos}
+              />
             }
           />
         )}
       </div>
 
       {/* Pinned Record — available on every tab, never blocked by summary loads. */}
-      <RecordingControls recorder={recorder} onRecord={handleRecord} jobTitle={job.title} />
-
-      {justCapturedId && (
-        <CaptureConfirmation
-          note={notes.find((n) => n.clientNoteId === justCapturedId)}
-          online={online}
-          onClose={() => { setJustCapturedId(null); dismissSavedCapture() }}
-          onOpenReviewQueue={() => {
-            setJustCapturedId(null)
-            dismissSavedCapture()
-            onOpenReviewQueue()
-          }}
-        />
-      )}
+      <RecordingControls
+        recorder={recorder}
+        onRecord={handleRecord}
+        jobTitle={recorder.state === 'idle' ? job.title : recordingTitle}
+      />
     </div>
   )
 }
 
 // An isolated workspace is also a complete capture root (component tests and
 // previews). The real app supplies this provider above every screen.
-export default function CurrentJobWorkspace(props: React.ComponentProps<typeof Workspace>) {
+export default function CurrentJobWorkspace(
+  props: React.ComponentProps<typeof Workspace>,
+) {
   const capture = useCaptureContext()
-  return capture ? <Workspace {...props} /> : <CaptureSyncProvider><Workspace {...props} /></CaptureSyncProvider>
+  return capture ? (
+    <Workspace {...props} />
+  ) : (
+    <CaptureSyncProvider>
+      <Workspace {...props} />
+    </CaptureSyncProvider>
+  )
 }

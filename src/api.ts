@@ -3,10 +3,26 @@
 // fetch code) and src/api/mock/ (mock backend fixtures + state).
 
 export { ApiError, onUnauthorized, resolveApiUrl } from './api/client'
-export { signup, login, logout, getCurrentUser, requestPasswordReset, confirmPasswordReset } from './api/auth'
-export { getCurrentJob, getJobs, createJob, patchJob } from './api/jobs'
-export { getJobNoteStatuses, getDraftFacts, getNoteTranscript, uploadNote } from './api/notes'
-export type { UploadNoteResponse, NoteListRow, TranscriptResponse } from './api/notes'
+export {
+  signup,
+  login,
+  logout,
+  getCurrentUser,
+  requestPasswordReset,
+  confirmPasswordReset,
+} from './api/auth'
+export { getCurrentJob, getJobs, getJob, createJob, patchJob } from './api/jobs'
+export {
+  getJobNoteStatuses,
+  getDraftFacts,
+  getNoteTranscript,
+  uploadNote,
+} from './api/notes'
+export type {
+  UploadNoteResponse,
+  NoteListRow,
+  TranscriptResponse,
+} from './api/notes'
 export { getReviewQueue, submitQueueDecision } from './api/reviewQueue'
 export {
   getMemoryView,
@@ -17,7 +33,12 @@ export {
   returnMemoryItem,
 } from './api/memory'
 export { getInspectionData } from './api/inspection'
-export { getJobPhotos, uploadJobPhoto, patchJobPhoto, removeJobPhoto } from './api/photos'
+export {
+  getJobPhotos,
+  uploadJobPhoto,
+  patchJobPhoto,
+  removeJobPhoto,
+} from './api/photos'
 export {
   getJobDetails,
   patchJobDetails,
@@ -51,3 +72,15 @@ export {
 } from './api/support'
 export { _resetMockMemoryForTesting } from './api/mock/state'
 export { getJobLog } from './api/jobLog'
+export {
+  getCaptureHome,
+  getUnfiledCaptures,
+  uploadCaptureNote,
+  fileCaptureNote,
+  moveCaptureNote,
+  uploadCapturePhoto,
+  fileCapturePhoto,
+  moveCapturePhoto,
+  getCaptureDraft,
+  confirmCaptureDraft,
+} from './api/capture'

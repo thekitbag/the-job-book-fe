@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within, act, cleanup } from '@testing-library/react'
+import {
+  render,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { createJob, getJobs } from '../api'
@@ -11,27 +18,70 @@ import type { Job } from '../types'
 
 vi.mock('../db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../db')>()
-  return { ...actual, saveNote: vi.fn(), getNotesForJob: vi.fn(() => Promise.resolve([])) }
+  return {
+    ...actual,
+    saveNote: vi.fn(),
+    getNotesForJob: vi.fn(() => Promise.resolve([])),
+  }
 })
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
   return {
+    ...actual,
+    getCaptureHome: vi.fn(async () => {
+      const api = await import('../api')
+      const jobs = await api.getJobs()
+      return {
+        inProgressJobs: jobs
+          .filter((j) => j.status === 'started')
+          .map((j) => ({
+            id: j.id,
+            title: j.title,
+            lastActivityAt: j.updatedAt,
+            toCheckCount: 0,
+          })),
+        otherJobs: { planningCount: 0, finishedCount: 0 },
+        unfiledCount: 0,
+        lastRecordedJobId: null,
+        workshop: { availableCount: 0, preview: [] },
+      }
+    }),
     getJobs: vi.fn(),
     createJob: vi.fn(),
     logout: vi.fn(() => Promise.resolve()),
-    getCurrentUser: vi.fn(() => Promise.resolve({ id: 'u1', email: 'mike@test', name: 'Mike', role: 'PILOT' })),
+    getCurrentUser: vi.fn(() =>
+      Promise.resolve({
+        id: 'u1',
+        email: 'mike@test',
+        name: 'Mike',
+        role: 'PILOT',
+      }),
+    ),
     onUnauthorized: vi.fn(),
     // Cross-job Money has its own suite (bookmoney.test.tsx). Here the backend
     // says there is nothing to show, which is what proves the row is omitted.
-    getBookMoney: vi.fn(() => Promise.resolve({ bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null })),
+    getBookMoney: vi.fn(() =>
+      Promise.resolve({
+        bookHome: { showMoneyRow: false },
+        toPayOnAccounts: null,
+        owedToMe: null,
+      }),
+    ),
     // Workshop has its own suite (workshop.test.tsx). Here it is the empty
     // destination: the row exists, with no count and no preview.
-    getWorkshop: vi.fn(() => Promise.resolve({
-      generatedAt: '2026-08-18T09:00:00.000Z',
-      bookHome: { showWorkshopRow: true, availableCount: 0, availableLabel: null, previewItems: [] },
-      availableItems: [],
-    })),
+    getWorkshop: vi.fn(() =>
+      Promise.resolve({
+        generatedAt: '2026-08-18T09:00:00.000Z',
+        bookHome: {
+          showWorkshopRow: true,
+          availableCount: 0,
+          availableLabel: null,
+          previewItems: [],
+        },
+        availableItems: [],
+      }),
+    ),
     ApiError: actual.ApiError,
   }
 })
@@ -39,11 +89,19 @@ vi.mock('../api', async (importOriginal) => {
 // Stands in for the job workspace: it carries the one Record action in the app
 // so "Book Home has no Record" is provable, and reports which job is selected.
 vi.mock('../CurrentJobWorkspace', () => ({
-  default: ({ job, onOpenBookHome }: { job: Job; onOpenBookHome: () => void }) => (
+  default: ({
+    job,
+    onOpenBookHome,
+  }: {
+    job: Job
+    onOpenBookHome: () => void
+  }) => (
     <div data-testid="workspace-screen" data-job-id={job.id}>
       <h1>{job.title}</h1>
       <button onClick={onOpenBookHome}>‹ The Job Book</button>
-      <button aria-label={`Start recording, saves to ${job.title}`}>Record</button>
+      <button aria-label={`Start recording, saves to ${job.title}`}>
+        Record
+      </button>
     </div>
   ),
 }))
@@ -67,11 +125,33 @@ function job(over: Partial<Job> & { id: string; title: string }): Job {
   }
 }
 
-const HILL = job({ id: 'job-hill', title: 'Hill extension', roughLocationOrLabel: '14 Hilltop Road' })
-const SAMMY = job({ id: 'job-sammy', title: 'Sammy garden room', roughLocationOrLabel: 'Beech Road' })
-const GRANT = job({ id: 'job-grant', title: 'Grant James roof', status: 'planning', roughLocationOrLabel: 'Ash Grove' })
-const VERITY = job({ id: 'job-verity', title: 'Verity porch', status: 'planning' })
-const WHITMORE = job({ id: 'job-whitmore', title: 'Whitmore patio', status: 'finished', roughLocationOrLabel: 'Elm Close' })
+const HILL = job({
+  id: 'job-hill',
+  title: 'Hill extension',
+  roughLocationOrLabel: '14 Hilltop Road',
+})
+const SAMMY = job({
+  id: 'job-sammy',
+  title: 'Sammy garden room',
+  roughLocationOrLabel: 'Beech Road',
+})
+const GRANT = job({
+  id: 'job-grant',
+  title: 'Grant James roof',
+  status: 'planning',
+  roughLocationOrLabel: 'Ash Grove',
+})
+const VERITY = job({
+  id: 'job-verity',
+  title: 'Verity porch',
+  status: 'planning',
+})
+const WHITMORE = job({
+  id: 'job-whitmore',
+  title: 'Whitmore patio',
+  status: 'finished',
+  roughLocationOrLabel: 'Elm Close',
+})
 const OKORO = job({ id: 'job-okoro', title: 'Okoro loft', status: 'finished' })
 
 const ALL = [HILL, SAMMY, GRANT, VERITY, WHITMORE, OKORO]
@@ -80,7 +160,14 @@ const SELECTED_ID_KEY = 'job-book-selected-job-id'
 
 async function launch() {
   render(<App />)
-  await waitFor(() => expect(screen.getByTestId('workspace-screen')).toBeInTheDocument())
+  const chosen =
+    ALL.find((j) => j.id === localStorage.getItem(SELECTED_ID_KEY)) ?? ALL[0]
+  fireEvent.click(
+    await screen.findByRole('button', { name: new RegExp('^' + chosen.title) }),
+  )
+  await waitFor(() =>
+    expect(screen.getByTestId('workspace-screen')).toBeInTheDocument(),
+  )
 }
 
 async function gotoBookHome(user: ReturnType<typeof userEvent.setup>) {
@@ -92,7 +179,7 @@ async function gotoBookHome(user: ReturnType<typeof userEvent.setup>) {
 // lists jobs itself, so there is no "All jobs ›" link beside a list.
 async function gotoAllJobs(user: ReturnType<typeof userEvent.setup>) {
   await gotoBookHome(user)
-  await user.click(screen.getByRole('button', { name: /^Jobs/ }))
+  await user.click(screen.getByRole('button', { name: /Other jobs/ }))
   await screen.findByRole('heading', { name: /^All jobs/ })
 }
 
@@ -108,122 +195,40 @@ describe('Book Home and job navigation', () => {
 
   // ── Launch and route ──────────────────────────────────────────────────────
 
-  it('still launches into the last selected job, not Book Home', async () => {
+  it('cold launches on Home even with a previous selected job', async () => {
+    localStorage.setItem(SELECTED_ID_KEY, SAMMY.id)
+    render(<App />)
+    expect(screen.getByRole('heading', { name: 'The Job Book' })).toBeVisible()
+    expect(screen.queryByTestId('workspace-screen')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /^Hill extension/ }),
+    ).toBeVisible()
+  })
+  it('Home offers Record, Add photo, in-progress jobs and Workshop', async () => {
+    render(<App />)
+    expect(
+      await screen.findByRole('button', { name: /^Hill extension/ }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add photo' })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Workshop/ })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /Grant James roof/ }),
+    ).not.toBeInTheDocument()
+  })
+  it('Home has no financial summary or zero unfiled row', async () => {
+    render(<App />)
+    await screen.findByRole('button', { name: /^Hill extension/ })
+    expect(screen.queryByText(/money|budget|£/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Not filed yet/ }),
+    ).not.toBeInTheDocument()
+  })
+  it('returning Home preserves the selected job until a deliberate switch', async () => {
     localStorage.setItem(SELECTED_ID_KEY, SAMMY.id)
     await launch()
-    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', SAMMY.id)
-    expect(screen.queryByRole('heading', { name: 'The Job Book' })).not.toBeInTheDocument()
-  })
-
-  it('every Job Home has a route labelled "The Job Book"', async () => {
     const user = userEvent.setup()
-    await launch()
-    await gotoBookHome(user)
-    expect(screen.getByRole('heading', { name: 'The Job Book' })).toBeInTheDocument()
-  })
-
-  // ── Book Home ─────────────────────────────────────────────────────────────
-
-  it('Book Home has no Record action', async () => {
-    const user = userEvent.setup()
-    await launch()
-    expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
-    await gotoBookHome(user)
-    expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
-  })
-
-  it('is three destination rows, and names no individual job', async () => {
-    const user = userEvent.setup()
-    await launch()
-    await gotoBookHome(user)
-
-    // The cover says how much of each thing there is and hands over. It used
-    // to list the live jobs by name, which put a job list directly above the
-    // page that is itself a job list. (Money is backend-gated and off in this
-    // suite's fixture — bookmoney.test.tsx owns the row that appears.)
-    expect(screen.getByRole('button', { name: /^Jobs/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Workshop/ })).toBeInTheDocument()
-    for (const j of ALL) {
-      expect(screen.queryByRole('button', { name: new RegExp(j.title) })).not.toBeInTheDocument()
-    }
-  })
-
-  it('counts the jobs by state, dropping any state there are none of', async () => {
-    const user = userEvent.setup()
-    await launch()
-    await gotoBookHome(user)
-
-    // 2 started, 2 planning, 2 finished in the fixture.
-    const jobsRow = screen.getByRole('button', { name: /^Jobs/ })
-    expect(jobsRow).toHaveTextContent('2 in progress')
-    expect(jobsRow).toHaveTextContent('2 planning · 2 finished')
-
-    mockGetJobs.mockResolvedValue([HILL, SAMMY])
-    localStorage.clear()
-    cleanup()
-    await launch()
-    await gotoBookHome(user)
-    const onlyLive = screen.getByRole('button', { name: /^Jobs/ })
-    expect(onlyLive).toHaveTextContent('2 in progress')
-    // No "0 planning", no "0 finished" — a zero is a fact about nothing.
-    expect(onlyLive).not.toHaveTextContent('0')
-  })
-
-  it('the Jobs row opens All Jobs, which is where a job is now opened', async () => {
-    const user = userEvent.setup()
-    localStorage.setItem(SELECTED_ID_KEY, HILL.id)
-    await launch()
-    await gotoBookHome(user)
-
-    await user.click(screen.getByRole('button', { name: /^Jobs/ }))
-    await screen.findByRole('heading', { name: /^All jobs/ })
-    // Reaching the index changed nothing about what Record would save to.
-    expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(HILL.id)
-  })
-
-  it('holds the Jobs "things to check" line until a cross-job count exists', async () => {
-    const user = userEvent.setup()
-    await launch()
-    await gotoBookHome(user)
-    // The design puts a to-check count under Jobs. stillToCheck is per-job on
-    // memory-view only, so there is nothing cross-job to count — and a number
-    // derived here would disagree with the jobs it claims to summarise.
-    expect(screen.queryByText(/to check/i)).not.toBeInTheDocument()
-  })
-
-  it('shows no Money row when the backend has nothing to show', async () => {
-    const user = userEvent.setup()
-    await launch()
-    await gotoBookHome(user)
-    // Money is backend-gated: with showMoneyRow false there is no row, and no
-    // £0 or "nothing owed" stand-in for it either.
-    expect(screen.queryByText(/money/i)).not.toBeInTheDocument()
-  })
-
-  it('keeps the Workshop row when the workshop is empty, with no count and no explanation', async () => {
-    const user = userEvent.setup()
-    await launch()
-    await gotoBookHome(user)
-    // Workshop is a destination now, so the route stays learnable even with
-    // nothing in there — but an empty workshop says nothing about stock: no
-    // "0 things", no explanation of how leftovers get there, no Record.
-    expect(screen.getByRole('button', { name: /Workshop/ })).toBeInTheDocument()
-    expect(screen.queryByText(/0 things/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/^0$/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
-  })
-
-  it('returning to Book Home does not change the selected job', async () => {
-    const user = userEvent.setup()
-    localStorage.setItem(SELECTED_ID_KEY, SAMMY.id)
-    await launch()
     await gotoBookHome(user)
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(SAMMY.id)
-
-    // and coming back down through All Jobs leaves it selected
-    await user.click(screen.getByRole('button', { name: /^Jobs/ }))
-    await user.click(await screen.findByRole('button', { name: /Sammy garden room/ }))
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', SAMMY.id))
   })
 
   // ── All Jobs ──────────────────────────────────────────────────────────────
@@ -233,10 +238,18 @@ describe('Book Home and job navigation', () => {
     await launch()
     await gotoAllJobs(user)
 
-    expect(screen.getByRole('heading', { name: 'All jobs 6' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'In progress 2' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Planning 2' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Finished 2' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'All jobs 6' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'In progress 2' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Planning 2' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Finished 2' }),
+    ).toBeInTheDocument()
     // grouped index, not tabs
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
   })
@@ -247,11 +260,19 @@ describe('Book Home and job navigation', () => {
     await gotoAllJobs(user)
 
     for (const j of ALL) {
-      expect(screen.getAllByRole('button', { name: new RegExp(j.title) })).toHaveLength(1)
+      expect(
+        screen.getAllByRole('button', { name: new RegExp(j.title) }),
+      ).toHaveLength(1)
     }
-    expect(group(/in progress/i).getByRole('button', { name: /Hill extension/ })).toBeInTheDocument()
-    expect(group(/planning/i).getByRole('button', { name: /Grant James roof/ })).toBeInTheDocument()
-    expect(group(/finished/i).getByRole('button', { name: /Whitmore patio/ })).toBeInTheDocument()
+    expect(
+      group(/in progress/i).getByRole('button', { name: /Hill extension/ }),
+    ).toBeInTheDocument()
+    expect(
+      group(/planning/i).getByRole('button', { name: /Grant James roof/ }),
+    ).toBeInTheDocument()
+    expect(
+      group(/finished/i).getByRole('button', { name: /Whitmore patio/ }),
+    ).toBeInTheDocument()
     expect(screen.getByText('14 Hilltop Road')).toBeInTheDocument()
   })
 
@@ -262,7 +283,12 @@ describe('Book Home and job navigation', () => {
 
     await user.click(screen.getByRole('button', { name: /Okoro loft/ }))
 
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', OKORO.id))
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+        'data-job-id',
+        OKORO.id,
+      ),
+    )
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(OKORO.id)
   })
 
@@ -271,8 +297,12 @@ describe('Book Home and job navigation', () => {
     await launch()
     await gotoAllJobs(user)
 
-    expect(screen.getByRole('heading', { name: 'Finished 2' })).toBeInTheDocument()
-    expect(group(/finished/i).getByRole('button', { name: /Okoro loft/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Finished 2' }),
+    ).toBeInTheDocument()
+    expect(
+      group(/finished/i).getByRole('button', { name: /Okoro loft/ }),
+    ).toBeInTheDocument()
   })
 
   it('All Jobs goes back to Book Home without changing the selected job', async () => {
@@ -281,7 +311,9 @@ describe('Book Home and job navigation', () => {
     await launch()
     await gotoAllJobs(user)
 
-    await user.click(screen.getByRole('button', { name: /back to the job book/i }))
+    await user.click(
+      screen.getByRole('button', { name: /back to the job book/i }),
+    )
 
     await screen.findByRole('heading', { name: 'The Job Book' })
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(SAMMY.id)
@@ -304,7 +336,9 @@ describe('Book Home and job navigation', () => {
     expect(form.getByLabelText(/where \(optional\)/i)).toBeInTheDocument()
     expect(form.getByRole('button', { name: 'Add job' })).toBeInTheDocument()
     // the design's "Start the job" copy is overridden by the product handoff
-    expect(form.queryByRole('button', { name: /start the job/i })).not.toBeInTheDocument()
+    expect(
+      form.queryByRole('button', { name: /start the job/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('defaults to In progress and creates one job, opening it as the selected job', async () => {
@@ -319,7 +353,12 @@ describe('Book Home and job navigation', () => {
     await user.type(form.getByLabelText(/where \(optional\)/i), 'Elm Close')
     await user.click(form.getByRole('button', { name: 'Add job' }))
 
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', created.id))
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+        'data-job-id',
+        created.id,
+      ),
+    )
     expect(mockCreateJob).toHaveBeenCalledTimes(1)
     expect(mockCreateJob).toHaveBeenCalledWith({
       title: 'Verity porch 2',
@@ -331,7 +370,11 @@ describe('Book Home and job navigation', () => {
 
   it('creates a Planning job when Planning is chosen, and it lands in the Planning group', async () => {
     const user = userEvent.setup()
-    const created = job({ id: 'job-new-planning', title: 'Quote for barn', status: 'planning' })
+    const created = job({
+      id: 'job-new-planning',
+      title: 'Quote for barn',
+      status: 'planning',
+    })
     mockCreateJob.mockResolvedValue(created)
     await launch()
     const form = await openNewJob(user)
@@ -340,18 +383,36 @@ describe('Book Home and job navigation', () => {
     await user.click(form.getByRole('radio', { name: 'Planning' }))
     await user.click(form.getByRole('button', { name: 'Add job' }))
 
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', created.id))
-    expect(mockCreateJob).toHaveBeenCalledWith({ title: 'Quote for barn', roughLocationOrLabel: null, status: 'planning' })
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+        'data-job-id',
+        created.id,
+      ),
+    )
+    expect(mockCreateJob).toHaveBeenCalledWith({
+      title: 'Quote for barn',
+      roughLocationOrLabel: null,
+      status: 'planning',
+    })
 
     await gotoAllJobs(user)
-    expect(group(/planning/i).getByRole('button', { name: /Quote for barn/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'All jobs 7' })).toBeInTheDocument()
+    expect(
+      group(/planning/i).getByRole('button', { name: /Quote for barn/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'All jobs 7' }),
+    ).toBeInTheDocument()
   })
 
   it('a double tap on Add job creates exactly one job', async () => {
     const user = userEvent.setup()
     let resolveCreate: (j: Job) => void = () => {}
-    mockCreateJob.mockImplementation(() => new Promise<Job>(res => { resolveCreate = res }))
+    mockCreateJob.mockImplementation(
+      () =>
+        new Promise<Job>((res) => {
+          resolveCreate = res
+        }),
+    )
     await launch()
     const form = await openNewJob(user)
 
@@ -361,8 +422,15 @@ describe('Book Home and job navigation', () => {
     await user.click(submit)
 
     expect(mockCreateJob).toHaveBeenCalledTimes(1)
-    await act(async () => { resolveCreate(job({ id: 'job-slow', title: 'Slow job' })) })
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', 'job-slow'))
+    await act(async () => {
+      resolveCreate(job({ id: 'job-slow', title: 'Slow job' }))
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+        'data-job-id',
+        'job-slow',
+      ),
+    )
     expect(mockCreateJob).toHaveBeenCalledTimes(1)
   })
 
@@ -376,7 +444,9 @@ describe('Book Home and job navigation', () => {
     await user.click(form.getByRole('button', { name: /cancel/i }))
 
     expect(mockCreateJob).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: /Never created/ })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Never created/ }),
+    ).not.toBeInTheDocument()
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(SAMMY.id)
   })
 
@@ -399,8 +469,12 @@ describe('Book Home and job navigation', () => {
 
     // the job is not in the index either
     await user.click(form.getByRole('button', { name: /cancel/i }))
-    expect(screen.queryByRole('button', { name: /Barn conversion/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'All jobs 6' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Barn conversion/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'All jobs 6' }),
+    ).toBeInTheDocument()
   })
 
   it('offers a route to New job when there are no jobs at all', async () => {
@@ -410,15 +484,22 @@ describe('Book Home and job navigation', () => {
     mockCreateJob.mockResolvedValue(created)
     render(<App />)
 
-    await screen.findByRole('heading', { name: /^All jobs/ })
+    await screen.findByRole('button', { name: /new job/i })
     // Nowhere to go back to yet, so no back route is offered.
-    expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /back/i }),
+    ).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /new job/i }))
     const form = within(await screen.findByRole('dialog', { name: /new job/i }))
     await user.type(form.getByLabelText(/job name/i), 'First job')
     await user.click(form.getByRole('button', { name: 'Add job' }))
 
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', created.id))
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+        'data-job-id',
+        created.id,
+      ),
+    )
   })
 
   // ── Navigation safety ─────────────────────────────────────────────────────
@@ -429,11 +510,21 @@ describe('Book Home and job navigation', () => {
     await launch()
     await gotoAllJobs(user)
     await user.click(screen.getByRole('button', { name: /Sammy garden room/ }))
-    await waitFor(() => expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', SAMMY.id))
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+        'data-job-id',
+        SAMMY.id,
+      ),
+    )
 
-    act(() => { window.dispatchEvent(new PopStateEvent('popstate')) })
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
 
-    expect(screen.getByTestId('workspace-screen')).toHaveAttribute('data-job-id', SAMMY.id)
+    expect(screen.getByTestId('workspace-screen')).toHaveAttribute(
+      'data-job-id',
+      SAMMY.id,
+    )
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(SAMMY.id)
   })
 })

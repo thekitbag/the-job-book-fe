@@ -1,3 +1,4 @@
+import { resetMockCaptures } from './capture'
 import { resetMockJobLog } from './jobLog'
 import { resetMockQueue } from './reviewQueue'
 import { _resetMockAuthForTesting } from './auth'
@@ -7,6 +8,7 @@ import { _resetMockPhotosForTesting } from './photos'
 import { _resetMockWorkshopForTesting } from './workshop'
 
 export function resetMockApiForE2e(scenario = 'default'): void {
+  resetMockCaptures()
   resetMockQueue()
   resetMockJobLog()
   _resetMockAuthForTesting()

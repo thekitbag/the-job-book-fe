@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  fireEvent,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
@@ -8,7 +14,8 @@ import { getJobs } from '../api'
 import { MOCK_JOBS } from '../api/mock/jobs'
 import { mockMemoryView } from '../api/mock/memory'
 import {
-  _resetMockWorkshopForTesting, mockGetWorkshop,
+  _resetMockWorkshopForTesting,
+  mockGetWorkshop,
 } from '../api/mock/workshop'
 import { _resetMockMemoryForTesting } from '../api/mock/state'
 import type { Job } from '../types'
@@ -24,15 +31,30 @@ import type { Job } from '../types'
 
 vi.mock('../db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../db')>()
-  return { ...actual, saveNote: vi.fn(), getNotesForJob: vi.fn(() => Promise.resolve([])) }
+  return {
+    ...actual,
+    saveNote: vi.fn(),
+    getNotesForJob: vi.fn(() => Promise.resolve([])),
+  }
 })
 
-vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
-vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow: vi.fn() }) }))
+vi.mock('../useSync', () => ({
+  useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }),
+}))
+vi.mock('../useTranscriptPoll', () => ({
+  useTranscriptPoll: () => ({ refreshNow: vi.fn() }),
+}))
 vi.mock('../useRecorder', () => ({
   isRecordingSupported: true,
   getSupportedMimeType: () => 'audio/webm',
-  useRecorder: () => ({ state: 'idle', elapsedMs: 0, mimeType: 'audio/webm', permissionError: null, start: vi.fn(), stop: vi.fn() }),
+  useRecorder: () => ({
+    state: 'idle',
+    elapsedMs: 0,
+    mimeType: 'audio/webm',
+    permissionError: null,
+    start: vi.fn(),
+    stop: vi.fn(),
+  }),
 }))
 
 vi.mock('../AuthScreen', () => ({
@@ -52,37 +74,93 @@ vi.mock('../api', async (importOriginal) => {
   return {
     ...actual,
     getJobs: vi.fn(),
-    getCurrentUser: vi.fn(() => Promise.resolve({ id: 'u1', email: 'mike@test', name: 'Mike', role: 'PILOT' })),
+    getCaptureHome: vi.fn(async () => {
+      const w = workshop.mockGetWorkshop()
+      const api = await import('../api')
+      const jobs = await api.getJobs()
+      return {
+        inProgressJobs: jobs
+          .filter((j) => j.status === 'started')
+          .map((j) => ({
+            id: j.id,
+            title: j.title,
+            lastActivityAt: j.updatedAt,
+            toCheckCount: 0,
+          })),
+        otherJobs: { planningCount: 0, finishedCount: 0 },
+        unfiledCount: 0,
+        lastRecordedJobId: null,
+        workshop: {
+          availableCount: w.bookHome.availableCount,
+          preview: w.bookHome.previewItems.map((i) => i.materialName),
+        },
+      }
+    }),
+    getCurrentUser: vi.fn(() =>
+      Promise.resolve({
+        id: 'u1',
+        email: 'mike@test',
+        name: 'Mike',
+        role: 'PILOT',
+      }),
+    ),
     onUnauthorized: vi.fn(),
-    getBookMoney: vi.fn(() => Promise.resolve({
-      generatedAt: '', bookHome: { showMoneyRow: false }, toPayOnAccounts: null, owedToMe: null,
-    })),
+    getBookMoney: vi.fn(() =>
+      Promise.resolve({
+        generatedAt: '',
+        bookHome: { showMoneyRow: false },
+        toPayOnAccounts: null,
+        owedToMe: null,
+      }),
+    ),
     getWorkshop: vi.fn(async () => workshop.mockGetWorkshop()),
     moveLeftoverToWorkshop: vi.fn(async (jobId: string, itemId: string) =>
-      workshop.mockMoveLeftoverToWorkshop(jobId, itemId, {})),
-    createWorkshopItem: vi.fn(async (req: { materialName: string; roughAmount?: string | null }) =>
-      workshop.mockAddManualWorkshopItem(req)),
-    patchWorkshopItem: vi.fn(async (id: string, req: { materialName?: string; roughAmount?: string | null }) =>
-      workshop.mockPatchWorkshopItem(id, req)),
-    undoWorkshopMove: vi.fn(async (id: string) => workshop.mockUndoWorkshopMove(id)),
-    markWorkshopItemUsedUp: vi.fn(async (id: string) => workshop.mockWorkshopUsedUp(id)),
-    markWorkshopItemWasntThere: vi.fn(async (id: string) => workshop.mockWorkshopWasntThere(id)),
-    putBackWorkshopItem: vi.fn(async (id: string) => workshop.mockPutBackWorkshopItem(id)),
+      workshop.mockMoveLeftoverToWorkshop(jobId, itemId, {}),
+    ),
+    createWorkshopItem: vi.fn(
+      async (req: { materialName: string; roughAmount?: string | null }) =>
+        workshop.mockAddManualWorkshopItem(req),
+    ),
+    patchWorkshopItem: vi.fn(
+      async (
+        id: string,
+        req: { materialName?: string; roughAmount?: string | null },
+      ) => workshop.mockPatchWorkshopItem(id, req),
+    ),
+    undoWorkshopMove: vi.fn(async (id: string) =>
+      workshop.mockUndoWorkshopMove(id),
+    ),
+    markWorkshopItemUsedUp: vi.fn(async (id: string) =>
+      workshop.mockWorkshopUsedUp(id),
+    ),
+    markWorkshopItemWasntThere: vi.fn(async (id: string) =>
+      workshop.mockWorkshopWasntThere(id),
+    ),
+    putBackWorkshopItem: vi.fn(async (id: string) =>
+      workshop.mockPutBackWorkshopItem(id),
+    ),
     getMemoryView: vi.fn(async (jobId: string) => memory.mockMemoryView(jobId)),
     getJobPayments: vi.fn(() => Promise.reject(new Error('none'))),
-    getReviewQueue: vi.fn(() => Promise.resolve({ jobId: '', generatedAt: '', sections: [], alreadyRemembered: [] })),
+    getReviewQueue: vi.fn(() =>
+      Promise.resolve({
+        jobId: '',
+        generatedAt: '',
+        sections: [],
+        alreadyRemembered: [],
+      }),
+    ),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
-    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
+    getJobLog: vi.fn(() => Promise.resolve({ entries: [] })),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: '', photos: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: '', receipts: [] })),
   }
 })
 
-const GARDEN = MOCK_JOBS.find(j => j.id === 'job-pilot-garden-room-001')!
-const KITCHEN = MOCK_JOBS.find(j => j.id === 'job-pilot-extension-002')!
-const WHITMORE = MOCK_JOBS.find(j => j.id === 'job-pilot-finished-005')!
-const LIVE_JOBS = MOCK_JOBS.filter(j => j.status !== 'archived')
+const GARDEN = MOCK_JOBS.find((j) => j.id === 'job-pilot-garden-room-001')!
+const KITCHEN = MOCK_JOBS.find((j) => j.id === 'job-pilot-extension-002')!
+const WHITMORE = MOCK_JOBS.find((j) => j.id === 'job-pilot-finished-005')!
+const LIVE_JOBS = MOCK_JOBS.filter((j) => j.status !== 'archived')
 
 const SELECTED_ID_KEY = 'job-book-selected-job-id'
 
@@ -101,7 +179,14 @@ describe('Workshop across jobs', () => {
   async function launch(scenario = 'default') {
     _resetMockWorkshopForTesting(scenario)
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /the job book/i })).toBeInTheDocument())
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: /^Garden Room/ }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /the job book/i }),
+      ).toBeInTheDocument(),
+    )
   }
 
   async function gotoBookHome(user: ReturnType<typeof userEvent.setup>) {
@@ -154,9 +239,13 @@ describe('Workshop across jobs', () => {
     await launch('workshop-empty')
     await gotoBookHome(user)
 
-    expect(screen.getByRole('button', { name: /^Workshop/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^Workshop/ }),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/0 things/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /start recording/i }),
+    ).toBeInTheDocument()
   })
 
   it('lists available items newest entered first, with rough words and provenance', async () => {
@@ -165,8 +254,10 @@ describe('Workshop across jobs', () => {
     await gotoWorkshop(user)
 
     const expected = mockGetWorkshop().availableItems
-    const rendered = screen.getAllByRole('button', { name: /^Open / }).map(b => b.getAttribute('aria-label'))
-    expect(rendered).toEqual(expected.map(i => `Open ${i.materialName}`))
+    const rendered = screen
+      .getAllByRole('button', { name: /^Open / })
+      .map((b) => b.getAttribute('aria-label'))
+    expect(rendered).toEqual(expected.map((i) => `Open ${i.materialName}`))
 
     // Rough words survive exactly as they were said.
     expect(screen.getByText('about 3 sheets')).toBeInTheDocument()
@@ -174,7 +265,9 @@ describe('Workshop across jobs', () => {
     // A hand-added item says so where a source job would be.
     expect(screen.getAllByText(/Added by hand/).length).toBeGreaterThan(0)
     // A finished source job is named as one.
-    expect(screen.getByText(new RegExp(`${WHITMORE.title}.*finished job`))).toBeInTheDocument()
+    expect(
+      screen.getByText(new RegExp(`${WHITMORE.title}.*finished job`)),
+    ).toBeInTheDocument()
   })
 
   it('shows no amount at all — never a zero — for an item with no rough amount', async () => {
@@ -192,8 +285,12 @@ describe('Workshop across jobs', () => {
     await launch()
     await gotoWorkshop(user)
 
-    expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
-    expect(screen.queryByText(/say it|voice|stock check/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /record/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/say it|voice|stock check/i),
+    ).not.toBeInTheDocument()
   })
 
   it('shows only the two empty-state lines when there is nothing in there', async () => {
@@ -202,8 +299,12 @@ describe('Workshop across jobs', () => {
     await gotoWorkshop(user)
 
     expect(screen.getByText('Nothing in the workshop yet')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Add one by hand/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /record/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Add one by hand/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /record/i }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText(/leftover/i)).not.toBeInTheDocument()
   })
 
@@ -214,11 +315,21 @@ describe('Workshop across jobs', () => {
     await openItem(user, 'OSB')
 
     const sheet = within(screen.getByRole('dialog'))
-    expect(sheet.getByRole('button', { name: /Change what's there/ })).toBeInTheDocument()
-    expect(sheet.getByRole('button', { name: /All used up/ })).toBeInTheDocument()
-    expect(sheet.getByRole('button', { name: new RegExp(`Open ${KITCHEN.title}`) })).toBeInTheDocument()
-    expect(sheet.getByRole('button', { name: /Undo move to the Workshop/ })).toBeInTheDocument()
-    expect(sheet.getByRole('button', { name: /Wasn't there after all/ })).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /Change what's there/ }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /All used up/ }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: new RegExp(`Open ${KITCHEN.title}`) }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /Undo move to the Workshop/ }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /Wasn't there after all/ }),
+    ).toBeInTheDocument()
   })
 
   it('a hand-added item drawer omits the source job and the undo-move', async () => {
@@ -228,11 +339,21 @@ describe('Workshop across jobs', () => {
     await openItem(user, 'Sand')
 
     const sheet = within(screen.getByRole('dialog'))
-    expect(sheet.getByRole('button', { name: /Change what's there/ })).toBeInTheDocument()
-    expect(sheet.getByRole('button', { name: /All used up/ })).toBeInTheDocument()
-    expect(sheet.getByRole('button', { name: /Wasn't there after all/ })).toBeInTheDocument()
-    expect(sheet.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
-    expect(sheet.queryByRole('button', { name: /Undo move/ })).not.toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /Change what's there/ }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /All used up/ }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.getByRole('button', { name: /Wasn't there after all/ }),
+    ).toBeInTheDocument()
+    expect(
+      sheet.queryByRole('button', { name: /^Open / }),
+    ).not.toBeInTheDocument()
+    expect(
+      sheet.queryByRole('button', { name: /Undo move/ }),
+    ).not.toBeInTheDocument()
     // No reassurance about a job keeping its cost: there is no job.
     expect(sheet.queryByText(/keeps its cost/)).not.toBeInTheDocument()
   })
@@ -246,18 +367,37 @@ describe('Workshop across jobs', () => {
     const form = screen.getByRole('form', { name: 'Add by hand' })
     expect(within(form).getAllByRole('textbox')).toHaveLength(2)
     expect(within(form).getByLabelText('What it is')).toBeInTheDocument()
-    expect(within(form).getByLabelText('Rough amount (optional)')).toBeInTheDocument()
-    for (const absent of [/supplier/i, /price/i, /categor/i, /location/i, /unit/i, /job/i]) {
+    expect(
+      within(form).getByLabelText('Rough amount (optional)'),
+    ).toBeInTheDocument()
+    for (const absent of [
+      /supplier/i,
+      /price/i,
+      /categor/i,
+      /location/i,
+      /unit/i,
+      /job/i,
+    ]) {
       expect(within(form).queryByLabelText(absent)).not.toBeInTheDocument()
     }
 
-    await user.type(within(form).getByLabelText('What it is'), 'Insulation, 50mm')
-    await user.type(within(form).getByLabelText('Rough amount (optional)'), 'a bit')
-    await user.click(within(form).getByRole('button', { name: 'Add to the workshop' }))
+    await user.type(
+      within(form).getByLabelText('What it is'),
+      'Insulation, 50mm',
+    )
+    await user.type(
+      within(form).getByLabelText('Rough amount (optional)'),
+      'a bit',
+    )
+    await user.click(
+      within(form).getByRole('button', { name: 'Add to the workshop' }),
+    )
 
     await screen.findByRole('button', { name: 'Open Insulation, 50mm' })
     // Newest first, so a fresh hand-added item leads the list.
-    expect(mockGetWorkshop().availableItems[0].materialName).toBe('Insulation, 50mm')
+    expect(mockGetWorkshop().availableItems[0].materialName).toBe(
+      'Insulation, 50mm',
+    )
     expect(screen.getByText('a bit')).toBeInTheDocument()
   })
 
@@ -269,7 +409,9 @@ describe('Workshop across jobs', () => {
 
     const form = screen.getByRole('form', { name: 'Add by hand' })
     await user.type(within(form).getByLabelText('What it is'), 'Trims')
-    await user.click(within(form).getByRole('button', { name: 'Add to the workshop' }))
+    await user.click(
+      within(form).getByRole('button', { name: 'Add to the workshop' }),
+    )
 
     const row = await screen.findByRole('button', { name: 'Open Trims' })
     expect(row.querySelector('.ws-row-amount')).toBeNull()
@@ -280,7 +422,11 @@ describe('Workshop across jobs', () => {
     await launch()
     await gotoWorkshop(user)
     await openItem(user, 'OSB')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Change what's there/ }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: /Change what's there/,
+      }),
+    )
 
     const form = screen.getByRole('form', { name: "Change what's there" })
     const amount = within(form).getByLabelText('Rough amount')
@@ -288,10 +434,16 @@ describe('Workshop across jobs', () => {
     await user.type(amount, 'a couple of sheets, maybe 3')
     await user.click(within(form).getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(screen.getByText('a couple of sheets, maybe 3')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('a couple of sheets, maybe 3'),
+      ).toBeInTheDocument(),
+    )
     // Stored verbatim — not parsed into a number, not rounded, not split.
-    expect(mockGetWorkshop().availableItems.find(i => i.id === 'ws-osb')!.roughAmount)
-      .toBe('a couple of sheets, maybe 3')
+    expect(
+      mockGetWorkshop().availableItems.find((i) => i.id === 'ws-osb')!
+        .roughAmount,
+    ).toBe('a couple of sheets, maybe 3')
   })
 
   it('marks an item all used up, drops it from the list, and undoes it back', async () => {
@@ -301,17 +453,33 @@ describe('Workshop across jobs', () => {
     const before = mockGetWorkshop().bookHome.availableCount
 
     await openItem(user, 'Membrane')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /All used up/ }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: /All used up/,
+      }),
+    )
 
-    const result = within(await screen.findByRole('dialog', { name: 'All used up' }))
+    const result = within(
+      await screen.findByRole('dialog', { name: 'All used up' }),
+    )
     expect(result.getByText(/Membrane · part of a roll/)).toBeInTheDocument()
-    await waitFor(() => expect(mockGetWorkshop().bookHome.availableCount).toBe(before - 1))
+    await waitFor(() =>
+      expect(mockGetWorkshop().bookHome.availableCount).toBe(before - 1),
+    )
 
     await user.click(result.getByRole('button', { name: /^Undo/ }))
-    await waitFor(() => expect(mockGetWorkshop().bookHome.availableCount).toBe(before))
+    await waitFor(() =>
+      expect(mockGetWorkshop().bookHome.availableCount).toBe(before),
+    )
     // Same item, same rough words — never a second Workshop item.
-    expect(mockGetWorkshop().availableItems.filter(i => i.materialName === 'Membrane')).toHaveLength(1)
-    expect(await screen.findByRole('button', { name: 'Open Membrane' })).toBeInTheDocument()
+    expect(
+      mockGetWorkshop().availableItems.filter(
+        (i) => i.materialName === 'Membrane',
+      ),
+    ).toHaveLength(1)
+    expect(
+      await screen.findByRole('button', { name: 'Open Membrane' }),
+    ).toBeInTheDocument()
   })
 
   it('records "wasn\'t there after all" as a different outcome, with its own undo', async () => {
@@ -320,17 +488,27 @@ describe('Workshop across jobs', () => {
     await gotoWorkshop(user)
 
     await openItem(user, 'Membrane')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Wasn't there after all/ }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: /Wasn't there after all/,
+      }),
+    )
 
     await screen.findByRole('dialog', { name: /Wasn.t there after all/ })
     // Distinct backend state — not shared with used up.
     await waitFor(() => {
-      const item = mockGetWorkshop().availableItems.find(i => i.id === 'ws-membrane')
+      const item = mockGetWorkshop().availableItems.find(
+        (i) => i.id === 'ws-membrane',
+      )
       expect(item).toBeUndefined()
     })
 
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Undo/ }))
-    expect(await screen.findByRole('button', { name: 'Open Membrane' })).toBeInTheDocument()
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: /^Undo/ }),
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Open Membrane' }),
+    ).toBeInTheDocument()
   })
 
   it('undoes a move from the Workshop, returning the material to its job alone', async () => {
@@ -338,12 +516,21 @@ describe('Workshop across jobs', () => {
     await launch()
     await gotoWorkshop(user)
     await openItem(user, 'OSB')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Undo move to the Workshop/ }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: /Undo move to the Workshop/,
+      }),
+    )
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Open OSB' })).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Open OSB' }),
+      ).not.toBeInTheDocument(),
+    )
     // The source leftover is a plain leftover again, with no Workshop state.
-    const source = mockMemoryView(KITCHEN.id).sections
-      .find(s => s.key === 'leftovers')!.items.find(i => i.id === 'mem-kitchen-left-1')!
+    const source = mockMemoryView(KITCHEN.id)
+      .sections.find((s) => s.key === 'leftovers')!
+      .items.find((i) => i.id === 'mem-kitchen-left-1')!
     expect(source.workshopState).toBe('not_moved')
   })
 
@@ -353,24 +540,38 @@ describe('Workshop across jobs', () => {
     await launch()
     await gotoWorkshop(user)
     await openItem(user, 'Fence posts')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: new RegExp(`Open ${WHITMORE.title}`) }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: new RegExp(`Open ${WHITMORE.title}`),
+      }),
+    )
 
     // Materials → Left over, with the source row's action drawer already open.
-    expect(await screen.findByRole('tabpanel', { name: 'Left over materials' })).toBeInTheDocument()
-    expect(await screen.findByRole('dialog', { name: /Fence posts/ })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('tabpanel', { name: 'Left over materials' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('dialog', { name: /Fence posts/ }),
+    ).toBeInTheDocument()
   })
 
   it('leaves a failed action with nothing changed and says so', async () => {
     const user = userEvent.setup()
     await launch('workshop-fails')
     await gotoWorkshop(user)
-    const before = mockGetWorkshop().availableItems.map(i => i.id)
+    const before = mockGetWorkshop().availableItems.map((i) => i.id)
 
     await openItem(user, 'OSB')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /All used up/ }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: /All used up/,
+      }),
+    )
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/nothing changed/i)
-    expect(mockGetWorkshop().availableItems.map(i => i.id)).toEqual(before)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /nothing changed/i,
+    )
+    expect(mockGetWorkshop().availableItems.map((i) => i.id)).toEqual(before)
   })
 })
 
@@ -383,19 +584,28 @@ describe('Workshop from the source job', () => {
   function renderJob(job: Job) {
     return render(
       <ToastProvider>
-        <CurrentJobWorkspace job={job} onOpenReviewQueue={vi.fn()} onOpenBookHome={vi.fn()} onOpenWorkshop={vi.fn()} />
+        <CurrentJobWorkspace
+          job={job}
+          onOpenReviewQueue={vi.fn()}
+          onOpenBookHome={vi.fn()}
+          onOpenWorkshop={vi.fn()}
+        />
       </ToastProvider>,
     )
   }
 
   async function openLeftovers() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Materials' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Open Materials' }),
+    )
     fireEvent.click(screen.getByRole('tab', { name: 'Left over' }))
     return screen.findByRole('tabpanel', { name: 'Left over materials' })
   }
 
   async function openRow(name: string) {
-    const row = await screen.findByRole('button', { name: `Open actions for ${name}` })
+    const row = await screen.findByRole('button', {
+      name: `Open actions for ${name}`,
+    })
     fireEvent.click(row)
     return within(await screen.findByRole('dialog'))
   }
@@ -406,28 +616,35 @@ describe('Workshop from the source job', () => {
     const sheet = await openRow('fence posts')
 
     const move = sheet.getByRole('button', { name: /Move to the Workshop/ })
-    expect(move).toHaveTextContent('Keep track of this material in the Workshop.')
+    expect(move).toHaveTextContent(
+      'Keep track of this material in the Workshop.',
+    )
     // The consequence is stated on the action, not repeated as a totals panel.
     expect(sheet.queryByText(/£/)).not.toBeInTheDocument()
   })
 
   it('moves a leftover from a Finished job without reopening it or touching the money', async () => {
-
     renderJob(WHITMORE)
     await openLeftovers()
     const sheet = await openRow('Gravel boards')
     fireEvent.click(sheet.getByRole('button', { name: /Move to the Workshop/ }))
 
     // The result names what moved and where it came from — and no totals.
-    const result = within(await screen.findByRole('dialog', { name: /Moved to the Workshop/ }))
+    const result = within(
+      await screen.findByRole('dialog', { name: /Moved to the Workshop/ }),
+    )
     expect(result.getByText(/Gravel boards · a couple/)).toBeInTheDocument()
     expect(result.getByText(`From ${WHITMORE.title}`)).toBeInTheDocument()
-    expect(result.getByRole('button', { name: /See in the Workshop/ })).toBeInTheDocument()
-    expect(result.getByRole('button', { name: /Undo move to the Workshop/ })).toBeInTheDocument()
+    expect(
+      result.getByRole('button', { name: /See in the Workshop/ }),
+    ).toBeInTheDocument()
+    expect(
+      result.getByRole('button', { name: /Undo move to the Workshop/ }),
+    ).toBeInTheDocument()
     expect(result.getByRole('button', { name: 'Done' })).toBeInTheDocument()
 
     // The job is still finished, and every figure is exactly as it was.
-    expect(MOCK_JOBS.find(j => j.id === WHITMORE.id)!.status).toBe('finished')
+    expect(MOCK_JOBS.find((j) => j.id === WHITMORE.id)!.status).toBe('finished')
   })
 
   it('keeps the moved leftover on its job, marked IN WORKSHOP', async () => {
@@ -435,9 +652,15 @@ describe('Workshop from the source job', () => {
     await openLeftovers()
     const sheet = await openRow('Gravel boards')
     fireEvent.click(sheet.getByRole('button', { name: /Move to the Workshop/ }))
-    fireEvent.click(within(await screen.findByRole('dialog', { name: /Moved to the Workshop/ })).getByRole('button', { name: 'Done' }))
+    fireEvent.click(
+      within(
+        await screen.findByRole('dialog', { name: /Moved to the Workshop/ }),
+      ).getByRole('button', { name: 'Done' }),
+    )
 
-    const row = await screen.findByRole('button', { name: 'Open actions for Gravel boards' })
+    const row = await screen.findByRole('button', {
+      name: 'Open actions for Gravel boards',
+    })
     expect(within(row).getByText('IN WORKSHOP')).toBeInTheDocument()
     expect(within(row).getByText(/in the workshop since/)).toBeInTheDocument()
   })
@@ -447,40 +670,60 @@ describe('Workshop from the source job', () => {
     await openLeftovers()
     // Fence posts is seeded as already in the Workshop.
     const sheet = await openRow('Fence posts')
-    expect(sheet.queryByRole('button', { name: /Move to the Workshop/ })).not.toBeInTheDocument()
+    expect(
+      sheet.queryByRole('button', { name: /Move to the Workshop/ }),
+    ).not.toBeInTheDocument()
   })
 
-  it('shows USED UP and WASN\'T THERE as different states on the source rows', async () => {
+  it("shows USED UP and WASN'T THERE as different states on the source rows", async () => {
     renderJob(WHITMORE)
     await openLeftovers()
-    const cementBoard = await screen.findByRole('button', { name: 'Open actions for Cement board' })
+    const cementBoard = await screen.findByRole('button', {
+      name: 'Open actions for Cement board',
+    })
     expect(within(cementBoard).getByText("WASN'T THERE")).toBeInTheDocument()
     expect(within(cementBoard).getByText(/corrected/)).toBeInTheDocument()
     // Never dimmed: the row is a fact Mike recorded, not a deactivated record.
-    expect(cementBoard.closest('.mem-card')!.className).not.toMatch(/faded|muted/)
+    expect(cementBoard.closest('.mem-card')!.className).not.toMatch(
+      /faded|muted/,
+    )
   })
 
   it('puts a terminal outcome back in the Workshop from its source job, without a duplicate', async () => {
     renderJob(WHITMORE)
     await openLeftovers()
     const sheet = await openRow('Cement board')
-    fireEvent.click(sheet.getByRole('button', { name: /Put back in the Workshop/ }))
+    fireEvent.click(
+      sheet.getByRole('button', { name: /Put back in the Workshop/ }),
+    )
 
     await waitFor(() => {
-      const row = screen.getByRole('button', { name: 'Open actions for Cement board' })
+      const row = screen.getByRole('button', {
+        name: 'Open actions for Cement board',
+      })
       expect(within(row).getByText('IN WORKSHOP')).toBeInTheDocument()
     })
-    expect(mockGetWorkshop().availableItems.filter(i => i.materialName === 'Cement board')).toHaveLength(1)
+    expect(
+      mockGetWorkshop().availableItems.filter(
+        (i) => i.materialName === 'Cement board',
+      ),
+    ).toHaveLength(1)
   })
 
   it('says nothing changed when a move fails, and leaves the leftover as it was', async () => {
     _resetMockWorkshopForTesting('workshop-fails')
     renderJob(WHITMORE)
     await openLeftovers()
-    fireEvent.click((await openRow('Gravel boards')).getByRole('button', { name: /Move to the Workshop/ }))
+    fireEvent.click(
+      (await openRow('Gravel boards')).getByRole('button', {
+        name: /Move to the Workshop/,
+      }),
+    )
 
     expect(await screen.findByText(/Nothing changed/)).toBeInTheDocument()
-    const row = await screen.findByRole('button', { name: 'Open actions for Gravel boards' })
+    const row = await screen.findByRole('button', {
+      name: 'Open actions for Gravel boards',
+    })
     expect(within(row).queryByText('IN WORKSHOP')).not.toBeInTheDocument()
   })
 })
