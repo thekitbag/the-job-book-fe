@@ -138,7 +138,7 @@ export default function CaptureJobPicker({
             (j) => j.status === 'planning' || j.status === 'finished',
           ) && (
             <button
-              className="capture-job-choice capture-picker-more"
+              className="capture-picker-action capture-picker-more"
               type="button"
               onClick={() => setOther(true)}
             >
@@ -150,7 +150,7 @@ export default function CaptureJobPicker({
           )}
         {online ? (
           <button
-            className="capture-job-choice capture-picker-new"
+            className="capture-picker-action capture-picker-new"
             type="button"
             disabled={saving}
             onClick={() => setAdding(true)}
