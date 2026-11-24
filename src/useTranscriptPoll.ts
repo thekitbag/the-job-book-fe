@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getJobNoteStatuses, getNoteTranscript } from './api'
 import { patchNote } from './db'
+import { getCaptureSessionId } from './localOwner'
 import type { ExtractionStatus, LocalNote, TranscriptStatus } from './types'
 
 const POLL_INTERVAL_MS = 10_000
@@ -32,11 +33,13 @@ export function useTranscriptPoll(
     if (polling.current) return
     const eligible = notesRef.current.filter(isPollable)
     if (eligible.length === 0) return
+    const session = getCaptureSessionId()
     polling.current = true
     try {
       // One list call for lightweight status across all notes.
       // BE field is `id`, not `noteId`.
       const rows = await getJobNoteStatuses(jobId)
+      if (session !== getCaptureSessionId()) return
       let changed = false
 
       await Promise.all(
@@ -51,12 +54,14 @@ export function useTranscriptPoll(
               if (TRANSCRIPT_FINAL.has(newStatus)) {
                 // Fetch full text and errorCode only for final states.
                 const detail = await getNoteTranscript(jobId, row.id)
+                if (session !== getCaptureSessionId()) return
                 await patchNote(local.clientNoteId, {
                   transcriptStatus: detail.status,
                   transcriptText: detail.text,
                   transcriptErrorCode: detail.errorCode,
                 })
               } else {
+                if (session !== getCaptureSessionId()) return
                 await patchNote(local.clientNoteId, { transcriptStatus: newStatus })
               }
               changed = true

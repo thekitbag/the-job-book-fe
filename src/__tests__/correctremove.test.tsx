@@ -4,7 +4,7 @@ import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import * as api from '../api'
 import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS } from '../memoryScan'
 import { openRowActions } from './helpers'
-import type { Job, MemoryViewItem, MemoryViewResponse, BudgetSummaryResponse } from '../types'
+import type { Job, MemoryViewItem, MemoryViewResponse } from '../types'
 
 // Correct/remove confirmed job items: item-level Remove with confirmation,
 // Used ↔ Left over moves, spend dates, and authoritative refetch after every
@@ -23,6 +23,7 @@ vi.mock('../api', async (importOriginal) => {
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-cr-001', photos: [] })),
+    getJobLog: vi.fn(() => Promise.resolve({ entries: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-cr-001', receipts: [] })),
     getJobPayments: vi.fn(() => Promise.resolve({
       jobId: 'job-cr-001', generatedAt: '',
@@ -46,20 +47,13 @@ const JOB: Job = {
   roughLocationOrLabel: null, status: 'started', createdAt: '', updatedAt: '',
 }
 
-const EMPTY_BUDGET: BudgetSummaryResponse = {
-  jobId: JOB.id, generatedAt: '', categories: [],
-  uncategorized: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, rows: [] },
-  totals: { budgetAmount: null, budgetCurrency: null, knownSpendAmount: null, knownSpendCurrency: null, remainingAmount: null, remainingLabel: null, overBudget: false },
-}
-
 function memItem(overrides: Partial<MemoryViewItem>): MemoryViewItem {
   return {
     id: 'mem-x', memoryType: 'ordered_material', summary: '',
     materialName: null, quantity: null, unit: null, supplierName: null,
     deliveryTiming: null, locationOrUse: null,
-    costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
     labourHours: null, labourPerson: null, labourTask: null,
-    uncertaintyFlags: [], budgetCategoryId: null, happenedAt: null,
+    uncertaintyFlags: [], happenedAt: null,
     sourceCandidateFactId: null, reviewDecisionId: null,
     createdAt: '2026-07-01T09:00:00.000Z', updatedAt: '', source: null,
     ...overrides,
@@ -78,7 +72,6 @@ function buildView(): MemoryViewResponse {
         key: 'ordered_materials', label: 'Ordered materials',
         items: [memItem({
           id: 'buy-1', summary: 'plasterboard', materialName: 'plasterboard',
-          totalCostAmount: '600', costCurrency: 'GBP',
           happenedAt: '2026-07-08T12:00:00.000Z',
           source: { candidateFactId: 'f1', noteId: 'n1', transcriptId: 't1', capturedAt: '2026-07-08T09:00:00.000Z', transcriptText: 'bought plasterboard' },
         })],
@@ -87,8 +80,7 @@ function buildView(): MemoryViewResponse {
       { key: 'leftovers', label: 'Leftovers', items: [memItem({ id: 'left-1', memoryType: 'leftover_material', summary: 'sand', materialName: 'sand' })] },
       { key: 'general_notes', label: 'Notes', items: [memItem({ id: 'note-1', memoryType: 'general_note', summary: 'Customer wants extra spots', source: { candidateFactId: 'f2', noteId: 'n2', transcriptId: 't2', capturedAt: '2026-07-09T09:00:00.000Z', transcriptText: 'extra spots' } })] },
     ],
-    stillToCheck: { count: 0, items: [] },
-    costSummary: undefined, // frontend derives from sections → removal moves totals
+    hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] }, // frontend derives from sections → removal moves totals
   }
 }
 
@@ -115,10 +107,9 @@ beforeEach(() => {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
   view = buildView()
   vi.mocked(api.getMemoryView).mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(view))))
-  vi.mocked(api.getBudgetSummary).mockResolvedValue(EMPTY_BUDGET)
   vi.mocked(api.removeMemoryItem).mockImplementation((_jobId, id) => { removeFromView(id); return Promise.resolve() })
   vi.mocked(api.updateMemoryItem).mockImplementation((_jobId, id, edit) => {
-    moveInView(id, edit.memoryType)
+    moveInView(id, edit.memoryType ?? 'used_material')
     return Promise.resolve(memItem({ id, memoryType: edit.memoryType }))
   })
 })
@@ -135,7 +126,7 @@ async function openSection(name: string, innerTab?: string) {
   goHomeIfNeeded()
   fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }))
   if (innerTab) fireEvent.click(screen.getByRole('tab', { name: innerTab }))
-  await screen.findByRole('tabpanel')
+  if(name !== 'Job log') await screen.findByRole('tabpanel')
 }
 
 const card = (text: string) => {
@@ -175,26 +166,6 @@ describe('Correct/remove — spend item dates', () => {
 // ── Remove ────────────────────────────────────────────────────────────────────
 
 describe('Correct/remove — remove confirmed items', () => {
-  it('removing a spend item needs confirmation, explains known spend + kept source, then updates totals', async () => {
-    renderWorkspace()
-    await openSection('Budget')
-    // seeded spend total (600) visible before removal
-    await screen.findByText(/£600/)
-    await openSection('Materials')
-    await screen.findByText('plasterboard')
-    const drawer = openRowActions(card('plasterboard'))
-    fireEvent.click(drawer.getByRole('button', { name: 'Remove item' }))
-    expect(api.removeMemoryItem).not.toHaveBeenCalled()
-    // Confirmation pushes into the same drawer, not inline on the card.
-    expect(drawer.getByText(/remove this item\?/i)).toBeInTheDocument()
-    expect(drawer.getByText(/no longer count towards budget/i)).toBeInTheDocument()
-    expect(drawer.getByText(/original voice note will be kept/i)).toBeInTheDocument()
-    fireEvent.click(drawer.getByRole('button', { name: /^remove$/i }))
-    await waitFor(() => expect(api.removeMemoryItem).toHaveBeenCalledWith(JOB.id, 'buy-1'))
-    await waitFor(() => expect(screen.queryByText('plasterboard')).not.toBeInTheDocument())
-    // budget refetched because spend totals changed
-    expect(vi.mocked(api.getBudgetSummary).mock.calls.length).toBeGreaterThan(1)
-  })
 
   it('cancelling the confirmation removes nothing', async () => {
     renderWorkspace()
@@ -231,19 +202,6 @@ describe('Correct/remove — remove confirmed items', () => {
     await waitFor(() => expect(screen.queryByText('sand')).not.toBeInTheDocument())
   })
 
-  it('removes a Job log note item with note-specific copy', async () => {
-    renderWorkspace()
-    await openSection('Job log', 'Notes')
-    await screen.findByText('Customer wants extra spots')
-    const drawer = openRowActions(card('Customer wants extra spots'))
-    fireEvent.click(drawer.getByRole('button', { name: 'Remove item' }))
-    expect(drawer.getByText(/removed from the job log/i)).toBeInTheDocument()
-    expect(drawer.getByText(/original voice note will be kept/i)).toBeInTheDocument()
-    fireEvent.click(drawer.getByRole('button', { name: /^remove$/i }))
-    await waitFor(() => expect(api.removeMemoryItem).toHaveBeenCalledWith(JOB.id, 'note-1'))
-    await waitFor(() => expect(screen.queryByText('Customer wants extra spots')).not.toBeInTheDocument())
-  })
-
   // Correcting the record is admin; capture is the product. Removing an item
   // must never cost Mike the Record button.
   it('leaves Record visible and usable after a removal', async () => {
@@ -268,7 +226,7 @@ describe('Correct/remove — remove confirmed items', () => {
     const drawer = openRowActions(card('OSB'))
     fireEvent.click(drawer.getByRole('button', { name: 'Remove item' }))
     fireEvent.click(drawer.getByRole('button', { name: /^remove$/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not remove/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not save/i)
     expect(screen.getByText('OSB')).toBeInTheDocument()
   })
 })
@@ -305,8 +263,6 @@ describe('Correct/remove — move Used ↔ Left over', () => {
     await openSection('Materials')
     await screen.findByText('plasterboard')
     expect(within(card('plasterboard')).queryByRole('button', { name: /move to/i })).not.toBeInTheDocument()
-    await openSection('Job log', 'Notes')
-    await screen.findByText('Customer wants extra spots')
-    expect(within(card('Customer wants extra spots')).queryByRole('button', { name: /move to/i })).not.toBeInTheDocument()
+
   })
 })

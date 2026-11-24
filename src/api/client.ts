@@ -1,3 +1,4 @@
+import { getCaptureSessionId } from '../localOwner'
 // Production fetch mechanics shared by every domain API module. Mock fixtures
 // and state live under ./mock — nothing in this file should know about them.
 
@@ -22,8 +23,9 @@ export function onUnauthorized(listener: (() => void) | null): void {
 
 // All real-mode API calls go through apiFetch so credentials are always included.
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const session = getCaptureSessionId()
   const res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' })
-  if (res.status === 401) unauthorizedListener?.()
+  if (res.status === 401 && session === getCaptureSessionId()) unauthorizedListener?.()
   return res
 }
 

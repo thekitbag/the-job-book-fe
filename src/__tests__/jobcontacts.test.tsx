@@ -22,6 +22,7 @@ vi.mock('../api', async (importOriginal) => {
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-contacts-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
     getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-contacts-001', photos: [] })),
     getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-contacts-001', receipts: [] })),
     getJobDetails: vi.fn(),
@@ -43,7 +44,6 @@ vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi
 vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow: vi.fn() }) }))
 
 const mockGetMemoryView = vi.mocked(api.getMemoryView)
-const mockGetBudgetSummary = vi.mocked(api.getBudgetSummary)
 const mockGetJobDetails = vi.mocked(api.getJobDetails)
 const mockPatchJobDetails = vi.mocked(api.patchJobDetails)
 const mockCreateJobContact = vi.mocked(api.createJobContact)
@@ -59,11 +59,7 @@ function memoryView(): MemoryViewResponse {
   return {
     job: JOB, generatedAt: '',
     sections: [{ key: 'general_notes', label: 'Notes', items: [] }],
-    stillToCheck: { count: 0, items: [] },
-    costSummary: {
-      orderedMaterials: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, includedMemoryItemIds: [], missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], rows: [], excludedRows: [] },
-      totalKnownCost: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, includedMemoryItemIds: [] },
-    },
+    hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] },
   }
 }
 
@@ -90,11 +86,7 @@ function details(over: Partial<JobDetailsResponse['job']> = {}, contacts: JobCon
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetMemoryView.mockResolvedValue(memoryView())
-  mockGetBudgetSummary.mockResolvedValue({
-    jobId: JOB.id, generatedAt: '', categories: [],
-    uncategorized: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, rows: [] },
-    totals: { budgetAmount: null, budgetCurrency: null, knownSpendAmount: null, knownSpendCurrency: null, remainingAmount: null, remainingLabel: null, overBudget: false },
-  })
+
   mockGetJobDetails.mockResolvedValue(details())
 })
 
@@ -144,7 +136,7 @@ describe('Job details — placement', () => {
   it('is not repeated in section headers — it belongs to the job, not a lens on it', async () => {
     renderWorkspace()
     await screen.findByRole('navigation', { name: 'Job sections' })
-    fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Hours' }))
     expect(await screen.findByRole('button', { name: '‹ Job home' })).toBeInTheDocument()
 
     // Budget is one view of the job's money. Its header carries the way back

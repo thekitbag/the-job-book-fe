@@ -13,6 +13,7 @@ vi.mock('../api', async (importOriginal) => {
     getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-photo-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
     getDraftFacts: vi.fn(() => Promise.resolve([])),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
+    getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
     getJobPhotos: vi.fn(),
     uploadJobPhoto: vi.fn(),
     patchJobPhoto: vi.fn(),
@@ -24,7 +25,6 @@ vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi
 vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow: vi.fn() }) }))
 
 const mockGetMemoryView = vi.mocked(api.getMemoryView)
-const mockGetBudgetSummary = vi.mocked(api.getBudgetSummary)
 const mockGetJobPhotos = vi.mocked(api.getJobPhotos)
 const mockUploadJobPhoto = vi.mocked(api.uploadJobPhoto)
 const mockPatchJobPhoto = vi.mocked(api.patchJobPhoto)
@@ -42,17 +42,13 @@ function memoryView(): MemoryViewResponse {
       { key: 'ordered_materials', label: 'Ordered materials', items: [{
         id: 'mem-plasterboard', memoryType: 'ordered_material', summary: '12 sheets of plasterboard',
         materialName: 'plasterboard', quantity: '12', unit: 'sheets', supplierName: null, deliveryTiming: null,
-        locationOrUse: null, costAmount: null, costCurrency: 'GBP', costQualifier: 'total', totalCostAmount: '600',
+        locationOrUse: null,
         uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
         createdAt: '2026-07-01T09:00:00Z', updatedAt: '2026-07-01T09:00:00Z', source: null,
       }] },
       { key: 'general_notes', label: 'Notes', items: [] },
     ],
-    stillToCheck: { count: 0, items: [] },
-    costSummary: {
-      orderedMaterials: { knownSpendAmount: '600', knownSpendCurrency: 'GBP', knownSpendLabel: '£600 known spend', includedMemoryItemIds: ['mem-plasterboard'], missingCostCount: 0, uncertainCostCount: 0, excludedMemoryItemIds: [], rows: [], excludedRows: [] },
-      totalKnownCost: { knownSpendAmount: '600', knownSpendCurrency: 'GBP', knownSpendLabel: '£600 known spend', includedMemoryItemIds: ['mem-plasterboard'] },
-    },
+    hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] },
   }
 }
 
@@ -69,11 +65,7 @@ function photo(over: Partial<JobPhoto> = {}): JobPhoto {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetMemoryView.mockResolvedValue(memoryView())
-  mockGetBudgetSummary.mockResolvedValue({
-    jobId: JOB.id, generatedAt: '', categories: [],
-    uncategorized: { knownSpendAmount: null, knownSpendCurrency: null, knownSpendLabel: null, rows: [] },
-    totals: { budgetAmount: null, budgetCurrency: null, knownSpendAmount: '600', knownSpendCurrency: 'GBP', remainingAmount: null, remainingLabel: null, overBudget: false },
-  })
+
   mockGetJobPhotos.mockResolvedValue({ jobId: JOB.id, photos: [] })
   // happy-dom lacks a full object-URL implementation in some versions
   if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => 'blob:preview')
@@ -90,6 +82,7 @@ function openNotesTab() {
   if (back) fireEvent.click(back)
   fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
   fireEvent.click(screen.getByRole('tab', { name: 'Photos' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add or change photos' }))
 }
 
 async function photosSection() {
@@ -216,25 +209,6 @@ describe('Job photos — section and upload', () => {
     expect(await within(section).findByAltText('Job photo')).toBeInTheDocument()
   })
 
-  it('uploading a receipt photo never changes known spend', async () => {
-    mockUploadJobPhoto.mockResolvedValue(photo({ descriptor: 'Receipt' }))
-    renderWorkspace()
-    openNotesTab()
-    const section = await photosSection()
-    fireEvent.click(within(section).getByRole('button', { name: 'Add photo' }))
-    pickFile(within(section).getByRole('form', { name: 'Add photo' }), 'receipt.jpg')
-    const budgetCallsBefore = mockGetBudgetSummary.mock.calls.length
-    fireEvent.click(within(section).getByRole('button', { name: 'Save photo' }))
-    await waitFor(() => expect(mockUploadJobPhoto).toHaveBeenCalled())
-
-    // no spend/budget refresh is triggered — photos are evidence, not spend
-    expect(mockGetBudgetSummary.mock.calls.length).toBe(budgetCallsBefore)
-    fireEvent.click(screen.getByRole('button', { name: /job home/i }))
-    fireEvent.click(screen.getByRole('button', { name: 'Open Budget' }))
-    const hero = await screen.findByRole('region', { name: /^budget$/i })
-    expect(within(hero).getByText(/£600/)).toBeInTheDocument()
-  })
-
   it('edit details patches descriptor and link without re-upload', async () => {
     const existing = photo()
     mockGetJobPhotos.mockResolvedValue({ jobId: JOB.id, photos: [existing] })
@@ -326,7 +300,7 @@ describe('Job photos — corrected items use current trusted labels', () => {
   const CORRECTED = {
     id: 'mem-corrected', memoryType: 'ordered_material', summary: 'Ordered a load of OSB boards',
     materialName: 'fire-rated plasterboard', quantity: '10', unit: 'sheets', supplierName: null, deliveryTiming: null,
-    locationOrUse: null, costAmount: null, costCurrency: 'GBP', costQualifier: null, totalCostAmount: null,
+    locationOrUse: null,
     uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
     createdAt: '2026-07-01T09:00:00Z', updatedAt: '2026-07-02T09:00:00Z', source: null,
   }
@@ -367,10 +341,10 @@ describe('Job photos — corrected items use current trusted labels', () => {
 
   it('labour link targets use person/hours/task, not the source summary', async () => {
     const view = memoryView()
-    view.sections.push({ key: 'labour', label: 'Labour', items: [{
+    view.sections.push({ key: 'labour', label: 'Hours', items: [{
       id: 'mem-lab', memoryType: 'labour', summary: 'Someone did some hours',
       materialName: null, quantity: null, unit: null, supplierName: null, deliveryTiming: null,
-      locationOrUse: null, costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
+      locationOrUse: null,
       labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
       uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
       createdAt: '2026-07-01T09:00:00Z', updatedAt: '2026-07-01T09:00:00Z', source: null,

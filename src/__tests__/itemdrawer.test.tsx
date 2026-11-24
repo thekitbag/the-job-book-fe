@@ -1,22 +1,20 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import ItemActionDrawer from '../ItemActionDrawer'
-import type { BudgetCategory, MemoryViewItem } from '../types'
+import type { MemoryViewItem } from '../types'
 
 function item(over: Partial<MemoryViewItem> = {}): MemoryViewItem {
   return {
     id: 'i1', memoryType: 'ordered_material', summary: 'plasterboard',
     materialName: 'plasterboard', quantity: '12', unit: 'sheets', supplierName: 'Jewson',
     deliveryTiming: null, locationOrUse: null,
-    costAmount: null, costCurrency: 'GBP', costQualifier: null, totalCostAmount: '600',
-    uncertaintyFlags: [], budgetCategoryId: null, sourceCandidateFactId: null, reviewDecisionId: null,
+    uncertaintyFlags: [], sourceCandidateFactId: null, reviewDecisionId: null,
     createdAt: '', updatedAt: '',
     source: { candidateFactId: 'f', noteId: 'n', transcriptId: 't', capturedAt: '2026-07-08T09:00:00.000Z', transcriptText: 'bought plasterboard from Jewson' },
     ...over,
   }
 }
 
-const CATS: BudgetCategory[] = [{ id: 'c1', jobId: 'j', name: 'cladding', budgetAmount: '2000', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: '', updatedAt: '' }]
 
 function renderDrawer(over: Partial<Parameters<typeof ItemActionDrawer>[0]> = {}) {
   const props = {
@@ -25,11 +23,7 @@ function renderDrawer(over: Partial<Parameters<typeof ItemActionDrawer>[0]> = {}
     item: item(),
     title: 'plasterboard',
     meta: '12 sheets · from Jewson',
-    costLine: '£600 cost',
-    categories: CATS,
     canPickCategory: true,
-    onAssignCategory: vi.fn(),
-    assigningCategory: false,
     onMove: vi.fn(),
     mutating: false,
     submitting: false,
@@ -49,8 +43,8 @@ describe('ItemActionDrawer — one drawer, push/replace sub-states', () => {
     renderDrawer()
     const d = drawer()
     expect(d.getByText('12 sheets · from Jewson')).toBeInTheDocument()
-    expect(d.getByText('£600 cost')).toBeInTheDocument()
-    expect(d.getByRole('button', { name: /choose category/i })).toBeInTheDocument()
+    expect(d.queryByText(/£/)).not.toBeInTheDocument()
+
     expect(d.getByRole('button', { name: /show source/i })).toBeInTheDocument()
     expect(d.getByRole('button', { name: /fix memory/i })).toBeInTheDocument()
     expect(d.getByRole('button', { name: /remove item/i })).toBeInTheDocument()
@@ -78,7 +72,7 @@ describe('ItemActionDrawer — one drawer, push/replace sub-states', () => {
   it('Fix memory pushes into an edit form inside the drawer (no navigation), Back returns', () => {
     renderDrawer()
     fireEvent.click(drawer().getByRole('button', { name: /fix memory/i }))
-    expect(drawer().getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
+    expect(drawer().getByRole('form', { name: /material entry/i })).toBeInTheDocument()
     fireEvent.click(drawer().getByRole('button', { name: /^‹ back/i }))
     expect(drawer().getByRole('button', { name: /remove item/i })).toBeInTheDocument()
   })
@@ -86,7 +80,7 @@ describe('ItemActionDrawer — one drawer, push/replace sub-states', () => {
   it('Fix memory save calls onSave through the existing patch path', () => {
     const props = renderDrawer()
     fireEvent.click(drawer().getByRole('button', { name: /fix memory/i }))
-    const form = drawer().getByRole('form', { name: /edit memory/i })
+    const form = drawer().getByRole('form', { name: /material entry/i })
     fireEvent.change(form.querySelector('input[name="quantity"]')!, { target: { value: '24' } })
     fireEvent.click(form.querySelector('button[type="submit"]')!)
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ quantity: '24' }))
@@ -97,7 +91,7 @@ describe('ItemActionDrawer — one drawer, push/replace sub-states', () => {
     fireEvent.click(drawer().getByRole('button', { name: /remove item/i }))
     expect(drawer().getByText(/remove this item\?/i)).toBeInTheDocument()
     // Explains the consequence and that the source note is kept.
-    expect(drawer().getByText(/no longer count towards budget/i)).toBeInTheDocument()
+    expect(drawer().getByText(/removed from this job/i)).toBeInTheDocument()
     expect(drawer().getByText(/original voice note will be kept/i)).toBeInTheDocument()
     fireEvent.click(drawer().getByRole('button', { name: /^remove$/i }))
     expect(props.onRemove).toHaveBeenCalled()
@@ -107,81 +101,12 @@ describe('ItemActionDrawer — one drawer, push/replace sub-states', () => {
     // submitting stays false and an error is present → drawer stays in edit.
     renderDrawer({ errorMsg: 'Could not save — tap to retry' })
     fireEvent.click(drawer().getByRole('button', { name: /fix memory/i }))
-    expect(drawer().getByRole('form', { name: /edit memory/i })).toBeInTheDocument()
+    expect(drawer().getByRole('form', { name: /material entry/i })).toBeInTheDocument()
     expect(drawer().getByRole('alert')).toHaveTextContent(/could not save/i)
   })
 
   it('renders nothing when closed', () => {
     renderDrawer({ open: false })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-})
-
-describe('ItemActionDrawer — Mark as paid', () => {
-  const controls = (over: Partial<Parameters<typeof ItemActionDrawer>[0]['markPaid'] & object> = {}) => ({
-    isPaid: () => false,
-    canMarkPaid: () => true,
-    onMarkPaid: vi.fn(),
-    onUndoPaid: vi.fn(),
-    pendingItemId: null,
-    ...over,
-  })
-
-  it('offers Mark as paid for an eligible, unpaid cost item and fires + closes on tap', () => {
-    const onMarkPaid = vi.fn()
-    const props = renderDrawer({ markPaid: controls({ onMarkPaid }) })
-    fireEvent.click(drawer().getByRole('button', { name: /mark as paid/i }))
-    expect(onMarkPaid).toHaveBeenCalledWith(props.item)
-    expect(props.onClose).toHaveBeenCalled()
-  })
-
-  it('shows a Paid state and no Mark as paid once the item is paid', () => {
-    renderDrawer({ markPaid: controls({ isPaid: () => true }) })
-    expect(drawer().getByText(/paid — recorded in money out/i)).toBeInTheDocument()
-    expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
-  })
-
-  it('guards paid labour cost edits and keeps Undo paid available through Back', () => {
-    const labour = item({
-      memoryType: 'labour',
-      summary: 'Tom did 8 hours on electrics',
-      materialName: null,
-      quantity: null,
-      unit: null,
-      supplierName: null,
-      costAmount: '35',
-      costQualifier: 'per_hour',
-      totalCostAmount: '280',
-      labourHours: '8',
-      labourPerson: 'Tom',
-      labourPersonId: null,
-      labourTask: 'electrics',
-    })
-    const props = renderDrawer({
-      item: labour,
-      title: 'electrics',
-      markPaid: controls({ isPaid: () => true }),
-    })
-
-    fireEvent.click(drawer().getByRole('button', { name: /fix memory/i }))
-    const form = drawer().getByRole('form', { name: /edit memory/i })
-    fireEvent.change(form.querySelector('input[name="costAmount"]')!, { target: { value: '40' } })
-
-    expect(drawer().getByRole('alert')).toHaveTextContent('Undo paid before changing the cost.')
-    expect(form.querySelector('button[type="submit"]')).toBeDisabled()
-    expect(props.onSave).not.toHaveBeenCalled()
-
-    fireEvent.click(drawer().getByRole('button', { name: /^‹ back/i }))
-    expect(drawer().getByRole('button', { name: /undo paid/i })).toBeInTheDocument()
-  })
-
-  it('omits Mark as paid when the item is not eligible', () => {
-    renderDrawer({ markPaid: controls({ canMarkPaid: () => false }) })
-    expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
-  })
-
-  it('never shows Mark as paid when Money is not wired (no markPaid prop)', () => {
-    renderDrawer()
-    expect(drawer().queryByRole('button', { name: /mark as paid/i })).not.toBeInTheDocument()
   })
 })

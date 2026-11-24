@@ -20,12 +20,19 @@ export default defineConfig({
   retries: 0,
   // CI uploads playwright-report/ on failure; local runs keep the default list output.
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-  webServer: {
+  webServer: [{
     command: 'VITE_USE_MOCK_API=true npx vite --port 5174',
     url: 'https://localhost:5174',
     ignoreHTTPSErrors: true,
     // Reusing a running dev server is a local convenience; in CI it could
     // silently attach to a stale server with the wrong env, so never reuse there.
     reuseExistingServer: !process.env.CI,
-  },
+  }, {
+    // Built app + service worker exercise a real offline cold reload. HTTP
+    // fixtures in capture-foundation.spec.ts stand in for the backend.
+    command: 'VITE_USE_MOCK_API=false npm run build && npx vite preview --port 5176 --host',
+    url: 'https://localhost:5176',
+    ignoreHTTPSErrors: true,
+    reuseExistingServer: false,
+  }],
 })

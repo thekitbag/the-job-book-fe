@@ -2,8 +2,13 @@ import '@testing-library/jest-dom/vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { _resetDbForTesting } from '../db'
+import { _resetLocalOwnerForTesting } from '../localOwner'
+
+// Under CPU load (parallel workers, CI) async UI work can take over the 1 s
+// default. Waiting longer only slows a failing test; passing tests finish early.
+configure({ asyncUtilTimeout: 5000 })
 
 // happy-dom's localStorage isn't fully initialised in all environments.
 // Replace it with a plain in-memory implementation for reliability.
@@ -18,12 +23,15 @@ const localStorageMock: Storage = {
 }
 Object.defineProperty(global, 'localStorage', { value: localStorageMock, configurable: true })
 
-beforeEach(() => {
+beforeEach(async () => {
   // Fresh IndexedDB for each test; other IDB globals stay from the auto-import above
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(global as any).indexedDB = new IDBFactory()
   _resetDbForTesting()
   localStorageMock.clear()
+  _resetLocalOwnerForTesting()
+  const { _resetCapturePersistenceForTesting } = await import('../capturePersistence')
+  _resetCapturePersistenceForTesting()
   // Reset mock call history AND implementations so each test starts with a clean slate
   vi.resetAllMocks()
 })

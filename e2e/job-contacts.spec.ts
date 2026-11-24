@@ -1,3 +1,4 @@
+import { openPilotJob } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
 
 // 390×844, VITE_USE_MOCK_API=true — Job details: site address + job contacts.
@@ -10,7 +11,7 @@ import { test, expect, type Page } from '@playwright/test'
 // than automatic actions, and job home never grows a Contacts card.
 
 async function gotoApp(page: Page) {
-  await page.goto('/')
+  await openPilotJob(page)
   const explainer = page.getByRole('button', { name: /got it/i })
   if (await explainer.isVisible().catch(() => false)) await explainer.click()
   const passcode = page.getByLabel(/passcode/i)
@@ -58,7 +59,7 @@ test.describe('Job details — contacts and site address', () => {
 
   test('is not repeated in section headers', async ({ page }) => {
     await gotoApp(page)
-    await page.getByRole('button', { name: 'Open Budget' }).click()
+    await page.getByRole('button', { name: 'Open Hours' }).click()
     await expect(page.getByRole('button', { name: '‹ Job home' })).toBeVisible()
 
     // A section is one lens on the job; its header carries only the way back
@@ -157,7 +158,7 @@ test.describe('Job details — contacts and site address', () => {
 
     // Job home is unchanged: the same five sections, no Contacts/Customer card.
     const nav = page.getByRole('navigation', { name: 'Job sections' })
-    await expect(nav.getByRole('button')).toHaveCount(5)
+    await expect(nav.getByRole('button')).toHaveCount(3)
     await expect(nav.getByRole('button', { name: /contact|customer/i })).toHaveCount(0)
 
     const reopened = await openJobDetails(page)

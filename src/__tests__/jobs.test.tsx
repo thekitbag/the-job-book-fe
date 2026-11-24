@@ -16,6 +16,7 @@ vi.mock('../api', async (importOriginal) => {
   return {
     ...actual,
     createJob: vi.fn(),
+    getCurrentUser: vi.fn(async () => ({ id: 'u1', name: 'Mike', email: 'mike@test', role: 'PILOT' })),
     getJobs: vi.fn(),
     getDraftFacts: vi.fn(),
     getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
@@ -65,7 +66,7 @@ const JOB_B: Job = {
 }
 
 const EMPTY_MEMORY: MemoryViewResponse = {
-  job: JOB_A, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] }, costSummary: undefined,
+  job: JOB_A, generatedAt: '', sections: [], hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] },
 }
 
 beforeEach(() => {
@@ -73,7 +74,6 @@ beforeEach(() => {
   mockGetDraftFacts.mockResolvedValue([])
   vi.mocked(api.getReviewQueue).mockResolvedValue({ jobId: 'job-001', generatedAt: '', sections: [], alreadyRemembered: [] })
   vi.mocked(api.getMemoryView).mockResolvedValue(EMPTY_MEMORY)
-  vi.mocked(api.getBudgetSummary).mockRejectedValue(new Error('no budget'))
 })
 
 // ── Workspace selected-job display ─────────────────────────────────────────

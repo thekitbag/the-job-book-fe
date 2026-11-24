@@ -1,30 +1,50 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ApiError, getDraftFacts, getJobPhotos, getJobReceipts, getReviewQueue, isAlreadyInWorkshop, moveLeftoverToWorkshop, patchJob, putBackWorkshopItem } from './api'
-import { saveNote, getNotesForJob } from './db'
-import { useRecorder, isRecordingSupported } from './useRecorder'
-import { useSync } from './useSync'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import {
+  getReviewQueue,
+  isAlreadyInWorkshop,
+  moveLeftoverToWorkshop,
+  patchJob,
+  putBackWorkshopItem,
+} from './api'
+import { getNotesForJob, subscribeLocalCaptures } from './db'
+import { getCaptureSessionId, subscribeLocalOwner } from './localOwner'
+import RecordingControls from './RecordingControls'
+import { CaptureSyncProvider, useCaptureContext } from './CaptureSyncProvider'
+import { useCaptureUpdates } from './captureEvents'
 import { useTranscriptPoll } from './useTranscriptPoll'
 import { usePwaInstall } from './usePwaInstall'
 import { useJobMemory } from './useJobMemory'
-import { deriveLatestActivity, formatMoney, mergeLatestActivityWithPhotos, mergeLatestActivityWithReceipts } from './memoryScan'
-import SpendTab from './SpendTab'
-import LabourTab from './LabourTab'
+import JobLog from './JobLog'
+import HoursTab from './HoursTab'
 import MemorySectionTab from './MemorySectionTab'
-import JobPhotosSection, { photoLinkTargetLabel, type PhotoLinkTarget } from './JobPhotosSection'
-import JobReceiptsSection from './JobReceiptsSection'
-import SourceHistory, { formatDuration, formatSavedStamp } from './SourceHistory'
+import JobPhotosSection, {
+  photoLinkTargetLabel,
+  type PhotoLinkTarget,
+} from './JobPhotosSection'
 import BottomSheet from './BottomSheet'
 import JobDetailsSheet from './JobDetailsSheet'
-import MoneySection, { useMoney } from './MoneySection'
 import { useToast } from './Toast'
-import { markPaidEligibleType, type MarkPaidControls } from './markPaid'
 import MoveToWorkshopResult from './MoveToWorkshopResult'
 import type { WorkshopSourceControls } from './workshopSource'
-import { durationBucket, mimeTypeFamily, track } from './analytics'
+import { track } from './analytics'
 import { NORMAL_JOB_STATUSES, jobStatusLabel } from './jobStatus'
-import type { AuthUser, CandidateFact, CreateMemoryItemRequest, EditableJobStatus, Job, JobMoneyResponse, JobPhoto, JobReceipt, LabourHoursSummary, LatestActivityItem, LatestActivityType, LocalNote, MemoryViewItem, TotalKnownCost, WorkshopItem } from './types'
+import type {
+  AuthUser,
+  EditableJobStatus,
+  Job,
+  HoursSummary,
+  LocalNote,
+  MemoryViewItem,
+  WorkshopItem,
+} from './types'
 
-const MAX_DURATION_MS = 3 * 60 * 1000
 const EXPLAINER_KEY = 'job-book-explainer-seen'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -33,175 +53,69 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   other: 'Other',
 }
 
-const NOTES_SECTION_KEYS = ['general_notes', 'supplier_delivery_notes', 'customer_changes', 'watch_outs']
-
-// Stable section navigation: home is the root of the current-job workspace,
-// not a tab. Money is the actual-movement surface (in + out) that replaced the
-// old Payments card; Variations becomes a Job log filter, without another
-// cramped top-level tab strip.
-type Section = 'home' | 'spend' | 'money' | 'labour' | 'materials' | 'joblog'
+type Section = 'home' | 'hours' | 'materials' | 'joblog'
 // Returned is a peer state, not something tucked inside Left over: material
 // that went back to the merchant really left the job, and hiding it under the
 // stock he still has would be a different (wrong) claim.
 type MaterialsTab = 'bought' | 'used' | 'leftover' | 'returned'
-// Receipts are their own filter: classification follows Mike's intent at upload
-// time, so a receipt image lives here and never under Photos.
-type JobLogFilter = 'all' | 'notes' | 'photos' | 'receipts'
 
-/**
- * How a job was entered from outside itself — cross-job Money routing a
- * supplier line back to the cost that produced it, or an owed row to that job's
- * Money. Absent for every ordinary arrival, which always lands on job home.
- */
 export type JobEntry = {
   jobId: string
-  // An owed row goes straight to this job's Money; a cost line names the source
-  // item instead and lets the job work out which lens actually shows it.
-  section?: 'money'
   focusItemId?: string
 }
 
 const SECTION_TITLES: Record<Exclude<Section, 'home'>, string> = {
-  // The 'spend' section is user-facing "Budget": it tracks committed/allocated
-  // job cost against budget, not cash paid out. Internal key stays 'spend'.
-  spend: 'Budget',
-  money: 'Money',
-  labour: 'Labour',
+  hours: 'Hours',
   materials: 'Materials',
   joblog: 'Job log',
 }
-
-// Where a latest-activity row's underlying detail lives. Section-level
-// navigation (with the right inner tab/filter preselected) is the v1 minimum;
-// item-level highlight is a follow-up.
-const ACTIVITY_DEST: Record<LatestActivityType, { section: Exclude<Section, 'home'>; materialsTab?: MaterialsTab; joblogFilter?: JobLogFilter }> = {
-  bought: { section: 'spend' },
-  used: { section: 'materials', materialsTab: 'used' },
-  returned: { section: 'materials', materialsTab: 'returned' },
-  labour: { section: 'labour' },
-  note: { section: 'joblog', joblogFilter: 'notes' },
-  photo: { section: 'joblog', joblogFilter: 'photos' },
-  receipt: { section: 'joblog', joblogFilter: 'receipts' },
-  payment: { section: 'money' },
-}
-
-// ── Job home: stable section nav ─────────────────────────────────────────────
-// Spend/Payments/Labour carry a live figure and its denominator (known spend of
-// budget, received of total, hours logged); Materials/Job log have no number, so
-// they carry a short muted description instead. Rows render even while memory is
-// loading or failed — navigation must never disappear with the data.
-//
-// value/denom are separate rather than one string so the figures can be set in
-// tabular numerals and right-aligned into a column, ledger-style, while the
-// denominator stays muted.
-
-type NavRow = {
-  section: Exclude<Section, 'home'>
-  title: string
-  value: string | null
-  denom: string | null
-  // Optional third line (Budget uses it for the remaining-budget figure).
-  sub?: string | null
-}
-
-function HomeSectionCards({ total, budgetAmount, labourHours, moneySummary, onOpen }: {
-  total: TotalKnownCost | null
-  budgetAmount: string | null
-  labourHours: LabourHoursSummary | null
-  moneySummary: JobMoneyResponse | null
+function HomeSectionCards({
+  hours,
+  onOpen,
+}: {
+  hours: HoursSummary | null
   onOpen: (section: Exclude<Section, 'home'>) => void
 }) {
-  const known = total?.knownSpendAmount ? parseFloat(total.knownSpendAmount) : 0
-  const budget = budgetAmount ? parseFloat(budgetAmount) : null
-  const hasBudget = budget !== null && budget > 0
-  const hasHours = labourHours?.totalHours != null
-
-  // Money: actual movement — "received" and "paid out" so it can never read as
-  // committed cost. Falls back quietly while the summary loads or if it failed.
-  const moneyIn = moneySummary?.moneyInAmount
-  const moneyOut = moneySummary?.moneyOutAmount
-
-  // Budget card: committed/known cost of the total budget, plus the remaining
-  // budget as a third line (per the spec's job-home example). "Remaining", not
-  // "left to spend" — this tracks committed cost, not cash out.
-  const remaining = hasBudget ? budget! - known : null
-  const rows: NavRow[] = [
-    {
-      section: 'spend', title: 'Budget',
-      value: total?.knownSpendAmount ? formatMoney(known, total.knownSpendCurrency) : null,
-      denom: total?.knownSpendAmount ? (hasBudget ? `of ${formatMoney(budget!, 'GBP')}` : null) : 'None yet',
-      sub: remaining !== null
-        ? (remaining < 0 ? `${formatMoney(-remaining, 'GBP')} over budget` : `${formatMoney(remaining, 'GBP')} remaining budget`)
-        : null,
-    },
-    {
-      section: 'money', title: 'Money',
-      // Plain in/out totals, e.g. "£4000 received · £1124 paid out".
-      value: moneyIn ? `${formatMoney(parseFloat(moneyIn), 'GBP')} received` : null,
-      denom: moneyOut ? `${formatMoney(parseFloat(moneyOut), 'GBP')} paid out`
-        : moneyIn ? null
-        : 'No money in or out yet',
-    },
-    {
-      section: 'labour', title: 'Labour',
-      value: hasHours ? `${labourHours!.totalHours}h` : null,
-      denom: hasHours ? 'logged' : 'None yet',
-    },
-    { section: 'materials', title: 'Materials', value: null, denom: 'Bought · used · left · returned' },
-    { section: 'joblog', title: 'Job log', value: null, denom: 'Notes · photos · receipts' },
-  ]
-
   return (
     <nav className="ws-home-cards" aria-label="Job sections">
-      {rows.map(r => (
+      {(
+        [
+          [
+            'hours',
+            'Hours',
+            hours ? `${hours.totalHours}h logged` : 'None yet',
+          ],
+          ['materials', 'Materials', 'Bought · used · left · returned'],
+          ['joblog', 'Job log', 'Notes · photos'],
+        ] as const
+      ).map(([section, title, detail]) => (
         <button
-          key={r.section}
+          key={section}
           type="button"
           className="ws-home-card"
-          aria-label={`Open ${r.title}`}
-          onClick={() => onOpen(r.section)}
+          aria-label={`Open ${title}`}
+          onClick={() => onOpen(section)}
         >
           <span className="ws-home-card-text">
-            <span className="ws-home-card-title">{r.title}</span>
+            <span className="ws-home-card-title">{title}</span>
             <span className="ws-home-card-figures">
-              {r.value && <span className="ws-home-card-value">{r.value}</span>}
-              {r.denom && <span className="ws-home-card-denom">{r.denom}</span>}
-              {r.sub && <span className="ws-home-card-denom ws-home-card-sub">{r.sub}</span>}
+              <span
+                className={
+                  section === 'hours'
+                    ? 'ws-home-card-value'
+                    : 'ws-home-card-denom'
+                }
+              >
+                {detail}
+              </span>
             </span>
           </span>
-          <span className="ws-home-card-chev" aria-hidden="true">›</span>
+          <span className="ws-home-card-chev" aria-hidden="true">
+            ›
+          </span>
         </button>
       ))}
     </nav>
-  )
-}
-
-
-function LatestActivity({ items, onOpenItem }: { items: LatestActivityItem[]; onOpenItem: (item: LatestActivityItem) => void }) {
-  if (items.length === 0) return null
-  return (
-    <section className="ws-latest" aria-label="Latest on this job">
-      <h2 className="mem-section-heading">Latest on this job</h2>
-      <ul className="ws-latest-card">
-        {items.map(item => (
-          <li key={item.memoryItemId}>
-            <button
-              type="button"
-              className="ws-latest-row"
-              onClick={() => onOpenItem(item)}
-              aria-label={`${item.typeLabel}: ${item.headline}`}
-            >
-              <span className="ws-latest-top">
-                <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
-                <span className="ws-latest-headline">{item.headline}</span>
-                {item.costLabel && <span className="ws-latest-right">{item.costLabel}</span>}
-              </span>
-              <span className="ws-latest-time">{formatSavedStamp(item.effectiveAt)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 
@@ -211,14 +125,21 @@ function StorageExplainer({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="explainer" role="region" aria-label="About your recordings">
       <p className="explainer-text">
-        We save the recording during the pilot so we can check what was captured and improve the job memory.
+        We save the recording during the pilot so we can check what was captured
+        and improve the job memory.
       </p>
-      <button className="explainer-dismiss" onClick={onDismiss}>Got it</button>
+      <button className="explainer-dismiss" onClick={onDismiss}>
+        Got it
+      </button>
     </div>
   )
 }
 
-function InstallBanner({ isIosSafari, onInstall, onDismiss }: {
+function InstallBanner({
+  isIosSafari,
+  onInstall,
+  onDismiss,
+}: {
   isIosSafari: boolean
   onInstall: () => void
   onDismiss: () => void
@@ -227,16 +148,25 @@ function InstallBanner({ isIosSafari, onInstall, onDismiss }: {
     <div className="install-banner" role="region" aria-label="Install app">
       {isIosSafari ? (
         <p className="install-banner-text">
-          Add to your home screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>
+          Add to your home screen: tap <strong>Share</strong> then{' '}
+          <strong>Add to Home Screen</strong>
         </p>
       ) : (
-        <p className="install-banner-text">Install The Job Book on your phone for quick access</p>
+        <p className="install-banner-text">
+          Install The Job Book on your phone for quick access
+        </p>
       )}
       <div className="install-banner-actions">
         {!isIosSafari && (
-          <button className="install-banner-btn" onClick={onInstall}>Install</button>
+          <button className="install-banner-btn" onClick={onInstall}>
+            Install
+          </button>
         )}
-        <button className="install-banner-dismiss" onClick={onDismiss} aria-label="Dismiss install banner">
+        <button
+          className="install-banner-dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss install banner"
+        >
           Not now
         </button>
       </div>
@@ -247,82 +177,7 @@ function InstallBanner({ isIosSafari, onInstall, onDismiss }: {
 // Interstitial shown after a recording stops. Confirms the note is safe and
 // reflects live progress (saving → saved → looking for facts) without making
 // Mike wait — he can tap Done and carry on at any point.
-function CaptureConfirmation({
-  note,
-  online,
-  onClose,
-  onOpenReviewQueue,
-}: {
-  note: LocalNote | undefined
-  online: boolean
-  onClose: () => void
-  onOpenReviewQueue: () => void
-}) {
-  const state = note?.localState
-  const uploaded = state === 'uploaded'
-  const failedSend = state === 'upload_failed' || state === 'upload_needs_attention'
-  const stillSending = !uploaded && !failedSend // saved_local / uploading
-
-  let title = 'Voice note saved'
-  let sub = "I'll pull out anything useful for this job."
-  let ready = false
-
-  if (stillSending) {
-    if (!online) {
-      title = 'Saved on this phone'
-      sub = "I'll send it through when there's signal."
-    } else {
-      title = 'Saving your note…'
-      sub = 'Keeping it safe on your phone too.'
-    }
-  } else if (failedSend) {
-    title = 'Saved on this phone'
-    sub = "Couldn't send it yet — I'll keep trying automatically."
-  } else if (note?.transcriptStatus === 'failed') {
-    sub = "Couldn't make out this recording, but it's safe."
-  } else if (note?.extractionStatus === 'ready') {
-    sub = 'Job facts are ready to check.'
-    ready = true
-  } else if (note?.extractionStatus === 'failed') {
-    sub = "Saved — I couldn't pull job facts from this one."
-  } else if (uploaded) {
-    sub = 'Looking for useful job facts…'
-  }
-
-  // Spinner only while the note is actively being sent; a saved note (locally or
-  // uploaded) shows a reassuring tick even while facts are still being found.
-  const spinner = title === 'Saving your note…'
-
-  return (
-    // Scrim click-to-dismiss is a pointer convenience duplicating the visible
-    // Done/close button, which stays keyboard-reachable; the inner card's
-    // onClick only stops propagation. TODO(a11y follow-up): add an Escape-key
-    // handler and focus trap for this dialog.
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <div className="ws-capture-scrim" role="dialog" aria-modal="true" aria-label="Recording saved" onClick={onClose}>
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-      <div className="ws-capture-card" onClick={e => e.stopPropagation()}>
-        <div className="ws-capture-icon" aria-hidden="true">
-          {spinner
-            ? <span className="ws-capture-spinner" />
-            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
-        </div>
-        <p className="ws-capture-title" aria-live="polite">{title}</p>
-        <p className="ws-capture-sub" aria-live="polite">{sub}</p>
-        <div className="ws-capture-actions">
-          {ready && (
-            <button type="button" className="ws-capture-review" onClick={onOpenReviewQueue}>
-              See things to check
-            </button>
-          )}
-          <button type="button" className="ws-capture-done" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function CurrentJobWorkspace({
+function Workspace({
   job,
   entry = null,
   onOpenReviewQueue,
@@ -352,9 +207,7 @@ export default function CurrentJobWorkspace({
 }) {
   const [section, setSection] = useState<Section>('home')
   const [materialsTab, setMaterialsTab] = useState<MaterialsTab>('bought')
-  const [joblogFilter, setJoblogFilter] = useState<JobLogFilter>('all')
   // clientNoteId of the note just recorded — drives the capture confirmation.
-  const [justCapturedId, setJustCapturedId] = useState<string | null>(null)
   const [notes, setNotes] = useState<LocalNote[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [showExplainer, setShowExplainer] = useState(
@@ -362,7 +215,6 @@ export default function CurrentJobWorkspace({
   )
   // Open by default so a freshly recorded note confirms capture without hunting,
   // but it stays below the job summary — secondary, not a primary card.
-  const [showSourceHistory, setShowSourceHistory] = useState(true)
   // Job title rename (PATCH /api/jobs/:jobId). Failure keeps the old title.
   const [renaming, setRenaming] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -381,7 +233,9 @@ export default function CurrentJobWorkspace({
   // never sit on the path that carries Record.
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
-  const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(null)
+  const [savingStatus, setSavingStatus] = useState<EditableJobStatus | null>(
+    null,
+  )
   const [statusError, setStatusError] = useState<string | null>(null)
 
   // Switching jobs always lands on the new job's home — never a section of
@@ -389,243 +243,114 @@ export default function CurrentJobWorkspace({
   useEffect(() => {
     setSection('home')
     setMaterialsTab('bought')
-    setJoblogFilter('all')
     // A details sheet left open would otherwise show the new job's contacts
     // under the old job's heading.
     setDetailsSheetOpen(false)
   }, [job.id])
 
-  // Money (in + out) — loaded independently of memory/budget so a Money failure
-  // never hides the Budget/Labour lenses (and vice versa). Declared before
-  // memory so a category correction can refresh it: Money out rows caption
-  // themselves with their source item's Budget category, and would otherwise
-  // keep showing the old one until the section was reopened.
-  const money = useMoney(job.id)
-  const mem = useJobMemory(job, { onCategoryChanged: money.reload })
+  const mem = useJobMemory(job)
   const toast = useToast()
-
-  // Arriving from cross-job Money: Mike lands on the lens that actually shows
-  // the fact he tapped, rather than on job home (the reset above).
-  //
-  // Which lens that is depends on the item, not on the caller: a cost counted
-  // in Budget (or filed to a category) shows in Budget, while a bought item
-  // with no usable price is exactly the item Budget leaves out — it lives in
-  // Materials → Bought, which is also where its price gets added. Resolving it
-  // here keeps that knowledge in the job, where it belongs.
-  //
-  // Applied once per entry: resolving to a plain value and depending on that
-  // value means a later memory reload (say, after Mike fixes the price) can't
-  // drag him back to this lens a second time.
-  const focusItemId = entry?.jobId === job.id ? entry.focusItemId ?? null : null
-  const memData = mem.data
-  const includedIds = mem.includedIds
-  const entryTarget = useMemo<'money' | 'spend' | 'materials' | null>(() => {
-    if (!entry || entry.jobId !== job.id) return null
-    if (entry.section === 'money') return 'money'
-    if (!entry.focusItemId) return null
-    // Wait for the memory view: landing on the wrong lens and moving him a
-    // moment later would read as the app changing its mind.
-    if (!memData) return null
-    const item = memData.sections.flatMap(s => s.items).find(i => i.id === entry.focusItemId)
-    // A leftover is Materials' business whatever else is true of it — it carries
-    // no Budget cost of its own, and Workshop is the one place that sends Mike
-    // to one. Checked before the Budget rules below so a leftover can never be
-    // routed to a lens that doesn't list it.
-    if (item?.memoryType === 'leftover_material') return 'materials'
-    // The item is gone, or Budget shows it: Budget is the right place either
-    // way — it is where a cross-job cost is explained.
-    if (!item || item.budgetCategoryId || includedIds.has(item.id)) return 'spend'
-    return item.memoryType === 'ordered_material' ? 'materials' : 'spend'
-  }, [entry, job.id, memData, includedIds])
-
-  // Which Materials tab the entry item actually lives on. Bought is the default
-  // for everything the old cross-job Money routes send here; a leftover has its
-  // own tab, and landing on Bought would leave Mike hunting for the row he
-  // tapped in the Workshop.
-  const entryMaterialsTab = useMemo<MaterialsTab>(() => {
-    const item = memData?.sections.flatMap(s => s.items).find(i => i.id === entry?.focusItemId)
-    return item?.memoryType === 'leftover_material' ? 'leftover' : 'bought'
-  }, [memData, entry])
-
+  const focusItemId =
+    entry?.jobId === job.id ? (entry.focusItemId ?? null) : null
+  const entryReady = !!mem.data
   useEffect(() => {
-    if (!entryTarget) return
-    if (entryTarget === 'materials') setMaterialsTab(entryMaterialsTab)
-    setSection(entryTarget)
-  }, [entry, entryTarget, entryMaterialsTab])
-  // Source item currently being marked paid, so its drawer control shows a
-  // busy state and a double-tap can't fire two markers.
-  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
-
+    if (!focusItemId || !entryReady) return
+    setSection('materials')
+    setMaterialsTab('leftover')
+  }, [focusItemId, entryReady])
   const openSection = useCallback((s: Exclude<Section, 'home'>) => {
-    track('job_section_opened', { section: s })
-    // Opening Money refetches it, so a refund recorded from a return elsewhere
-    // (Materials) shows up without the section needing its own change signal.
-    if (s === 'money') void money.reload()
+    track('job_section_opened', { section: s === 'hours' ? 'labour' : s })
     setSection(s)
-  }, [money])
+  }, [])
 
-  const openActivityItem = useCallback((item: LatestActivityItem) => {
-    const dest = ACTIVITY_DEST[item.type]
-    if (dest.materialsTab) setMaterialsTab(dest.materialsTab)
-    if (dest.joblogFilter) setJoblogFilter(dest.joblogFilter)
-    openSection(dest.section)
-  }, [openSection])
-
-  // Mark a trusted Budget cost item paid: records Money out, never touches
-  // Budget. The toast names both effects explicitly. On failure the item stays
-  // put and a retryable toast is shown (the drawer has already closed).
-  const handleMarkPaid = useCallback(async (item: MemoryViewItem) => {
-    if (markingPaidId) return
-    setMarkingPaidId(item.id)
-    try {
-      const row = await money.markPaid(item.id)
-      track('money_marked_paid', { job_id: job.id, memory_type: item.memoryType })
-      // Budget must be unchanged — refetch it so any stale figure can't imply
-      // otherwise, and so paid metadata (if any) is picked up.
-      void mem.reloadBudget()
-      const amount = row ? row.amount : null
-      toast({
-        title: 'Marked paid',
-        body: amount ? `Added ${formatMoney(parseFloat(amount), 'GBP')} to Money out. Budget cost unchanged.` : 'Recorded in Money out. Budget cost unchanged.',
-      })
-    } catch (err: unknown) {
-      // A cost already covered by a supplier account payment is a different
-      // sentence from one already marked paid here: it can only be changed by
-      // undoing that whole payment.
-      const onAccount = (err as { code?: string }).code === 'SUPPLIER_PAYMENT_OWNS_COST'
-      const already = err instanceof ApiError && err.status === 400
-      toast({
-        title: onAccount ? 'Paid on a supplier account' : already ? 'Already marked paid' : 'Could not mark paid',
-        body: onAccount ? 'Undo that supplier payment in Money to change this.'
-          : already ? 'This cost is already recorded in Money out.'
-          : 'Nothing changed — try again.',
-        tone: 'plain',
-      })
-    } finally {
-      setMarkingPaidId(null)
-    }
-  }, [markingPaidId, money, mem, toast, job.id])
-
-  // Undo an accidental paid mark: soft-delete the linked Money out and leave
-  // the Budget cost exactly as it was. The toast names both effects. On failure
-  // the paid marker stays put and a retryable toast is shown.
-  const handleUndoPaid = useCallback(async (item: MemoryViewItem) => {
-    if (markingPaidId) return
-    const row = money.paidRowBySource.get(item.id)
-    if (!row) return
-    // This cost was paid as part of one real payment to a supplier account
-    // covering several jobs. Unlinking it here would leave that payment claiming
-    // to cover a cost it no longer covers, so name the payment instead: it is
-    // undone whole, from its receipt in Money.
-    if (row.kind === 'supplier_account_payment') {
-      toast({
-        title: 'Paid on a supplier account',
-        body: `Covered by the ${formatMoney(parseFloat(row.amount), 'GBP')} payment to ${row.supplierName ?? 'the supplier'}. Undo that payment in Money to change this.`,
-        tone: 'plain',
-      })
-      return
-    }
-    setMarkingPaidId(item.id)
-    try {
-      await money.removeEvent(row.id)
-      track('money_undo_paid', { job_id: job.id, memory_type: item.memoryType })
-      // Budget must be unchanged — refetch it so no stale figure implies otherwise.
-      void mem.reloadBudget()
-      toast({
-        title: 'Marked unpaid',
-        body: `Removed ${formatMoney(parseFloat(row.amount), 'GBP')} from Money out. Budget cost unchanged.`,
-      })
-    } catch {
-      toast({
-        title: 'Could not undo paid',
-        body: 'Nothing changed — try again.',
-        tone: 'plain',
-      })
-    } finally {
-      setMarkingPaidId(null)
-    }
-  }, [markingPaidId, money, mem, toast, job.id])
-
-  // Mark-paid capability handed to the Budget/Labour drawers. Eligibility leans
-  // on mem.includedIds — the authoritative "counts in Budget" set — so only a
-  // trusted, safe, GBP, active cost item is ever offered, plus not-already-paid.
-  // ── Workshop, from inside the job ──────────────────────────────────────────
-  // Moving a confirmed leftover into the Workshop classifies a memory that
-  // already exists. Nothing here reloads Budget or Money, because nothing here
-  // can change them: the request carries no amount and the response carries no
-  // cost. What it does reload is the memory view, so the leftover's row picks up
-  // its new state without Mike having to leave and come back.
-  const [workshopPendingId, setWorkshopPendingId] = useState<string | null>(null)
+  const [workshopPendingId, setWorkshopPendingId] = useState<string | null>(
+    null,
+  )
   const [moveResult, setMoveResult] = useState<WorkshopItem | null>(null)
   const memRefetch = mem.refetch
 
-  const handleMoveToWorkshop = useCallback(async (item: MemoryViewItem) => {
-    if (workshopPendingId) return
-    setWorkshopPendingId(item.id)
-    try {
-      const res = await moveLeftoverToWorkshop(job.id, item.id)
-      track('workshop_move_recorded', { job_id: job.id, job_status: job.status })
-      await memRefetch()
-      setMoveResult(res.workshopItem)
-    } catch (err: unknown) {
-      // A second move of the same leftover is not really a failure from Mike's
-      // side — the material is where he wanted it — so it is said plainly and
-      // the row is refreshed to show the state he was evidently not seeing.
-      if (isAlreadyInWorkshop(err)) {
+  const handleMoveToWorkshop = useCallback(
+    async (item: MemoryViewItem) => {
+      if (workshopPendingId) return
+      setWorkshopPendingId(item.id)
+      try {
+        const res = await moveLeftoverToWorkshop(job.id, item.id)
+        track('workshop_move_recorded', {
+          job_id: job.id,
+          job_status: job.status,
+        })
         await memRefetch()
-        toast({ title: 'Already in the Workshop', body: 'This leftover is in there once already. Nothing changed.', tone: 'plain' })
-      } else {
-        toast({ title: 'Could not move it', body: 'Nothing changed — it is still just a leftover on this job. Try again.', tone: 'plain' })
+        setMoveResult(res.workshopItem)
+      } catch (err: unknown) {
+        // A second move of the same leftover is not really a failure from Mike's
+        // side — the material is where he wanted it — so it is said plainly and
+        // the row is refreshed to show the state he was evidently not seeing.
+        if (isAlreadyInWorkshop(err)) {
+          await memRefetch()
+          toast({
+            title: 'Already in the Workshop',
+            body: 'This leftover is in there once already. Nothing changed.',
+            tone: 'plain',
+          })
+        } else {
+          toast({
+            title: 'Could not move it',
+            body: 'Nothing changed — it is still just a leftover on this job. Try again.',
+            tone: 'plain',
+          })
+        }
+      } finally {
+        setWorkshopPendingId(null)
       }
-    } finally {
-      setWorkshopPendingId(null)
-    }
-  }, [job.id, job.status, workshopPendingId, memRefetch, toast])
+    },
+    [job.id, job.status, workshopPendingId, memRefetch, toast],
+  )
 
-  const handlePutBackInWorkshop = useCallback(async (item: MemoryViewItem) => {
-    if (workshopPendingId || !item.workshopItemId) return
-    setWorkshopPendingId(item.id)
-    try {
-      await putBackWorkshopItem(item.workshopItemId)
-      track('workshop_put_back', { job_id: job.id })
-      await memRefetch()
-      toast({ title: 'Back in the Workshop', body: 'The same item is available again, with the amount it had before.', tone: 'plain' })
-    } catch {
-      toast({ title: 'Could not put it back', body: 'Nothing changed. Try again.', tone: 'plain' })
-    } finally {
-      setWorkshopPendingId(null)
-    }
-  }, [job.id, workshopPendingId, memRefetch, toast])
+  const handlePutBackInWorkshop = useCallback(
+    async (item: MemoryViewItem) => {
+      if (workshopPendingId || !item.workshopItemId) return
+      setWorkshopPendingId(item.id)
+      try {
+        await putBackWorkshopItem(item.workshopItemId)
+        track('workshop_put_back', { job_id: job.id })
+        await memRefetch()
+        toast({
+          title: 'Back in the Workshop',
+          body: 'The same item is available again, with the amount it had before.',
+          tone: 'plain',
+        })
+      } catch {
+        toast({
+          title: 'Could not put it back',
+          body: 'Nothing changed. Try again.',
+          tone: 'plain',
+        })
+      } finally {
+        setWorkshopPendingId(null)
+      }
+    },
+    [job.id, workshopPendingId, memRefetch, toast],
+  )
 
-  const workshop = useMemo<WorkshopSourceControls>(() => ({
-    onMoveToWorkshop: (item) => { void handleMoveToWorkshop(item) },
-    onPutBackInWorkshop: (item) => { void handlePutBackInWorkshop(item) },
-    pendingItemId: workshopPendingId,
-  }), [handleMoveToWorkshop, handlePutBackInWorkshop, workshopPendingId])
+  const workshop = useMemo<WorkshopSourceControls>(
+    () => ({
+      onMoveToWorkshop: (item) => {
+        void handleMoveToWorkshop(item)
+      },
+      onPutBackInWorkshop: (item) => {
+        void handlePutBackInWorkshop(item)
+      },
+      pendingItemId: workshopPendingId,
+    }),
+    [handleMoveToWorkshop, handlePutBackInWorkshop, workshopPendingId],
+  )
 
-  const markPaid = useMemo<MarkPaidControls>(() => ({
-    isPaid: (item) => money.paidRowBySource.has(item.id),
-    canMarkPaid: (item) =>
-      markPaidEligibleType(item) &&
-      mem.includedIds.has(item.id) &&
-      !money.paidRowBySource.has(item.id),
-    onMarkPaid: (item) => { void handleMarkPaid(item) },
-    onUndoPaid: (item) => { void handleUndoPaid(item) },
-    pendingItemId: markingPaidId,
-  }), [money.paidRowBySource, mem.includedIds, handleMarkPaid, handleUndoPaid, markingPaidId])
-
-  // Paid-now source creation is atomic on the backend. Once the source exists,
-  // refetch both authoritative views: Budget for commitment/payment state and
-  // Money for the one linked movement.
-  const addMemoryItem = mem.addMemoryItem
-  const reloadMoney = money.reload
-  const addBoughtItem = useCallback(async (req: CreateMemoryItemRequest) => {
-    const created = await addMemoryItem(req)
-    if (req.markPaid) await reloadMoney()
-    return created
-  }, [addMemoryItem, reloadMoney])
-
-  const startRename = () => { setTitleDraft(job.title); setTitleError(null); setStatusSheetOpen(false); setRenaming(true) }
+  const startRename = () => {
+    setTitleDraft(job.title)
+    setTitleError(null)
+    setStatusSheetOpen(false)
+    setRenaming(true)
+  }
   const saveTitle = async () => {
     const title = titleDraft.trim()
     if (!title || title.length > 80 || savingTitle) return
@@ -652,8 +377,17 @@ export default function CurrentJobWorkspace({
     setDetailsSheetOpen(true)
   }, [])
 
-  const openStatusSheet = () => { setStatusError(null); setConfirmingArchive(false); setRenaming(false); setStatusSheetOpen(true) }
-  const closeStatusSheet = () => { setStatusSheetOpen(false); setConfirmingArchive(false); setStatusError(null) }
+  const openStatusSheet = () => {
+    setStatusError(null)
+    setConfirmingArchive(false)
+    setRenaming(false)
+    setStatusSheetOpen(true)
+  }
+  const closeStatusSheet = () => {
+    setStatusSheetOpen(false)
+    setConfirmingArchive(false)
+    setStatusError(null)
+  }
   const saveStatus = async (status: EditableJobStatus) => {
     if (savingStatus) return
     setSavingStatus(status)
@@ -663,7 +397,11 @@ export default function CurrentJobWorkspace({
       if (status === 'archived') {
         track('job_archived', { job_id: job.id })
       } else {
-        track('job_status_changed', { job_id: job.id, from_status: job.status, to_status: status })
+        track('job_status_changed', {
+          job_id: job.id,
+          from_status: job.status,
+          to_status: status,
+        })
       }
       onJobUpdated(updated)
       closeStatusSheet()
@@ -673,22 +411,47 @@ export default function CurrentJobWorkspace({
       setSavingStatus(null)
     }
   }
-  const { showBanner, isIosSafari, triggerInstall, dismiss: dismissInstall } = usePwaInstall()
-
-  const [facts, setFacts] = useState<CandidateFact[]>([])
-  const [factsLoadFailed, setFactsLoadFailed] = useState(false)
+  const {
+    showBanner,
+    isIosSafari,
+    triggerInstall,
+    dismiss: dismissInstall,
+  } = usePwaInstall()
 
   // Things to check — draft queue count. Loads independently; never blocks record.
   const [draftCount, setDraftCount] = useState(0)
-  const [queueLoadState, setQueueLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [queueLoadState, setQueueLoadState] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading')
 
+  const activeJob = useRef(job.id)
+  activeJob.current = job.id
   const refreshNotes = useCallback(async () => {
+    const session = getCaptureSessionId()
     const fresh = await getNotesForJob(job.id)
+    if (activeJob.current !== job.id || session !== getCaptureSessionId())
+      return
     fresh.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
     setNotes(fresh)
   }, [job.id])
 
-  useEffect(() => { refreshNotes() }, [refreshNotes])
+  useEffect(() => {
+    let current = true
+    const refresh = () => {
+      if (current) void refreshNotes().catch(() => {})
+    }
+    refresh()
+    const unsubscribe = subscribeLocalCaptures(refresh)
+    const unsubscribeOwner = subscribeLocalOwner(() => {
+      setNotes([])
+      refresh()
+    })
+    return () => {
+      current = false
+      unsubscribe()
+      unsubscribeOwner()
+    }
+  }, [refreshNotes])
 
   useEffect(() => {
     const setOn = () => setOnline(true)
@@ -701,166 +464,105 @@ export default function CurrentJobWorkspace({
     }
   }, [])
 
+  const queueRequest = useRef(0)
   const loadQueue = useCallback(() => {
+    const request = ++queueRequest.current
     setQueueLoadState('loading')
     getReviewQueue(job.id)
-      .then(q => {
-        const count = q.sections.flatMap(s => s.items).filter(it => it.status === 'draft').length
+      .then((q) => {
+        if (activeJob.current !== job.id || request !== queueRequest.current)
+          return
+        const count = q.sections
+          .flatMap((s) => s.items)
+          .filter((it) => it.status === 'draft').length
         setDraftCount(count)
         setQueueLoadState('ready')
       })
-      .catch(() => setQueueLoadState('error'))
-  }, [job.id])
-
-  useEffect(() => { loadQueue() }, [loadQueue])
-
-  // Latest activity's photo rows — loaded independently of JobPhotosSection's
-  // own Notes-tab fetch. Failure quietly omits photos rather than blocking
-  // Overview or Record. Stale-job guarded like JobPhotosSection; re-run after
-  // JobPhotosSection reports a change (e.g. a new upload) so Overview reflects it.
-  const [photos, setPhotos] = useState<JobPhoto[]>([])
-  const currentJobIdRef = useRef(job.id)
-  currentJobIdRef.current = job.id
-
-  const loadPhotos = useCallback(() => {
-    const requestedJobId = job.id
-    getJobPhotos(requestedJobId)
-      .then(res => { if (currentJobIdRef.current === requestedJobId) setPhotos(res.photos) })
-      .catch(() => { if (currentJobIdRef.current === requestedJobId) setPhotos([]) })
-  }, [job.id])
-
-  useEffect(() => { loadPhotos() }, [loadPhotos])
-
-  // Job log "All" needs receipts alongside notes and photos, so the workspace
-  // reads them independently of JobReceiptsSection's own fetch — same stale-job
-  // guard, same quiet failure. Receipts are evidence only: this read never
-  // feeds Budget, Money, or latest activity on job home.
-  const [receipts, setReceipts] = useState<JobReceipt[]>([])
-
-  const loadReceipts = useCallback(() => {
-    const requestedJobId = job.id
-    getJobReceipts(requestedJobId)
-      .then(res => { if (currentJobIdRef.current === requestedJobId) setReceipts(res.receipts) })
-      .catch(() => { if (currentJobIdRef.current === requestedJobId) setReceipts([]) })
-  }, [job.id])
-
-  useEffect(() => { loadReceipts() }, [loadReceipts])
-
-  const readyExtractionCount = notes.filter(
-    n => n.localState === 'uploaded' && n.extractionStatus === 'ready',
-  ).length
-
-  const fetchFacts = useCallback(() => {
-    getDraftFacts(job.id)
-      .then(data => { setFacts(data); setFactsLoadFailed(false) })
-      .catch(() => setFactsLoadFailed(true))
+      .catch(() => {
+        if (activeJob.current === job.id && request === queueRequest.current)
+          setQueueLoadState('error')
+      })
   }, [job.id])
 
   useEffect(() => {
-    if (readyExtractionCount === 0) return
-    fetchFacts()
-  }, [readyExtractionCount, fetchFacts])
+    loadQueue()
+  }, [loadQueue])
 
-  const { syncAll, retryNote } = useSync(refreshNotes)
-  const { refreshNow: refreshStatus } = useTranscriptPoll(notes, job.id, refreshNotes)
-  const recorder = useRecorder()
+  const [photoRevision, setPhotoRevision] = useState(0)
+  const loadPhotos = useCallback(() => setPhotoRevision((v) => v + 1), [])
 
-  const handleRefresh = useCallback(() => {
-    refreshStatus()
-    if (readyExtractionCount > 0) fetchFacts()
-  }, [refreshStatus, readyExtractionCount, fetchFacts])
+  const readyExtractionCount = notes.filter(
+    (n) => n.localState === 'uploaded' && n.extractionStatus === 'ready',
+  ).length
 
-  const handleRecord = useCallback(async () => {
-    const started = await recorder.start(async (result) => {
-      track('record_completed', {
-        job_id: job.id,
-        duration_bucket: durationBucket(result.durationMs),
-        mime_type_family: mimeTypeFamily(result.mimeType),
-      })
-      const clientNoteId = crypto.randomUUID()
-      const note: LocalNote = {
-        clientNoteId,
-        jobId: job.id,
-        capturedAt: new Date().toISOString(),
-        durationMs: result.durationMs,
-        mimeType: result.mimeType,
-        blob: result.blob,
-        sizeBytes: result.blob.size,
-        localState: 'saved_local',
-        uploadAttemptCount: 0,
-        lastUploadAttemptAt: null,
-        serverNoteId: null,
-        lastErrorCode: null,
-        transcriptStatus: null,
-        transcriptText: null,
-        transcriptErrorCode: null,
-        extractionStatus: null,
-      }
-      await saveNote(note)
-      await refreshNotes()
-      setJustCapturedId(clientNoteId)
-      syncAll()
+  const { recorder, record, recordingTitle } = useCaptureContext()!
+  useTranscriptPoll(notes, job.id, refreshNotes)
+  const updates = useCaptureUpdates()
+  const refreshMemory = mem.refetch
+  const previousCaptureUpdate = useRef({
+    jobId: job.id,
+    updates,
+    count: readyExtractionCount,
+  })
+  useEffect(() => {
+    const previous = previousCaptureUpdate.current
+    previousCaptureUpdate.current = {
+      jobId: job.id,
+      updates,
+      count: readyExtractionCount,
+    }
+    if (
+      previous.jobId === job.id &&
+      (previous.updates !== updates || previous.count !== readyExtractionCount)
+    ) {
+      void refreshMemory()
       loadQueue()
-    })
-    // The UI has no cancel affordance mid-recording; the only way a tapped
-    // Record produces no note is a failed start (mic permission denied).
-    if (started) track('record_started', { job_id: job.id })
-    else track('record_cancelled', { job_id: job.id, error_kind: 'PERMISSION_DENIED' })
-  }, [recorder, job.id, refreshNotes, syncAll, loadQueue])
+      loadPhotos()
+    }
+  }, [
+    job.id,
+    updates,
+    readyExtractionCount,
+    refreshMemory,
+    loadQueue,
+    loadPhotos,
+  ])
+  const handleRecord = useCallback(() => {
+    void record({ jobId: job.id, title: job.title })
+  }, [record, job.id, job.title])
 
   const dismissExplainer = useCallback(() => {
     localStorage.setItem(EXPLAINER_KEY, 'true')
     setShowExplainer(false)
   }, [])
 
-  // Customer payments (money in) appear in home latest activity as their own
-  // type. Merged after the memory/photo merge so newest-first covers all
-  // sources. Only customer_payment rows — cost-paid/refund movements are
-  // explained by their Budget/Materials items, not doubled up here.
-  const latest = useMemo(() => {
-    const memoryAndPhotos = mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 20), photos, 20)
-    const paymentItems: LatestActivityItem[] = (money.data?.rows ?? [])
-      .filter(r => r.kind === 'customer_payment')
-      .map(r => ({
-        memoryItemId: r.id,
-        type: 'payment' as const,
-        typeLabel: 'Payment',
-        headline: r.note ? `${formatMoney(parseFloat(r.amount), 'GBP')} received — ${r.note}` : `${formatMoney(parseFloat(r.amount), 'GBP')} received`,
-        costLabel: null,
-        effectiveAt: r.occurredAt,
-      }))
-    return [...memoryAndPhotos, ...paymentItems]
-      .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))
-      .slice(0, 5)
-  }, [mem.data, photos, money.data])
-
-  // Job log "All": every note-type memory item and photo, merged newest-first.
-  // Bought/used/labour stay in their own sections — the log is the narrative
-  // record (notes, photos, receipts), not a duplicate of the money lenses.
-  const jobLogItems = useMemo(
-    () => mergeLatestActivityWithReceipts(
-      mergeLatestActivityWithPhotos(deriveLatestActivity(mem.data?.sections ?? [], 500), photos, 500),
-      receipts,
-      500,
-    ).filter(i => i.type === 'note' || i.type === 'photo' || i.type === 'receipt'),
-    [mem.data, photos, receipts],
-  )
-
   // Photo link targets: trusted memory items only — review-queue drafts are
   // never offered as link targets (v1 rule). Labels are the items' CURRENT
   // display identity (post-correction), not original extraction text.
+  const logRefreshKey = useMemo(
+    () => ({ memory: mem.data, photoRevision, notes }),
+    [mem.data, photoRevision, notes],
+  )
   const photoLinkTargets = useMemo<PhotoLinkTarget[]>(
-    () => (mem.data?.sections ?? []).flatMap(s => s.items.map(i => ({ id: i.id, label: photoLinkTargetLabel(i) }))),
+    () =>
+      (mem.data?.sections ?? []).flatMap((s) =>
+        s.items.map((i) => ({ id: i.id, label: photoLinkTargetLabel(i) })),
+      ),
     [mem.data],
   )
 
   const hasUrgent = queueLoadState === 'ready' && draftCount > 0
-  const thingsCopy = draftCount === 1 ? '1 thing to check' : `${draftCount} things to check`
+  const thingsCopy =
+    draftCount === 1 ? '1 thing to check' : `${draftCount} things to check`
 
   function renderThingsToCheck() {
     if (hasUrgent) {
       return (
-        <button type="button" className="ws-ttc ws-ttc--urgent" onClick={onOpenReviewQueue}>
+        <button
+          type="button"
+          className="ws-ttc ws-ttc--urgent"
+          onClick={onOpenReviewQueue}
+        >
           <span className="ws-ttc-dot" aria-hidden="true" />
           <span className="ws-ttc-label">{thingsCopy}</span>
           <span className="ws-ttc-action">Review ›</span>
@@ -882,7 +584,9 @@ export default function CurrentJobWorkspace({
       return (
         <div className="mem-error" role="alert">
           <p>{mem.errorMsg}</p>
-          <button className="mem-retry" onClick={mem.reload}>Try again</button>
+          <button className="mem-retry" onClick={mem.reload}>
+            Try again
+          </button>
         </div>
       )
     }
@@ -892,17 +596,16 @@ export default function CurrentJobWorkspace({
     return content
   }
 
-  // Budget / Money / Labour each open with a full-bleed ink band running the
-  // page header straight into the lens's hero, so the page tells the shell to
-  // join them (see .ws-page--banded). Nothing may render between the two.
-  const banded = section === 'spend' || section === 'money' || section === 'labour'
+  const banded = section === 'hours'
 
   return (
     <div className={`ws-page${banded ? ' ws-page--banded' : ''}`}>
-      {(mem.openMenuCatId || headerMenuOpen) && (
+      {headerMenuOpen && (
         <div
           className="mem-menu-scrim"
-          onClick={() => { mem.setOpenMenuCatId(null); setHeaderMenuOpen(false) }}
+          onClick={() => {
+            setHeaderMenuOpen(false)
+          }}
           aria-hidden="true"
         />
       )}
@@ -912,12 +615,19 @@ export default function CurrentJobWorkspace({
         // job title kept as context. No global tab strip anywhere.
         <header className="ws-header ws-header--section">
           <div className="ws-header-top">
-            <button type="button" className="btn-switch-job" onClick={() => setSection('home')}>‹ Job home</button>
-            {/* No Job details control here. A section is one lens on the job —
-                Budget, Money, Labour — and its header carries only the way back
-                out of it. Job details lives with the status chip on job home,
-                where the job describes itself, plus the header menu. */}
-            {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
+            <button
+              type="button"
+              className="btn-switch-job"
+              onClick={() => setSection('home')}
+            >
+              ‹ Job home
+            </button>
+
+            {!online && (
+              <span className="offline-badge" aria-live="polite">
+                No signal
+              </span>
+            )}
           </div>
           <div className="ws-header-titles">
             <h1 className="ws-job-title">{SECTION_TITLES[section]}</h1>
@@ -925,91 +635,171 @@ export default function CurrentJobWorkspace({
           </div>
         </header>
       ) : (
-      <header className="ws-header">
-        <div className="ws-header-top">
-          {/* The route up to the book level is named after where it goes. "Switch
+        <header className="ws-header">
+          <div className="ws-header-top">
+            {/* The route up to the book level is named after where it goes. "Switch
               job" described a picker; this is the cover of the book, and Mike
               gets there the same way from every job. */}
-          <button type="button" className="btn-switch-job" onClick={onOpenBookHome}>‹ The Job Book</button>
-          <div className="ws-header-top-right">
-            {!online && <span className="offline-badge" aria-live="polite">No signal</span>}
-            <div className="ws-header-menu-wrap">
-              <button
-                type="button"
-                className="btn-header-menu"
-                aria-label="More actions"
-                aria-haspopup="menu"
-                aria-expanded={headerMenuOpen}
-                onClick={() => setHeaderMenuOpen(o => !o)}
-              >⋯</button>
-              {headerMenuOpen && (
-                <div className="ws-header-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); startRename() }}>Rename job</button>
-                  {/* Job details (site address + who's on the job) is reference
-                      context, not daily work — it belongs behind the menu, not
-                      on a home card next to Budget and Labour. */}
-                  <button type="button" role="menuitem" onClick={openDetailsSheet}>Job details</button>
-                  {user?.role === 'INTERNAL' && (
-                    <a role="menuitem" href="/internal/support" onClick={() => setHeaderMenuOpen(false)}>Support</a>
-                  )}
-                  <button type="button" role="menuitem" className="ws-header-menu-danger" onClick={() => { setHeaderMenuOpen(false); onLogout() }}>Log out</button>
-                </div>
+            <button
+              type="button"
+              className="btn-switch-job"
+              onClick={onOpenBookHome}
+            >
+              ‹ The Job Book
+            </button>
+            <div className="ws-header-top-right">
+              {!online && (
+                <span className="offline-badge" aria-live="polite">
+                  No signal
+                </span>
               )}
-            </div>
-          </div>
-        </div>
-        <div className="ws-header-titles">
-          {renaming ? (
-            <form className="ws-rename-form" aria-label="Rename job" onSubmit={e => { e.preventDefault(); void saveTitle() }}>
-              <input
-                className="ws-rename-input"
-                name="jobTitle"
-                aria-label="Job title"
-                value={titleDraft}
-                maxLength={80}
-                onChange={e => setTitleDraft(e.target.value)}
-              />
-              <div className="ws-rename-actions">
-                <button type="submit" className="btn-queue-save" disabled={savingTitle || titleDraft.trim() === ''}>
-                  {savingTitle ? 'Saving…' : 'Save'}
-                </button>
-                <button type="button" className="btn-queue-cancel" onClick={() => { setRenaming(false); setTitleError(null) }} disabled={savingTitle}>
-                  Cancel
-                </button>
-              </div>
-              {titleError && <p className="queue-item-error" role="alert">{titleError}</p>}
-            </form>
-          ) : (
-            <>
-              <h1 className="ws-job-title">{job.title}</h1>
-              {job.roughLocationOrLabel && <p className="ws-job-location">{job.roughLocationOrLabel}</p>}
-              {!job.roughLocationOrLabel && job.jobType && job.jobType !== 'other' && JOB_TYPE_LABELS[job.jobType] && (
-                <p className="ws-job-location">{JOB_TYPE_LABELS[job.jobType]}</p>
-              )}
-              <div className="ws-status-block">
-                <span className="ws-status-label">Status</span>
+              <div className="ws-header-menu-wrap">
                 <button
                   type="button"
-                  className={`ws-status-chip ws-status-chip--${job.status}`}
-                  onClick={openStatusSheet}
-                  aria-haspopup="dialog"
-                  aria-label={`Change job status, current status ${jobStatusLabel(job.status)}`}
+                  className="btn-header-menu"
+                  aria-label="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={headerMenuOpen}
+                  onClick={() => setHeaderMenuOpen((o) => !o)}
                 >
-                  {jobStatusLabel(job.status)}
-                  <span className="ws-status-chip-chev" aria-hidden="true">▾</span>
+                  ⋯
                 </button>
-                {/* Named, on the status line: site address and phone numbers
+                {headerMenuOpen && (
+                  <div className="ws-header-menu" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setHeaderMenuOpen(false)
+                        startRename()
+                      }}
+                    >
+                      Rename job
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openDetailsSheet}
+                    >
+                      Job details
+                    </button>
+                    {user?.role === 'INTERNAL' && (
+                      <a
+                        role="menuitem"
+                        href="/internal/support"
+                        onClick={() => setHeaderMenuOpen(false)}
+                      >
+                        Support
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="ws-header-menu-danger"
+                      onClick={() => {
+                        setHeaderMenuOpen(false)
+                        onLogout()
+                      }}
+                    >
+                      Log out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="ws-header-titles">
+            {renaming ? (
+              <form
+                className="ws-rename-form"
+                aria-label="Rename job"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void saveTitle()
+                }}
+              >
+                <input
+                  className="ws-rename-input"
+                  name="jobTitle"
+                  aria-label="Job title"
+                  value={titleDraft}
+                  maxLength={80}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                />
+                <div className="ws-rename-actions">
+                  <button
+                    type="submit"
+                    className="btn-queue-save"
+                    disabled={savingTitle || titleDraft.trim() === ''}
+                  >
+                    {savingTitle ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-queue-cancel"
+                    onClick={() => {
+                      setRenaming(false)
+                      setTitleError(null)
+                    }}
+                    disabled={savingTitle}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {titleError && (
+                  <p className="queue-item-error" role="alert">
+                    {titleError}
+                  </p>
+                )}
+              </form>
+            ) : (
+              <>
+                <h1 className="ws-job-title">{job.title}</h1>
+                {job.roughLocationOrLabel && (
+                  <p className="ws-job-location">{job.roughLocationOrLabel}</p>
+                )}
+                {!job.roughLocationOrLabel &&
+                  job.jobType &&
+                  job.jobType !== 'other' &&
+                  JOB_TYPE_LABELS[job.jobType] && (
+                    <p className="ws-job-location">
+                      {JOB_TYPE_LABELS[job.jobType]}
+                    </p>
+                  )}
+                <div className="ws-status-block">
+                  <span className="ws-status-label">Status</span>
+                  <button
+                    type="button"
+                    className={`ws-status-chip ws-status-chip--${job.status}`}
+                    onClick={openStatusSheet}
+                    aria-haspopup="dialog"
+                    aria-label={`Change job status, current status ${jobStatusLabel(job.status)}`}
+                  >
+                    {jobStatusLabel(job.status)}
+                    <span className="ws-status-chip-chev" aria-hidden="true">
+                      ▾
+                    </span>
+                  </button>
+                  {/* Named, on the status line: site address and phone numbers
                     are things Mike goes looking for, and an unlabelled "⋯" is
                     not somewhere anyone looks for a phone number. The menu
                     item stays, but it is no longer the only way in. */}
-                <button type="button" className="btn-job-details" onClick={openDetailsSheet}>
-                  Job details<span className="btn-job-details-chev" aria-hidden="true">›</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </header>
+                  <button
+                    type="button"
+                    className="btn-job-details"
+                    onClick={openDetailsSheet}
+                  >
+                    Job details
+                    <span className="btn-job-details-chev" aria-hidden="true">
+                      ›
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </header>
       )}
 
       {statusSheetOpen && (
@@ -1020,8 +810,9 @@ export default function CurrentJobWorkspace({
             // it never fires from a single tap.
             <div className="status-sheet-confirm">
               <p className="status-sheet-confirm-copy">
-                Archive “{job.title}”? It will be removed from your normal job list.
-                Its data is kept — nothing is deleted, and it stays visible to Support.
+                Archive “{job.title}”? It will be removed from your normal job
+                list. Its data is kept — nothing is deleted, and it stays
+                visible to Support.
               </p>
               <div className="status-sheet-confirm-actions">
                 <button
@@ -1044,7 +835,7 @@ export default function CurrentJobWorkspace({
             </div>
           ) : (
             <div className="status-sheet-options">
-              {NORMAL_JOB_STATUSES.map(opt => (
+              {NORMAL_JOB_STATUSES.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
@@ -1054,8 +845,14 @@ export default function CurrentJobWorkspace({
                   onClick={() => saveStatus(opt.value)}
                 >
                   <span className="status-sheet-dot" aria-hidden="true" />
-                  <span className="status-sheet-opt-label">{savingStatus === opt.value ? 'Saving…' : opt.label}</span>
-                  {job.status === opt.value && <span className="status-sheet-check" aria-hidden="true">✓</span>}
+                  <span className="status-sheet-opt-label">
+                    {savingStatus === opt.value ? 'Saving…' : opt.label}
+                  </span>
+                  {job.status === opt.value && (
+                    <span className="status-sheet-check" aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
                 </button>
               ))}
               <div className="status-sheet-divider" role="presentation" />
@@ -1069,12 +866,20 @@ export default function CurrentJobWorkspace({
               </button>
             </div>
           )}
-          {statusError && <p className="queue-item-error" role="alert">{statusError}</p>}
+          {statusError && (
+            <p className="queue-item-error" role="alert">
+              {statusError}
+            </p>
+          )}
         </BottomSheet>
       )}
 
       {detailsSheetOpen && (
-        <JobDetailsSheet jobId={job.id} jobTitle={job.title} onClose={() => setDetailsSheetOpen(false)} />
+        <JobDetailsSheet
+          jobId={job.id}
+          jobTitle={job.title}
+          onClose={() => setDetailsSheetOpen(false)}
+        />
       )}
 
       {/* The move result. It replaces the item drawer rather than stacking on
@@ -1083,8 +888,14 @@ export default function CurrentJobWorkspace({
       {moveResult && (
         <MoveToWorkshopResult
           workshopItem={moveResult}
-          onSeeInWorkshop={() => { setMoveResult(null); onOpenWorkshop() }}
-          onUndone={() => { setMoveResult(null); void mem.refetch() }}
+          onSeeInWorkshop={() => {
+            setMoveResult(null)
+            onOpenWorkshop()
+          }}
+          onUndone={() => {
+            setMoveResult(null)
+            void mem.refetch()
+          }}
           onClose={() => setMoveResult(null)}
         />
       )}
@@ -1095,9 +906,15 @@ export default function CurrentJobWorkspace({
             Spend screen in particular is specified as hero + rows and nothing
             else, with its header and hero running together as one ink band. */}
         {section === 'home' && showBanner && (
-          <InstallBanner isIosSafari={isIosSafari} onInstall={triggerInstall} onDismiss={dismissInstall} />
+          <InstallBanner
+            isIosSafari={isIosSafari}
+            onInstall={triggerInstall}
+            onDismiss={dismissInstall}
+          />
         )}
-        {section === 'home' && showExplainer && <StorageExplainer onDismiss={dismissExplainer} />}
+        {section === 'home' && showExplainer && (
+          <StorageExplainer onDismiss={dismissExplainer} />
+        )}
 
         {section === 'home' && (
           <div className="ws-overview">
@@ -1109,45 +926,38 @@ export default function CurrentJobWorkspace({
             {mem.loadState === 'error' ? (
               <div className="mem-error" role="alert">
                 <p>Couldn’t load job details.</p>
-                <button className="mem-retry" onClick={mem.reload}>Try again</button>
+                <button className="mem-retry" onClick={mem.reload}>
+                  Try again
+                </button>
               </div>
             ) : mem.loadState === 'loading' && !mem.data ? (
               <p className="mem-loading">Loading…</p>
             ) : null}
 
             <HomeSectionCards
-              total={mem.totalKnownCost}
-              budgetAmount={mem.budgetSummary?.totals.budgetAmount ?? null}
-              labourHours={mem.labourHours}
-              moneySummary={money.data}
+              hours={mem.data?.hours ?? null}
               onOpen={openSection}
-            />
-
-            <LatestActivity items={latest} onOpenItem={openActivityItem} />
-
-            <SourceHistory
-              notes={notes}
-              online={online}
-              onRetry={retryNote}
-              facts={facts}
-              factsLoadFailed={factsLoadFailed}
-              onRefresh={handleRefresh}
-              open={showSourceHistory}
-              onToggle={() => setShowSourceHistory(h => !h)}
             />
           </div>
         )}
 
-        {section === 'spend' && renderMemoryTab(
-          <SpendTab mem={mem} markPaid={markPaid} focusItemId={focusItemId} />,
-        )}
-        {section === 'money' && <MoneySection jobId={job.id} money={money} />}
-        {section === 'labour' && renderMemoryTab(<LabourTab mem={mem} jobId={job.id} markPaid={markPaid} />)}
+        {section === 'hours' && renderMemoryTab(<HoursTab mem={mem} />)}
 
         {section === 'materials' && (
           <>
-            <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Materials views">
-              {([['bought', 'Bought'], ['used', 'Used'], ['leftover', 'Left over'], ['returned', 'Returned']] as const).map(([key, label]) => (
+            <div
+              className="ws-tabs ws-tabs--inner"
+              role="tablist"
+              aria-label="Materials views"
+            >
+              {(
+                [
+                  ['bought', 'Bought'],
+                  ['used', 'Used'],
+                  ['leftover', 'Left over'],
+                  ['returned', 'Returned'],
+                ] as const
+              ).map(([key, label]) => (
                 <button
                   key={key}
                   role="tab"
@@ -1165,25 +975,31 @@ export default function CurrentJobWorkspace({
                   mem={mem}
                   sectionKeys={['ordered_materials']}
                   ariaLabel="Bought materials"
-                  sectionAdds={{ ordered_materials: { kind: 'spend', label: 'Add bought item' } }}
+                  sectionAdds={{
+                    ordered_materials: {
+                      kind: 'bought',
+                      label: 'Add bought item',
+                    },
+                  }}
                   focusItemId={focusItemId}
-                  markPaid={markPaid}
-                  onAddMemoryItem={addBoughtItem}
-                  budgetCategories={mem.budgetCategories}
                 />
               ) : materialsTab === 'used' ? (
                 <MemorySectionTab
                   mem={mem}
                   sectionKeys={['used_materials']}
                   ariaLabel="Used materials"
-                  sectionAdds={{ used_materials: { kind: 'used', label: 'Add used item' } }}
+                  sectionAdds={{
+                    used_materials: { kind: 'used', label: 'Add used item' },
+                  }}
                 />
               ) : materialsTab === 'leftover' ? (
                 <MemorySectionTab
                   mem={mem}
                   sectionKeys={['leftovers']}
                   ariaLabel="Left over materials"
-                  sectionAdds={{ leftovers: { kind: 'leftover', label: 'Add leftover' } }}
+                  sectionAdds={{
+                    leftovers: { kind: 'leftover', label: 'Add leftover' },
+                  }}
                   focusItemId={focusItemId}
                   workshop={workshop}
                 />
@@ -1204,118 +1020,43 @@ export default function CurrentJobWorkspace({
         )}
 
         {section === 'joblog' && (
-          <>
-            <div className="ws-tabs ws-tabs--inner" role="tablist" aria-label="Job log filters">
-              {([['all', 'All'], ['notes', 'Notes'], ['photos', 'Photos'], ['receipts', 'Receipts']] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  role="tab"
-                  aria-selected={joblogFilter === key}
-                  className={`ws-tab${joblogFilter === key ? ' ws-tab--active' : ''}`}
-                  onClick={() => setJoblogFilter(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {joblogFilter === 'all' && renderMemoryTab(
-              jobLogItems.length === 0 ? (
-                <p className="mem-tab-empty">Nothing in the job log yet. Notes, photos, and receipts land here.</p>
-              ) : (
-                <ul className="ws-latest-card ws-joblog-feed" aria-label="Job log">
-                  {jobLogItems.map(item => (
-                    <li key={item.memoryItemId}>
-                      <button
-                        type="button"
-                        className="ws-latest-row"
-                        onClick={() => setJoblogFilter(item.type === 'photo' ? 'photos' : item.type === 'receipt' ? 'receipts' : 'notes')}
-                        aria-label={`${item.typeLabel}: ${item.headline}`}
-                      >
-                        <span className="ws-latest-top">
-                          <span className={`ws-type-chip ws-type-chip--${item.type}`}>{item.typeLabel}</span>
-                          <span className="ws-latest-headline">{item.headline}</span>
-                        </span>
-                        <span className="ws-latest-time">{formatSavedStamp(item.effectiveAt)}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ),
-            )}
-            {joblogFilter === 'notes' && renderMemoryTab(
-              <MemorySectionTab
-                mem={mem}
-                sectionKeys={NOTES_SECTION_KEYS}
-                ariaLabel="Notes"
-                directAdd={{ kind: 'note', label: 'Add note', sectionLabel: 'Notes' }}
-              />,
-            )}
-            {joblogFilter === 'photos' && (
-              <JobPhotosSection jobId={job.id} linkTargets={photoLinkTargets} onPhotosChanged={loadPhotos} />
-            )}
-            {joblogFilter === 'receipts' && (
-              <JobReceiptsSection jobId={job.id} onReceiptsChanged={loadReceipts} />
-            )}
-          </>
+          <JobLog
+            refreshKey={logRefreshKey}
+            jobId={job.id}
+            onAddNote={mem.addMemoryItem}
+            onEditNote={mem.cardProps}
+            photos={
+              <JobPhotosSection
+                jobId={job.id}
+                linkTargets={photoLinkTargets}
+                onPhotosChanged={loadPhotos}
+              />
+            }
+          />
         )}
       </div>
 
       {/* Pinned Record — available on every tab, never blocked by summary loads. */}
-      <div className="ws-record-bar">
-        {!isRecordingSupported ? (
-          <p className="ws-record-unsupported">
-            {!window.isSecureContext
-              ? 'Open this page over https:// to enable the microphone.'
-              : 'Recording is not supported in this browser. Try Chrome or Safari.'}
-          </p>
-        ) : recorder.state === 'idle' ? (
-          <button className="ws-record-btn" onClick={handleRecord} aria-label="Start recording">
-            <span className="ws-record-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="2" width="6" height="12" rx="3" />
-                <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
-              </svg>
-            </span>
-            {/* The persistent Record bar names its destination job on every
-                screen (not "Tap · say it · done", which narrated the control) so
-                a recording can never quietly land on the wrong job. */}
-            <span className="ws-record-text">
-              <span className="ws-record-title">Record</span>
-              <span className="ws-record-sub">to {job.title}</span>
-            </span>
-          </button>
-        ) : (
-          <div className="ws-recording-active">
-            <span className="ws-rec-dot" aria-hidden="true" />
-            <span className="ws-rec-elapsed" aria-live="polite" aria-atomic="true">
-              {formatDuration(recorder.elapsedMs)}
-              <span className="ws-rec-max"> / {formatDuration(MAX_DURATION_MS)}</span>
-            </span>
-            <button
-              className="ws-stop-btn"
-              onClick={recorder.stop}
-              disabled={recorder.state === 'stopping'}
-              aria-label="Stop recording"
-            >
-              {recorder.state === 'stopping' ? 'Saving…' : 'Stop'}
-            </button>
-          </div>
-        )}
-        {recorder.permissionError && (
-          <p className="permission-error">
-            Microphone access denied. Check your browser settings and try again.
-          </p>
-        )}
-      </div>
-
-      {justCapturedId && (
-        <CaptureConfirmation
-          note={notes.find(n => n.clientNoteId === justCapturedId)}
-          online={online}
-          onClose={() => setJustCapturedId(null)}
-          onOpenReviewQueue={() => { setJustCapturedId(null); onOpenReviewQueue() }}
-        />
-      )}
+      <RecordingControls
+        recorder={recorder}
+        onRecord={handleRecord}
+        jobTitle={recorder.state === 'idle' ? job.title : recordingTitle}
+      />
     </div>
+  )
+}
+
+// An isolated workspace is also a complete capture root (component tests and
+// previews). The real app supplies this provider above every screen.
+export default function CurrentJobWorkspace(
+  props: React.ComponentProps<typeof Workspace>,
+) {
+  const capture = useCaptureContext()
+  return capture ? (
+    <Workspace {...props} />
+  ) : (
+    <CaptureSyncProvider>
+      <Workspace {...props} />
+    </CaptureSyncProvider>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
@@ -10,17 +10,38 @@ import type { UseRecorderReturn } from '../useRecorder'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../api', () => ({
+vi.mock('../api', async (original) => ({
+  ...(await original<typeof import('../api')>()),
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(() => Promise.resolve([])),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn(() => Promise.resolve([])),
-  getReviewQueue: vi.fn(() => Promise.resolve({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] })),
-  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-pilot-001' }, generatedAt: '', sections: [], stillToCheck: { count: 0, items: [] } })),
+  getReviewQueue: vi.fn(() =>
+    Promise.resolve({
+      jobId: 'job-pilot-001',
+      generatedAt: '',
+      sections: [],
+      alreadyRemembered: [],
+    }),
+  ),
+  getMemoryView: vi.fn(() =>
+    Promise.resolve({
+      job: { id: 'job-pilot-001' },
+      generatedAt: '',
+      sections: [],
+      hours: { totalHours: '0', people: [], days: [] },
+      stillToCheck: { count: 0, items: [] },
+    }),
+  ),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
-  getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-pilot-001', photos: [] })),
-  getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-pilot-001', receipts: [] })),
+  getJobLog: vi.fn(() => Promise.resolve({ entries: [] })),
+  getJobPhotos: vi.fn(() =>
+    Promise.resolve({ jobId: 'job-pilot-001', photos: [] }),
+  ),
+  getJobReceipts: vi.fn(() =>
+    Promise.resolve({ jobId: 'job-pilot-001', receipts: [] }),
+  ),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -39,8 +60,12 @@ vi.mock('../useRecorder', () => {
   }
 })
 
-vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
-vi.mock('../useTranscriptPoll', () => ({ useTranscriptPoll: () => ({ refreshNow: vi.fn() }) }))
+vi.mock('../useSync', () => ({
+  useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }),
+}))
+vi.mock('../useTranscriptPoll', () => ({
+  useTranscriptPoll: () => ({ refreshNow: vi.fn() }),
+}))
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,7 +98,7 @@ describe('PWA assets and manifest config', () => {
     'favicon-32.png',
     'favicon-16.png',
     'logo-horizontal.png',
-  ])('%s is present in public dir', file => {
+  ])('%s is present in public dir', (file) => {
     expect(existsSync(resolve(PUBLIC_DIR, file))).toBe(true)
   })
 
@@ -138,43 +163,92 @@ describe('PWA assets and manifest config', () => {
 describe('Workspace — pilot field requirements', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
-    vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-pilot-001', generatedAt: '', sections: [], alreadyRemembered: [] })
+    vi.mocked(getReviewQueue).mockResolvedValue({
+      jobId: 'job-pilot-001',
+      generatedAt: '',
+      sections: [],
+      alreadyRemembered: [],
+    })
   })
 
   it('shows approved audio-storage explainer copy on first launch', () => {
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
-    expect(screen.getByText(
-      'We save the recording during the pilot so we can check what was captured and improve the job memory.'
-    )).toBeInTheDocument()
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    expect(
+      screen.getByText(
+        'We save the recording during the pilot so we can check what was captured and improve the job memory.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('renders the record button as the default capture entry point', () => {
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
-    expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument()
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: /start recording/i }),
+    ).toBeInTheDocument()
   })
 
   it('shows the current pilot job title', () => {
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
     expect(screen.getByText('Garden Room')).toBeInTheDocument()
   })
 
   it('shows "Saved on phone" label for a locally-saved note when online', async () => {
-    const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
+    const note = makeNote({
+      jobId: PILOT_JOB.id,
+      localState: 'saved_local',
+      serverNoteId: null,
+    })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
     await waitFor(() => {
-      expect(screen.getByText('Saved on phone')).toBeInTheDocument()
+      expect(screen.getByText('Saved on this phone')).toBeInTheDocument()
     })
   })
 
   it('shows "Voice note saved" label after a note is uploaded', async () => {
-    const note = makeNote({ jobId: PILOT_JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
+    const note = makeNote({
+      jobId: PILOT_JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-001',
+    })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
     await waitFor(() => {
       expect(screen.getByText('Voice note saved')).toBeInTheDocument()
     })
@@ -182,11 +256,22 @@ describe('Workspace — pilot field requirements', () => {
 
   it('shows "Saved on this phone" when offline and a note is saved locally', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
-    const note = makeNote({ jobId: PILOT_JOB.id, localState: 'saved_local', serverNoteId: null })
+    const note = makeNote({
+      jobId: PILOT_JOB.id,
+      localState: 'saved_local',
+      serverNoteId: null,
+    })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
     await waitFor(() => {
       expect(screen.getByText('Saved on this phone')).toBeInTheDocument()
     })
@@ -195,7 +280,13 @@ describe('Workspace — pilot field requirements', () => {
   it('shows offline badge in the header when network is unavailable', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
 
-    render(<CurrentJobWorkspace job={PILOT_JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={PILOT_JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
 
     expect(screen.getByText('No signal')).toBeInTheDocument()
   })

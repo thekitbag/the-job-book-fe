@@ -14,6 +14,8 @@ async function loginAsFounder(page: Page) {
   await page.goto('/')
   await page.waitForTimeout(800)
   await dismissIntro(page)
+  const direct = page.getByRole('button', { name: 'Log out', exact: true })
+  if (await direct.isVisible().catch(() => false)) await direct.click()
   const menuButton = page.getByRole('button', { name: /more actions/i })
   if (await menuButton.isVisible().catch(() => false)) {
     await menuButton.click()
@@ -27,7 +29,9 @@ async function loginAsFounder(page: Page) {
 }
 
 test.describe('Support mode — gating', () => {
-  test('a pilot user sees no Support entry and the direct route exposes nothing', async ({ page }) => {
+  test('a pilot user sees no Support entry and the direct route exposes nothing', async ({
+    page,
+  }) => {
     await page.goto('/')
     await page.waitForTimeout(800)
     await dismissIntro(page)
@@ -42,7 +46,9 @@ test.describe('Support mode — gating', () => {
 })
 
 test.describe('Support mode — founder flow', () => {
-  test('user list → jobs → inspection → read-only view-as → exit', async ({ page }) => {
+  test('user list → jobs → inspection → read-only view-as → exit', async ({
+    page,
+  }) => {
     await loginAsFounder(page)
 
     // internal users get a Support entry from their own workspace/no-jobs state
@@ -75,8 +81,16 @@ test.describe('Support mode — founder flow', () => {
       // no write controls of any kind while viewing as the user
       await expect(page.getByRole('button', { name: /record/i })).toHaveCount(0)
       await expect(page.getByRole('button', { name: /^add /i })).toHaveCount(0)
-      await expect(page.getByRole('button', { name: /fix memory|remember this|dismiss|save|upload|edit details/i })).toHaveCount(0)
-      await expect(page.locator('.mem-tabpanel input, .mem-tabpanel textarea, .mem-tabpanel select')).toHaveCount(0)
+      await expect(
+        page.getByRole('button', {
+          name: /fix memory|remember this|dismiss|save|upload|edit details/i,
+        }),
+      ).toHaveCount(0)
+      await expect(
+        page.locator(
+          '.mem-tabpanel input, .mem-tabpanel textarea, .mem-tabpanel select',
+        ),
+      ).toHaveCount(0)
     }
 
     // the target user's data is actually visible
@@ -85,18 +99,28 @@ test.describe('Support mode — founder flow', () => {
     await expect(jobTotal).toContainText('24h')
     await expect(jobTotal).toContainText('job total')
     await page.getByRole('tab', { name: 'Budget' }).click()
-    await expect(page.getByRole('region', { name: /^budget$/i }).locator('.mem-hero-amount')).toContainText('£2,270 cost')
+    await expect(
+      page
+        .getByRole('region', { name: /^budget$/i })
+        .locator('.mem-hero-amount'),
+    ).toContainText('£2,270 cost')
 
     // exit returns to the support surface with no target data left
     await page.getByRole('button', { name: 'Exit' }).click()
     await expect(page.getByRole('status')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'View as user' }).first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'View as user' }).first(),
+    ).toBeVisible()
   })
 
-  test('support mode never pollutes the founder’s own workspace state', async ({ page }) => {
+  test('support mode never pollutes the founder’s own workspace state', async ({
+    page,
+  }) => {
     await loginAsFounder(page)
     // the founder's own app state: no jobs of their own
-    const before = await page.evaluate(() => localStorage.getItem('job-book-selected-job-id'))
+    const before = await page.evaluate(() =>
+      localStorage.getItem('job-book-selected-job-id'),
+    )
 
     await page.goto('/internal/support')
     await page.waitForTimeout(800)
@@ -106,12 +130,16 @@ test.describe('Support mode — founder flow', () => {
     await expect(page.getByRole('status')).toContainText('viewing as Mike')
 
     // viewing Mike's job must not write it into the normal job cache
-    const after = await page.evaluate(() => localStorage.getItem('job-book-selected-job-id'))
+    const after = await page.evaluate(() =>
+      localStorage.getItem('job-book-selected-job-id'),
+    )
     expect(after).toBe(before)
 
     // back in the normal app, the founder still sees their own (job-less) state
     await page.goto('/')
     await page.waitForTimeout(1000)
-    await expect(page.getByRole('heading', { name: 'All jobs 0' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'The Job Book' }),
+    ).toBeVisible()
   })
 })

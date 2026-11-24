@@ -15,7 +15,7 @@ import {
 } from './api'
 import { identifyAnalyticsUser, track } from './analytics'
 import AuthScreen from './AuthScreen'
-import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, deriveRefundsSummary, formatCostLabel, formatTotalLabel, friendlyDayLabel, moneyFigure } from './memoryScan'
+import { costDetailRows, deriveLabourHoursSummary, deriveLabourSpendGroupFromBudget, deriveRefundsSummary, formatCostLabel, formatTotalLabel, friendlyDayLabel, moneyFigure } from './internalSupport/scan'
 import type {
   AuthUser,
   BudgetSummaryResponse,
@@ -31,7 +31,7 @@ import type {
   SupportJob,
   SupportUser,
   SupportUserJobsResponse,
-} from './types'
+} from './internalSupport/types'
 
 // Founder Support Mode — internal-only, READ-ONLY by construction.
 //

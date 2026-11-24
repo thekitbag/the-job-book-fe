@@ -1,22 +1,26 @@
+import { openPilotJob } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
 import { openRowActions } from './helpers'
 
 // New job-home navigation: sections are cards on home; Used/Left over live in
 // Materials, Notes/Photos live in Job log.
-async function goToSection(page: import('@playwright/test').Page, section: string, innerTab?: string) {
+async function goToSection(
+  page: import('@playwright/test').Page,
+  section: string,
+  innerTab?: string,
+) {
   const back = page.getByRole('button', { name: /job home/i })
   if (await back.isVisible().catch(() => false)) await back.click()
   await page.getByRole('button', { name: `Open ${section}` }).click()
   if (innerTab) await page.getByRole('tab', { name: innerTab }).click()
 }
 
-
 // 390px, VITE_USE_MOCK_API=true. The leftover "sand" item has uncertaintyFlags
 // (approximate quantity) → a Worth-checking note. It lives on the
 // Materials workspace’s Left over tab.
 
 async function openUsedTab(page: Page) {
-  await page.goto('/')
+  await openPilotJob(page)
   const explainer = page.getByRole('button', { name: /got it/i })
   if (await explainer.isVisible().catch(() => false)) await explainer.click()
   const passcode = page.getByLabel(/passcode/i)
@@ -29,10 +33,13 @@ async function openUsedTab(page: Page) {
   await page.waitForTimeout(800)
 }
 
-const sandCard = (page: Page) => page.locator('.mem-card', { hasText: 'in the van' })
+const sandCard = (page: Page) =>
+  page.locator('.mem-card', { hasText: 'in the van' })
 
 test.describe('Worth checking resolution', () => {
-  test('verify as right removes Worth checking but keeps the item and approximate wording', async ({ page }) => {
+  test('verify as right removes Worth checking but keeps the item and approximate wording', async ({
+    page,
+  }) => {
     await openUsedTab(page)
     const card = sandCard(page)
     await expect(card.getByText('Worth checking')).toBeVisible()
@@ -44,12 +51,16 @@ test.describe('Worth checking resolution', () => {
     await expect(card.getByText(/about half/i)).toBeVisible()
   })
 
-  test('Fix memory clears Worth checking and updates the card', async ({ page }) => {
+  test('Fix memory clears Worth checking and updates the card', async ({
+    page,
+  }) => {
     await openUsedTab(page)
-    await (await openRowActions(page, sandCard(page))).getByRole('button', { name: /fix memory/i }).click()
-    const form = page.getByRole('form', { name: /edit memory/i })
+    await (await openRowActions(page, sandCard(page)))
+      .getByRole('button', { name: /fix memory/i })
+      .click()
+    const form = page.getByRole('form', { name: /material entry/i })
     await form.locator('input[name="locationOrUse"]').fill('in the lockup')
-    await page.getByRole('button', { name: /save memory/i }).click()
+    await page.getByRole('button', { name: /^save$/i }).click()
     await page.waitForTimeout(500)
 
     const updated = page.locator('.mem-card', { hasText: 'in the lockup' })
@@ -63,7 +74,13 @@ test.describe('Worth checking resolution', () => {
     await page.waitForTimeout(200)
 
     await expect(card.getByText('Worth checking')).toBeVisible()
-    await expect(card.getByRole('button', { name: /this is right/i })).toHaveCount(0)
-    await expect((await openRowActions(page, card)).getByRole('button', { name: /fix memory/i })).toBeVisible()
+    await expect(
+      card.getByRole('button', { name: /this is right/i }),
+    ).toHaveCount(0)
+    await expect(
+      (await openRowActions(page, card)).getByRole('button', {
+        name: /fix memory/i,
+      }),
+    ).toBeVisible()
   })
 })

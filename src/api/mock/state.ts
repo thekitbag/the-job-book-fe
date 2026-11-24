@@ -1,564 +1,530 @@
-import type { BudgetCategory, MemoryViewItem, MemoryViewSection } from '../../types'
+import type { MemoryViewItem, MemoryViewSection } from '../../types'
 import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS, SECTION_ORDER } from '../../memoryScan'
-
-// The one pilot job that gets the rich fixture (sections + budget
-// categories). Any other job — including one freshly created — starts empty.
 const MOCK_SEED_JOB_ID = 'job-pilot-garden-room-001'
-let mockScenario = 'default'
-
-// Canonical seed for the stateful mock memory-view. The bought/ordered section
-// deliberately spans the five Known-spend cases the pilot fix must distinguish:
-//  - hardcore: an included cost item (£40)
-//  - plasterboard ×2: a trusted money-total row, consolidated to £1200
-//  - timber: a no-cost item (No cost remembered)
-//  - insulation: an approximate, untrusted cost (Cost worth checking)
-//  - membrane ×2: a consolidated quantity row with no trusted cost
+let scenario = 'default'
 function buildMockSections(): MemoryViewSection[] {
   return [
-      {
-        key: 'ordered_materials',
-        label: 'Ordered materials',
-        items: [
-          {
-            id: 'mem-view-001',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 8 bags of hardcore from Jewson at £5 each',
-            materialName: 'hardcore',
-            quantity: '8',
-            unit: 'bags',
-            supplierName: 'Jewson',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: '5',
-            costCurrency: 'GBP',
-            costQualifier: 'each' as const,
-            totalCostAmount: '40',
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-001',
-            reviewDecisionId: 'decision-001',
-            createdAt: '2026-06-13T09:25:00.000Z',
-            updatedAt: '2026-06-13T09:25:00.000Z',
-            source: {
-              candidateFactId: 'fact-001',
-              noteId: 'note-001',
-              transcriptId: 'trans-001',
-              capturedAt: '2026-06-13T09:15:00.000Z',
-              transcriptText: 'Bought 8 bags of hardcore from Jewson, five pounds each.',
-            },
+    {
+      key: 'ordered_materials',
+      label: 'Ordered materials',
+      items: [
+        {
+          id: 'mem-view-001',
+          memoryType: 'ordered_material',
+          summary: 'hardcore, 8 bags, Jewson',
+          materialName: 'hardcore',
+          quantity: '8',
+          unit: 'bags',
+          supplierName: 'Jewson',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-001',
+          reviewDecisionId: 'decision-001',
+          createdAt: '2026-06-13T09:25:00.000Z',
+          updatedAt: '2026-06-13T09:25:00.000Z',
+          source: {
+            candidateFactId: 'fact-001',
+            noteId: 'note-001',
+            transcriptId: 'trans-001',
+            capturedAt: '2026-06-13T09:15:00.000Z',
+            transcriptText: 'Bought 8 bags of hardcore from Jewson, five pounds each.',
           },
-          // Two plasterboard rows in the same unit → safe like-for-like total (24 sheets)
-          {
-            id: 'mem-view-004',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 12 sheets of plasterboard from Jewson',
-            materialName: 'plasterboard',
-            quantity: '12',
-            unit: 'sheets',
-            supplierName: 'Jewson',
-            deliveryTiming: 'Tuesday',
-            locationOrUse: null,
-            costAmount: '50',
-            costCurrency: 'GBP',
-            costQualifier: 'each' as const,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-004',
-            reviewDecisionId: 'decision-004',
-            createdAt: '2026-06-13T09:30:00.000Z',
-            updatedAt: '2026-06-13T09:30:00.000Z',
-            source: null,
+        },
+        {
+          id: 'mem-view-004',
+          memoryType: 'ordered_material',
+          summary: 'plasterboard, 12 sheets, Jewson',
+          materialName: 'plasterboard',
+          quantity: '12',
+          unit: 'sheets',
+          supplierName: 'Jewson',
+          deliveryTiming: 'Tuesday',
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-004',
+          reviewDecisionId: 'decision-004',
+          createdAt: '2026-06-13T09:30:00.000Z',
+          updatedAt: '2026-06-13T09:30:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-005',
+          memoryType: 'ordered_material',
+          summary: 'plasterboard, 12 sheets, Jewson',
+          materialName: 'plasterboard',
+          quantity: '12',
+          unit: 'sheets',
+          supplierName: 'Jewson',
+          deliveryTiming: 'Thursday',
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-005',
+          reviewDecisionId: 'decision-005',
+          createdAt: '2026-06-13T09:35:00.000Z',
+          updatedAt: '2026-06-13T09:35:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-006',
+          memoryType: 'ordered_material',
+          summary: 'timber, 6 lengths, Travis Perkins',
+          materialName: 'timber',
+          quantity: '6',
+          unit: 'lengths',
+          supplierName: 'Travis Perkins',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-006',
+          reviewDecisionId: 'decision-006',
+          createdAt: '2026-06-13T09:40:00.000Z',
+          updatedAt: '2026-06-13T09:40:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-009',
+          memoryType: 'ordered_material',
+          summary: 'insulation, 4 packs, Jewson',
+          materialName: 'insulation',
+          quantity: '4',
+          unit: 'packs',
+          supplierName: 'Jewson',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-009',
+          reviewDecisionId: 'decision-009',
+          createdAt: '2026-06-13T09:42:00.000Z',
+          updatedAt: '2026-06-13T09:42:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-013',
+          memoryType: 'ordered_material',
+          summary: 'sealant, Screwfix',
+          materialName: 'sealant',
+          quantity: null,
+          unit: null,
+          supplierName: 'Screwfix',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-013',
+          reviewDecisionId: 'decision-013',
+          createdAt: '2026-06-13T09:43:00.000Z',
+          updatedAt: '2026-06-13T09:43:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-015',
+          memoryType: 'ordered_material',
+          summary: 'agency invoice, SiteStaff Agency',
+          materialName: 'agency invoice',
+          quantity: null,
+          unit: null,
+          supplierName: 'SiteStaff Agency',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-015',
+          reviewDecisionId: 'decision-015',
+          createdAt: '2026-06-13T09:46:00.000Z',
+          updatedAt: '2026-06-13T09:46:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-010',
+          memoryType: 'ordered_material',
+          summary: 'membrane, 5 rolls, Travis Perkins',
+          materialName: 'membrane',
+          quantity: '5',
+          unit: 'rolls',
+          supplierName: 'Travis Perkins',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-010',
+          reviewDecisionId: 'decision-010',
+          createdAt: '2026-06-13T09:44:00.000Z',
+          updatedAt: '2026-06-13T09:44:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-011',
+          memoryType: 'ordered_material',
+          summary: 'membrane, 5 rolls, Travis Perkins',
+          materialName: 'membrane',
+          quantity: '5',
+          unit: 'rolls',
+          supplierName: 'Travis Perkins',
+          deliveryTiming: null,
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-011',
+          reviewDecisionId: 'decision-011',
+          createdAt: '2026-06-13T09:45:00.000Z',
+          updatedAt: '2026-06-13T09:45:00.000Z',
+          source: null,
+        },
+      ],
+    },
+    {
+      key: 'used_materials',
+      label: 'Used materials',
+      items: [
+        {
+          id: 'mem-view-002',
+          memoryType: 'used_material',
+          summary: 'OSB, back wall',
+          materialName: 'OSB',
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: 'back wall',
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-002',
+          reviewDecisionId: 'decision-002',
+          createdAt: '2026-06-13T10:00:00.000Z',
+          updatedAt: '2026-06-13T10:00:00.000Z',
+          source: null,
+        },
+      ],
+    },
+    {
+      key: 'labour',
+      label: 'Hours',
+      items: [
+        {
+          id: 'mem-labour-4',
+          memoryType: 'labour',
+          summary: 'Mike · 4h',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: null,
+          labourHours: '4',
+          labourPerson: 'Mike',
+          labourTask: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-l4',
+          reviewDecisionId: 'decision-l4',
+          createdAt: '2026-06-13T11:30:00.000Z',
+          updatedAt: '2026-06-13T11:30:00.000Z',
+          source: {
+            candidateFactId: 'fact-l4',
+            noteId: 'note-l4',
+            transcriptId: 'trans-l4',
+            capturedAt: '2026-06-13T11:25:00.000Z',
+            transcriptText: 'Mike 4 hours, Kurt 6.',
           },
-          {
-            id: 'mem-view-005',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 12 more sheets of plasterboard',
-            materialName: 'plasterboard',
-            quantity: '12',
-            unit: 'sheets',
-            supplierName: 'Jewson',
-            deliveryTiming: 'Thursday',
-            locationOrUse: null,
-            costAmount: '50',
-            costCurrency: 'GBP',
-            costQualifier: 'each' as const,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-005',
-            reviewDecisionId: 'decision-005',
-            createdAt: '2026-06-13T09:35:00.000Z',
-            updatedAt: '2026-06-13T09:35:00.000Z',
-            source: null,
+        },
+        {
+          id: 'mem-labour-5',
+          memoryType: 'labour',
+          summary: 'Kurt · 6h',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: null,
+          labourHours: '6',
+          labourPerson: 'Kurt',
+          labourTask: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-l5',
+          reviewDecisionId: 'decision-l5',
+          createdAt: '2026-06-13T11:29:00.000Z',
+          updatedAt: '2026-06-13T11:29:00.000Z',
+          source: {
+            candidateFactId: 'fact-l5',
+            noteId: 'note-l4',
+            transcriptId: 'trans-l4',
+            capturedAt: '2026-06-13T11:25:00.000Z',
+            transcriptText: 'Mike 4 hours, Kurt 6.',
           },
-          // Different unit (lengths) → must stay separate from the sheets total
-          {
-            id: 'mem-view-006',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 6 lengths of timber',
-            materialName: 'timber',
-            quantity: '6',
-            unit: 'lengths',
-            supplierName: 'Travis Perkins',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: null,
-            // Genuinely currency-null: adding a cost must default the currency to
-            // GBP so the line can count towards Known spend.
-            costCurrency: null,
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-006',
-            reviewDecisionId: 'decision-006',
-            createdAt: '2026-06-13T09:40:00.000Z',
-            updatedAt: '2026-06-13T09:40:00.000Z',
-            source: null,
+        },
+        {
+          id: 'mem-labour-1',
+          memoryType: 'labour',
+          summary: '6h · fitting cladding',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: null,
+          labourHours: '6',
+          labourPerson: null,
+          labourTask: 'fitting cladding',
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-l1',
+          reviewDecisionId: 'decision-l1',
+          createdAt: '2026-06-13T11:10:00.000Z',
+          updatedAt: '2026-06-13T11:10:00.000Z',
+          source: {
+            candidateFactId: 'fact-l1',
+            noteId: 'note-l1',
+            transcriptId: 'trans-l1',
+            capturedAt: '2026-06-13T11:05:00.000Z',
+            transcriptText: 'Spent about six hours fitting the cladding today.',
           },
-          // Has a remembered cost, but only as an approximate basis → not safe to
-          // total, so it is excluded as "Cost worth checking". No uncertaintyFlags,
-          // so it does NOT appear in the scan "Worth checking" roll-up.
-          {
-            id: 'mem-view-009',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 4 packs of insulation, roughly £120',
-            materialName: 'insulation',
-            quantity: '4',
-            unit: 'packs',
-            supplierName: 'Jewson',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: '120',
-            costCurrency: 'GBP',
-            costQualifier: 'approx' as const,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-009',
-            reviewDecisionId: 'decision-009',
-            createdAt: '2026-06-13T09:42:00.000Z',
-            updatedAt: '2026-06-13T09:42:00.000Z',
-            source: null,
+        },
+        {
+          id: 'mem-labour-2',
+          memoryType: 'labour',
+          summary: 'Tom · 8h · electrics',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: null,
+          labourHours: '8',
+          labourPerson: 'Tom',
+          labourTask: 'electrics',
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-l2',
+          reviewDecisionId: 'decision-l2',
+          createdAt: '2026-06-13T11:15:00.000Z',
+          updatedAt: '2026-06-13T11:15:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-labour-6',
+          memoryType: 'labour',
+          summary: 'Apprentice · 5h · clearing up',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: null,
+          labourHours: '5',
+          labourPerson: 'Apprentice',
+          labourTask: 'clearing up',
+          uncertaintyFlags: ['uncertain_hours'],
+          sourceCandidateFactId: 'fact-l6',
+          reviewDecisionId: 'decision-l6',
+          createdAt: '2026-06-13T11:08:00.000Z',
+          updatedAt: '2026-06-13T11:08:00.000Z',
+          source: null,
+        },
+      ],
+    },
+    {
+      key: 'leftovers',
+      label: 'Leftovers',
+      items: [
+        {
+          id: 'mem-view-007',
+          memoryType: 'leftover_material',
+          summary: 'sand, about half bag, in the van',
+          materialName: 'sand',
+          quantity: 'about half',
+          unit: 'bag',
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: 'in the van',
+          uncertaintyFlags: ['approximate_quantity'],
+          sourceCandidateFactId: 'fact-007',
+          reviewDecisionId: 'decision-007',
+          createdAt: '2026-06-13T10:30:00.000Z',
+          updatedAt: '2026-06-13T10:30:00.000Z',
+          source: null,
+        },
+        {
+          id: 'mem-view-016',
+          memoryType: 'leftover_material',
+          summary: 'fence posts, 6, Jewson, stacked by the gate',
+          materialName: 'fence posts',
+          quantity: '6',
+          unit: null,
+          supplierName: 'Jewson',
+          deliveryTiming: null,
+          locationOrUse: 'stacked by the gate',
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-016',
+          reviewDecisionId: 'decision-016',
+          createdAt: '2026-06-13T10:35:00.000Z',
+          updatedAt: '2026-06-13T10:35:00.000Z',
+          source: {
+            candidateFactId: 'fact-016',
+            noteId: 'note-016',
+            transcriptId: 'trans-016',
+            capturedAt: '2026-06-13T10:32:00.000Z',
+            transcriptText: 'Six fence posts left over, stacked by the gate.',
           },
-          // Cost-like but excluded, with NO safe quantity/unit → attention item
-          // that can only be resolved as a total ("Set as unit cost" is hidden).
-          {
-            id: 'mem-view-013',
-            memoryType: 'ordered_material',
-            summary: 'Bought some sealant, £15',
-            materialName: 'sealant',
-            quantity: null,
-            unit: null,
-            supplierName: 'Screwfix',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: '15',
-            costCurrency: 'GBP',
-            costQualifier: 'unknown' as const,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-013',
-            reviewDecisionId: 'decision-013',
-            createdAt: '2026-06-13T09:43:00.000Z',
-            updatedAt: '2026-06-13T09:43:00.000Z',
-            source: null,
+        },
+      ],
+    },
+    {
+      key: 'returned_materials',
+      label: 'Returned materials',
+      items: [],
+    },
+    {
+      key: 'supplier_delivery_notes',
+      label: 'Supplier delivery notes',
+      items: [
+        {
+          id: 'mem-view-008',
+          memoryType: 'supplier_delivery_note',
+          summary: 'Jewson said the next delivery slips to Friday',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: 'Jewson',
+          deliveryTiming: 'Friday',
+          locationOrUse: null,
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-008',
+          reviewDecisionId: 'decision-008',
+          createdAt: '2026-06-13T10:45:00.000Z',
+          updatedAt: '2026-06-13T10:45:00.000Z',
+          source: null,
+        },
+      ],
+    },
+    {
+      key: 'customer_changes',
+      label: 'Customer changes',
+      items: [],
+    },
+    {
+      key: 'watch_outs',
+      label: 'Watch outs',
+      items: [
+        {
+          id: 'mem-view-003',
+          memoryType: 'watch_out',
+          summary: 'Uneven floor near back door',
+          materialName: null,
+          quantity: null,
+          unit: null,
+          supplierName: null,
+          deliveryTiming: null,
+          locationOrUse: 'near back door',
+          uncertaintyFlags: [],
+          sourceCandidateFactId: 'fact-003',
+          reviewDecisionId: 'decision-003',
+          createdAt: '2026-06-13T11:00:00.000Z',
+          updatedAt: '2026-06-13T11:00:00.000Z',
+          source: {
+            candidateFactId: 'fact-003',
+            noteId: 'note-002',
+            transcriptId: 'trans-002',
+            capturedAt: '2026-06-13T10:50:00.000Z',
+            transcriptText: 'Watch out for the uneven floor near the back door, nearly tripped earlier.',
           },
-          // Historical/misclassified spend: an ordinary bought row assigned to
-          // the user-created Labour category (assignment seeded below). It must
-          // stay visible in Spend, count once via normal spend rules, and never
-          // appear in the system Labour group (memoryType is not labour).
-          {
-            id: 'mem-view-015',
-            memoryType: 'ordered_material',
-            summary: 'Paid agency invoice for extra labourers, £150',
-            materialName: 'agency invoice',
-            quantity: null,
-            unit: null,
-            supplierName: 'SiteStaff Agency',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: '150',
-            costCurrency: 'GBP',
-            costQualifier: 'total' as const,
-            totalCostAmount: '150',
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-015',
-            reviewDecisionId: 'decision-015',
-            createdAt: '2026-06-13T09:46:00.000Z',
-            updatedAt: '2026-06-13T09:46:00.000Z',
-            source: null,
-          },
-          // Two like-for-like membrane rows with no cost → consolidate to a single
-          // quantity row (10 rolls total) that carries no money, and both are
-          // excluded from Known spend as "No cost remembered".
-          {
-            id: 'mem-view-010',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 5 rolls of DPM membrane',
-            materialName: 'membrane',
-            quantity: '5',
-            unit: 'rolls',
-            supplierName: 'Travis Perkins',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: null,
-            costCurrency: 'GBP',
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-010',
-            reviewDecisionId: 'decision-010',
-            createdAt: '2026-06-13T09:44:00.000Z',
-            updatedAt: '2026-06-13T09:44:00.000Z',
-            source: null,
-          },
-          {
-            id: 'mem-view-011',
-            memoryType: 'ordered_material',
-            summary: 'Ordered 5 more rolls of DPM membrane',
-            materialName: 'membrane',
-            quantity: '5',
-            unit: 'rolls',
-            supplierName: 'Travis Perkins',
-            deliveryTiming: null,
-            locationOrUse: null,
-            costAmount: null,
-            costCurrency: 'GBP',
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-011',
-            reviewDecisionId: 'decision-011',
-            createdAt: '2026-06-13T09:45:00.000Z',
-            updatedAt: '2026-06-13T09:45:00.000Z',
-            source: null,
-          },
-        ],
-      },
-      {
-        key: 'used_materials',
-        label: 'Used materials',
-        items: [
-          {
-            id: 'mem-view-002',
-            memoryType: 'used_material',
-            summary: 'Used OSB boards on the back wall',
-            materialName: 'OSB',
-            quantity: null,
-            unit: null,
-            supplierName: null,
-            deliveryTiming: null,
-            locationOrUse: 'back wall',
-            costAmount: null,
-            costCurrency: null,
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-002',
-            reviewDecisionId: 'decision-002',
-            createdAt: '2026-06-13T10:00:00.000Z',
-            updatedAt: '2026-06-13T10:00:00.000Z',
-            source: null,
-          },
-        ],
-      },
-      // Labour day-model cases (Labour Tracking V2), rebased so the "0 days ago"
-      // items land today and mem-labour-1 lands yesterday:
-      //  - Mike 4h + Kurt 6h: two entries from ONE note, same day → 10h day total
-      //  - mem-labour-1: hours-only, no named person, yesterday
-      //  - mem-labour-2: rated (8h × £35 = £280), assigned to the labour category
-      //  - mem-labour-3: trusted £600 total, no category → still under Labour in Spend
-      //  - mem-labour-6: worth checking → visible but excluded from hour totals
-      {
-        key: 'labour',
-        label: 'Labour',
-        items: [
-          // Two labour entries extracted from one voice note (same source).
-          {
-            id: 'mem-labour-4',
-            memoryType: 'labour',
-            summary: 'Mike worked 4 hours',
-            materialName: null, quantity: null, unit: null, supplierName: null,
-            deliveryTiming: null, locationOrUse: null,
-            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
-            labourHours: '4', labourPerson: 'Mike', labourTask: null,
-            labourPersonId: 'lp-mike', labourBudgetEnabled: false,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-l4', reviewDecisionId: 'decision-l4',
-            createdAt: '2026-06-13T11:30:00.000Z', updatedAt: '2026-06-13T11:30:00.000Z',
-            source: {
-              candidateFactId: 'fact-l4', noteId: 'note-l4', transcriptId: 'trans-l4',
-              capturedAt: '2026-06-13T11:25:00.000Z',
-              transcriptText: 'Mike 4 hours, Kurt 6.',
-            },
-          },
-          {
-            id: 'mem-labour-5',
-            memoryType: 'labour',
-            summary: 'Kurt worked 6 hours',
-            materialName: null, quantity: null, unit: null, supplierName: null,
-            deliveryTiming: null, locationOrUse: null,
-            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
-            labourHours: '6', labourPerson: 'Kurt', labourTask: null,
-            labourPersonId: 'lp-kurt', labourBudgetEnabled: false,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-l5', reviewDecisionId: 'decision-l5',
-            createdAt: '2026-06-13T11:29:00.000Z', updatedAt: '2026-06-13T11:29:00.000Z',
-            source: {
-              candidateFactId: 'fact-l5', noteId: 'note-l4', transcriptId: 'trans-l4',
-              capturedAt: '2026-06-13T11:25:00.000Z',
-              transcriptText: 'Mike 4 hours, Kurt 6.',
-            },
-          },
-          // Hours-only labour with no named person: remembered, no money → not
-          // counted in Spend. Rebased to YESTERDAY.
-          {
-            id: 'mem-labour-1',
-            memoryType: 'labour',
-            summary: 'Spent 6 hours fitting the cladding',
-            materialName: null, quantity: null, unit: null, supplierName: null,
-            deliveryTiming: null, locationOrUse: null,
-            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
-            labourHours: '6', labourPerson: null, labourTask: 'fitting cladding',
-            labourPersonId: null, labourBudgetEnabled: false,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-l1', reviewDecisionId: 'decision-l1',
-            createdAt: '2026-06-13T11:10:00.000Z', updatedAt: '2026-06-13T11:10:00.000Z',
-            source: {
-              candidateFactId: 'fact-l1', noteId: 'note-l1', transcriptId: 'trans-l1',
-              capturedAt: '2026-06-13T11:05:00.000Z',
-              transcriptText: 'Spent about six hours fitting the cladding today.',
-            },
-          },
-          // Rated labour: hours × per-hour rate → safe £280 (assigned to a category).
-          {
-            id: 'mem-labour-2',
-            memoryType: 'labour',
-            summary: 'Tom did 8 hours on electrics at £35 an hour',
-            materialName: null, quantity: null, unit: null, supplierName: null,
-            deliveryTiming: null, locationOrUse: null,
-            costAmount: '35', costCurrency: 'GBP', costQualifier: 'per_hour', totalCostAmount: '280',
-            labourHours: '8', labourPerson: 'Tom', labourTask: 'electrics',
-            labourPersonId: 'lp-tom', labourBudgetEnabled: true,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-l2', reviewDecisionId: 'decision-l2',
-            createdAt: '2026-06-13T11:15:00.000Z', updatedAt: '2026-06-13T11:15:00.000Z',
-            source: null,
-          },
-          // Explicit labour total → safe £600, deliberately NO category: must
-          // still show once under Labour in Spend.
-          {
-            id: 'mem-labour-3',
-            memoryType: 'labour',
-            summary: 'Labour on the roof came to £600',
-            materialName: null, quantity: null, unit: null, supplierName: null,
-            deliveryTiming: null, locationOrUse: null,
-            costAmount: '600', costCurrency: 'GBP', costQualifier: 'total', totalCostAmount: '600',
-            labourHours: null, labourPerson: null, labourTask: 'roof',
-            labourPersonId: null, labourBudgetEnabled: true,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-l3', reviewDecisionId: 'decision-l3',
-            createdAt: '2026-06-13T11:20:00.000Z', updatedAt: '2026-06-13T11:20:00.000Z',
-            source: null,
-          },
-          // Worth-checking labour: non-numeric hours + unresolved flag → visible
-          // in the daily view but excluded from hour totals and Spend.
-          {
-            id: 'mem-labour-6',
-            memoryType: 'labour',
-            summary: 'Apprentice did about 5 hours clearing up',
-            materialName: null, quantity: null, unit: null, supplierName: null,
-            deliveryTiming: null, locationOrUse: null,
-            costAmount: null, costCurrency: null, costQualifier: null, totalCostAmount: null,
-            labourHours: 'about 5', labourPerson: 'Apprentice', labourTask: 'clearing up',
-            labourPersonId: 'lp-apprentice', labourBudgetEnabled: false,
-            uncertaintyFlags: ['uncertain_hours'],
-            sourceCandidateFactId: 'fact-l6', reviewDecisionId: 'decision-l6',
-            createdAt: '2026-06-13T11:08:00.000Z', updatedAt: '2026-06-13T11:08:00.000Z',
-            source: null,
-          },
-        ],
-      },
-      {
-        key: 'leftovers',
-        label: 'Leftovers',
-        items: [
-          // Leftover with uncertainty → never consolidated, surfaced in Worth checking
-          {
-            id: 'mem-view-007',
-            memoryType: 'leftover_material',
-            summary: 'Roughly half a bag of sand left over',
-            materialName: 'sand',
-            quantity: 'about half',
-            unit: 'bag',
-            supplierName: null,
-            deliveryTiming: null,
-            locationOrUse: 'in the van',
-            costAmount: null,
-            costCurrency: null,
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: ['approximate_quantity'],
-            sourceCandidateFactId: 'fact-007',
-            reviewDecisionId: 'decision-007',
-            createdAt: '2026-06-13T10:30:00.000Z',
-            updatedAt: '2026-06-13T10:30:00.000Z',
-            source: null,
-          },
-          // A countable leftover Mike would take back rather than keep (bespoke,
-          // not reusable like sand or concrete) — the returnable case. Carries no
-          // cost of its own: the money lives on the bought row, which is exactly
-          // why a return has to move spend rather than delete this item.
-          {
-            id: 'mem-view-016',
-            memoryType: 'leftover_material',
-            summary: '6 fence posts left over',
-            materialName: 'fence posts',
-            quantity: '6',
-            unit: null,
-            supplierName: 'Jewson',
-            deliveryTiming: null,
-            locationOrUse: 'stacked by the gate',
-            costAmount: null,
-            costCurrency: null,
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-016',
-            reviewDecisionId: 'decision-016',
-            createdAt: '2026-06-13T10:35:00.000Z',
-            updatedAt: '2026-06-13T10:35:00.000Z',
-            source: {
-              candidateFactId: 'fact-016',
-              noteId: 'note-016',
-              transcriptId: 'trans-016',
-              capturedAt: '2026-06-13T10:32:00.000Z',
-              transcriptText: 'Six fence posts left over, stacked by the gate.',
-            },
-          },
-        ],
-      },
-      { key: 'returned_materials', label: 'Returned materials', items: [] },
-      {
-        key: 'supplier_delivery_notes',
-        label: 'Supplier delivery notes',
-        items: [
-          {
-            id: 'mem-view-008',
-            memoryType: 'supplier_delivery_note',
-            summary: 'Jewson said the next delivery slips to Friday',
-            materialName: null,
-            quantity: null,
-            unit: null,
-            supplierName: 'Jewson',
-            deliveryTiming: 'Friday',
-            locationOrUse: null,
-            costAmount: null,
-            costCurrency: null,
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-008',
-            reviewDecisionId: 'decision-008',
-            createdAt: '2026-06-13T10:45:00.000Z',
-            updatedAt: '2026-06-13T10:45:00.000Z',
-            source: null,
-          },
-        ],
-      },
-      { key: 'customer_changes', label: 'Customer changes', items: [] },
-      {
-        key: 'watch_outs',
-        label: 'Watch outs',
-        items: [
-          {
-            id: 'mem-view-003',
-            memoryType: 'watch_out',
-            summary: 'Uneven floor near back door',
-            materialName: null,
-            quantity: null,
-            unit: null,
-            supplierName: null,
-            deliveryTiming: null,
-            locationOrUse: 'near back door',
-            costAmount: null,
-            costCurrency: null,
-            costQualifier: null,
-            totalCostAmount: null,
-            uncertaintyFlags: [],
-            sourceCandidateFactId: 'fact-003',
-            reviewDecisionId: 'decision-003',
-            createdAt: '2026-06-13T11:00:00.000Z',
-            updatedAt: '2026-06-13T11:00:00.000Z',
-            source: {
-              candidateFactId: 'fact-003',
-              noteId: 'note-002',
-              transcriptId: 'trans-002',
-              capturedAt: '2026-06-13T10:50:00.000Z',
-              transcriptText: 'Watch out for the uneven floor near the back door, nearly tripped earlier.',
-            },
-          },
-        ],
-      },
-    ]
+        },
+      ],
+    },
+  ]
 }
-
-// Leftover-only fixtures for jobs beyond the pilot seed.
-//
-// Workshop material comes from real jobs, so the mock needs real leftovers on
-// more than one job — including two Finished ones. A leftover on a Finished job
-// must still be movable, and moving it must not reopen the job, so the fixture
-// exists mainly to make that provable by hand as well as in tests.
-//
-// Deliberately leftovers only: these jobs have no bought/cost fixture, so
-// nothing here can shift a Budget or Money figure anywhere in the app.
-const EXTRA_LEFTOVER_FIXTURES: Record<string, { id: string; materialName: string; quantity: string | null; unit: string | null; locationOrUse: string | null }[]> = {
+const EXTRA_LEFTOVER_FIXTURES: Record<
+  string,
+  {
+    id: string
+    materialName: string
+    quantity: string | null
+    unit: string | null
+    locationOrUse: string | null
+  }[]
+> = {
   // Kitchen Extension (in progress) — the leftovers the seeded Workshop was
   // filled from, so tapping "Open Kitchen Extension" from Workshop lands on the
   // actual source row rather than an empty Left over tab.
   'job-pilot-extension-002': [
-    { id: 'mem-kitchen-left-1', materialName: 'OSB', quantity: 'about 3', unit: 'sheets', locationOrUse: null },
-    { id: 'mem-kitchen-left-2', materialName: 'Screws, 5.0×80', quantity: 'half a box', unit: null, locationOrUse: null },
-    { id: 'mem-kitchen-left-3', materialName: 'Membrane', quantity: 'part of a roll', unit: null, locationOrUse: 'in the van' },
+    {
+      id: 'mem-kitchen-left-1',
+      materialName: 'OSB',
+      quantity: 'about 3',
+      unit: 'sheets',
+      locationOrUse: null,
+    },
+    {
+      id: 'mem-kitchen-left-2',
+      materialName: 'Screws, 5.0×80',
+      quantity: 'half a box',
+      unit: null,
+      locationOrUse: null,
+    },
+    {
+      id: 'mem-kitchen-left-3',
+      materialName: 'Membrane',
+      quantity: 'part of a roll',
+      unit: null,
+      locationOrUse: 'in the van',
+    },
   ],
   // Whitmore Patio (finished) — one already in the Workshop, one corrected as
   // never there, and one still unmoved so the Finished-job move can be walked.
   'job-pilot-finished-005': [
-    { id: 'mem-whitmore-left-1', materialName: 'Fence posts', quantity: '4 or 5', unit: null, locationOrUse: null },
-    { id: 'mem-whitmore-left-2', materialName: 'Gravel boards', quantity: 'a couple', unit: null, locationOrUse: 'stacked by the shed' },
-    { id: 'mem-whitmore-left-3', materialName: 'Cement board', quantity: 'a sheet', unit: null, locationOrUse: null },
+    {
+      id: 'mem-whitmore-left-1',
+      materialName: 'Fence posts',
+      quantity: '4 or 5',
+      unit: null,
+      locationOrUse: null,
+    },
+    {
+      id: 'mem-whitmore-left-2',
+      materialName: 'Gravel boards',
+      quantity: 'a couple',
+      unit: null,
+      locationOrUse: 'stacked by the shed',
+    },
+    {
+      id: 'mem-whitmore-left-3',
+      materialName: 'Cement board',
+      quantity: 'a sheet',
+      unit: null,
+      locationOrUse: null,
+    },
   ],
   // Okoro Loft (finished) — the used-up terminal outcome.
   'job-pilot-finished-006': [
-    { id: 'mem-okoro-left-1', materialName: 'Decking boards', quantity: '7 or 8', unit: null, locationOrUse: null },
+    {
+      id: 'mem-okoro-left-1',
+      materialName: 'Decking boards',
+      quantity: '7 or 8',
+      unit: null,
+      locationOrUse: null,
+    },
   ],
 }
 
 function buildExtraLeftoverSections(jobId: string): MemoryViewSection[] {
   const fixture = EXTRA_LEFTOVER_FIXTURES[jobId]
   if (!fixture) return []
-  return [{
-    key: 'leftovers',
-    label: 'Leftovers',
-    items: fixture.map(f => ({
-      id: f.id,
-      memoryType: 'leftover_material',
-      summary: `${f.materialName} left over`,
-      materialName: f.materialName,
-      quantity: f.quantity,
-      unit: f.unit,
-      supplierName: null,
-      deliveryTiming: null,
-      locationOrUse: f.locationOrUse,
-      costAmount: null,
-      costCurrency: null,
-      costQualifier: null,
-      totalCostAmount: null,
-      uncertaintyFlags: [],
-      sourceCandidateFactId: null,
-      reviewDecisionId: null,
-      createdAt: '2026-06-13T10:00:00.000Z',
-      updatedAt: '2026-06-13T10:00:00.000Z',
-      source: null,
-    })),
-  }]
+  return [
+    {
+      key: 'leftovers',
+      label: 'Leftovers',
+      items: fixture.map((f) => ({
+        id: f.id,
+        memoryType: 'leftover_material',
+        summary: `${f.materialName} left over`,
+        materialName: f.materialName,
+        quantity: f.quantity,
+        unit: f.unit,
+        supplierName: null,
+        deliveryTiming: null,
+        locationOrUse: f.locationOrUse,
+        uncertaintyFlags: [],
+        sourceCandidateFactId: null,
+        reviewDecisionId: null,
+        createdAt: '2026-06-13T10:00:00.000Z',
+        updatedAt: '2026-06-13T10:00:00.000Z',
+        source: null,
+      })),
+    },
+  ]
 }
 
 // Per-job mutable memory state so a post-edit refetch reflects the edit, the way
@@ -587,9 +553,8 @@ function rebaseMockDates(sections: MemoryViewSection[]): void {
   let nonLabourIdx = 0
   for (const s of sections) {
     for (const item of s.items) {
-      const daysAgo = item.memoryType === 'labour'
-        ? (YESTERDAY_LABOUR_IDS.has(item.id) ? 1 : 0)
-        : (nonLabourIdx++ % 7)
+      const daysAgo =
+        item.memoryType === 'labour' ? (YESTERDAY_LABOUR_IDS.has(item.id) ? 1 : 0) : nonLabourIdx++ % 7
       // Small per-item offset keeps same-day items in a stable newest-first order.
       const ms = now - daysAgo * dayMs - item.id.length * 60_000
       const iso = new Date(ms).toISOString()
@@ -610,6 +575,40 @@ export function mockSectionsFor(jobId: string): MemoryViewSection[] {
   if (!mockMemoryByJob) mockMemoryByJob = new Map()
   if (!mockMemoryByJob.has(jobId)) {
     const sections = jobId === MOCK_SEED_JOB_ID ? buildMockSections() : buildExtraLeftoverSections(jobId)
+    if (jobId === MOCK_SEED_JOB_ID)
+      upsertMockItem(sections, {
+        id: 'manual-note-seed',
+        memoryType: 'general_note',
+        summary: 'Customer wants extra lights by the door.',
+        materialName: null,
+        quantity: null,
+        unit: null,
+        supplierName: null,
+        deliveryTiming: null,
+        locationOrUse: null,
+        uncertaintyFlags: [],
+        sourceCandidateFactId: null,
+        reviewDecisionId: null,
+        source: null,
+        isManual: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    // Deliberately stale payload for the browser language guard; never used in a pilot run.
+    if (scenario === 'job-memory-legacy')
+      for (const section of sections)
+        for (const item of section.items) {
+          Object.assign(item, {
+            costAmount: '240',
+            costCurrency: 'GBP',
+            totalCostAmount: '240',
+            budgetCategoryId: 'legacy',
+            paidLabel: '£240 paid',
+            refundAmount: '80',
+          })
+          if (item.memoryType.endsWith('_material') || item.memoryType === 'labour')
+            item.summary = 'Legacy cost £240 paid on account'
+        }
     rebaseMockDates(sections)
     mockMemoryByJob.set(jobId, sections)
   }
@@ -617,15 +616,14 @@ export function mockSectionsFor(jobId: string): MemoryViewSection[] {
 }
 
 // Test seam: drop any accumulated mock edits.
-export function _resetMockMemoryForTesting(scenario = 'default'): void {
-  mockScenario = scenario
+export function _resetMockMemoryForTesting(nextScenario = 'default'): void {
+  scenario = nextScenario
   mockMemoryByJob = null
-  mockBudgetByJob = null
 }
 
 export function findMockItem(sections: MemoryViewSection[], id: string): MemoryViewItem | undefined {
   for (const s of sections) {
-    const found = s.items.find(it => it.id === id)
+    const found = s.items.find((it) => it.id === id)
     if (found) return found
   }
   return undefined
@@ -635,87 +633,15 @@ export function findMockItem(sections: MemoryViewSection[], id: string): MemoryV
 // section matching its (possibly new) memory type, creating the section in
 // canonical order if the fixture doesn't have it yet.
 export function upsertMockItem(sections: MemoryViewSection[], item: MemoryViewItem): void {
-  for (const s of sections) s.items = s.items.filter(it => it.id !== item.id)
+  for (const s of sections) s.items = s.items.filter((it) => it.id !== item.id)
   const targetKey = MEMORY_TYPE_TO_SECTION_KEY[item.memoryType] ?? item.memoryType
-  let target = sections.find(s => s.key === targetKey)
+  let target = sections.find((s) => s.key === targetKey)
   if (!target) {
     target = { key: targetKey, label: SECTION_FULL_LABELS[targetKey] ?? targetKey, items: [] }
     sections.push(target)
-    sections.sort((a, b) =>
-      ((SECTION_ORDER.indexOf(a.key) + 1) || 99) - ((SECTION_ORDER.indexOf(b.key) + 1) || 99))
+    sections.sort(
+      (a, b) => (SECTION_ORDER.indexOf(a.key) + 1 || 99) - (SECTION_ORDER.indexOf(b.key) + 1 || 99),
+    )
   }
   target.items.unshift(item)
-}
-
-// ── Stateful mock: budget categories ────────────────────────────────────────
-// Resets on every full page load (module re-init), so Playwright tests that
-// start with page.goto get a clean fixture with no cross-test leakage.
-
-let mockBudgetByJob: Map<string, BudgetCategory[]> | null = null
-
-export function mockBudgetCategoriesFor(jobId: string): BudgetCategory[] {
-  if (!mockBudgetByJob) mockBudgetByJob = new Map()
-  if (!mockBudgetByJob.has(jobId)) {
-    const now = '2026-06-28T08:00:00.000Z'
-    if (jobId === MOCK_SEED_JOB_ID) {
-      // timber (budget, no spend), cladding (budget + spend), electrics (no
-      // budget), labour (budget + labour spend).
-      mockBudgetByJob.set(jobId, [
-        { id: 'cat-timber', jobId, name: 'timber', budgetAmount: '4000', budgetCurrency: 'GBP', sortOrder: 0, isArchived: false, createdAt: now, updatedAt: now },
-        { id: 'cat-cladding', jobId, name: 'cladding', budgetAmount: '2000', budgetCurrency: 'GBP', sortOrder: 1, isArchived: false, createdAt: now, updatedAt: now },
-        { id: 'cat-electrics', jobId, name: 'electrics', budgetAmount: null, budgetCurrency: null, sortOrder: 2, isArchived: false, createdAt: now, updatedAt: now },
-        { id: 'cat-labour', jobId, name: 'labour', budgetAmount: '1500', budgetCurrency: 'GBP', sortOrder: 3, isArchived: false, createdAt: now, updatedAt: now },
-      ])
-      // Seed safe assigned items: plasterboard (£1200) → cladding, and the rated
-      // labour (Tom, £280) → labour. Leaves hardcore (£40) and the £600 roof
-      // labour safe-but-uncategorised, and the rest excluded.
-      const sections = mockSectionsFor(jobId)
-      for (const s of sections) for (const it of s.items) {
-        if (it.id === 'mem-view-004' || it.id === 'mem-view-005') it.budgetCategoryId = 'cat-cladding'
-        if (it.id === 'mem-labour-2') it.budgetCategoryId = 'cat-labour'
-        // historical non-labour spend left assigned to the Labour category
-        if (it.id === 'mem-view-015') it.budgetCategoryId = 'cat-labour'
-        if (mockScenario === 'payment-state') {
-          // Dedicated progressive-disclosure fixture:
-          // - electrics: all paid (hardcore; trusted £0 is excluded)
-          // - cladding: some paid (one of two plasterboard rows)
-          // - labour: not paid
-          // - timber: unresolved price takes precedence
-          if (it.id === 'mem-view-001') it.budgetCategoryId = 'cat-electrics'
-          if (it.id === 'mem-view-006' || it.id === 'mem-view-009') it.budgetCategoryId = 'cat-timber'
-          // Keep the all-not-paid Labour example unambiguous: this legacy
-          // non-labour invoice remains visible as committed cost, but outside
-          // the system Labour aggregate.
-          if (it.id === 'mem-view-015') it.budgetCategoryId = null
-        }
-      }
-      if (mockScenario === 'payment-state') {
-        upsertMockItem(sections, {
-          id: 'mem-view-zero',
-          memoryType: 'ordered_material',
-          summary: 'Cable offcuts at no cost',
-          materialName: 'cable offcuts',
-          quantity: '1',
-          unit: 'bundle',
-          supplierName: null,
-          deliveryTiming: null,
-          locationOrUse: null,
-          costAmount: '0',
-          costCurrency: 'GBP',
-          costQualifier: 'total',
-          totalCostAmount: '0',
-          uncertaintyFlags: [],
-          budgetCategoryId: 'cat-electrics',
-          sourceCandidateFactId: null,
-          reviewDecisionId: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          source: null,
-        })
-      }
-    } else {
-      mockBudgetByJob.set(jobId, []) // a job with no budget categories
-    }
-  }
-  return mockBudgetByJob.get(jobId)!
 }

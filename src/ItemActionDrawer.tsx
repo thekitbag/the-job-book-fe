@@ -3,33 +3,19 @@ import BottomSheet from './BottomSheet'
 import MemoryEditForm from './MemoryEditForm'
 import { memoryItemToEdit } from './memoryEdit'
 import { formatSavedStamp } from './SourceHistory'
-import { safeRefund } from './memoryScan'
-import type { MarkPaidControls } from './markPaid'
 import { canMoveToWorkshop, canPutBackInWorkshop, type WorkshopSourceControls } from './workshopSource'
-import type { BudgetCategory, MemoryItemEdit, MemoryType, MemoryViewItem } from './types'
+import type { MemoryItemEdit, MemoryType, MemoryViewItem } from './types'
 
-const SPEND_TYPES = new Set<string>(['ordered_material', 'labour'])
-
-// What removing this item actually costs Mike, in his terms. The source line
-// matters most: removing a fact must never read as deleting the voice note.
 export function removalConsequences(item: MemoryViewItem): string[] {
-  const lines: string[] = []
-  if (SPEND_TYPES.has(item.memoryType)) lines.push('It will no longer count towards Budget.')
-  else if (item.memoryType === 'returned_material') {
-    lines.push('It will no longer show as returned.')
-    if (safeRefund(item)) lines.push('Its refund will stop coming off your Budget.')
-  } else if (item.memoryType === 'general_note') lines.push('It will be removed from the job log.')
-  else lines.push('It will be removed from this job.')
-  if (item.source) lines.push('The original voice note will be kept.')
-  return lines
+  return [
+    item.memoryType === 'returned_material'
+      ? 'It will no longer show as returned.'
+      : 'It will be removed from this job.',
+    ...(item.source ? ['The original voice note will be kept.'] : []),
+  ]
 }
 
-// The single item-action drawer. One BottomSheet whose content pushes/replaces
-// between the action list and focused sub-states — Show source, Fix memory, and
-// Remove item — with Back returning to the actions. No stacked drawers, no inline
-// page expansion, no navigation away for a normal edit. Used by every remembered
-// item row (Budget / Labour / Materials / Job log) so the interaction is one shape.
-type Sub = 'actions' | 'source' | 'edit' | 'remove' | 'category'
+type Sub = 'actions' | 'source' | 'edit' | 'remove'
 
 export default function ItemActionDrawer({
   open,
@@ -37,13 +23,7 @@ export default function ItemActionDrawer({
   item,
   title,
   meta,
-  costLine,
-  categories,
-  canPickCategory = false,
-  onAssignCategory,
-  assigningCategory,
   onReturnStart,
-  markPaid,
   workshop,
   move,
   onMove,
@@ -60,17 +40,8 @@ export default function ItemActionDrawer({
   item: MemoryViewItem
   title: string
   meta?: string | null
-  costLine?: string | null
-  categories: BudgetCategory[]
-  canPickCategory?: boolean
-  onAssignCategory: (categoryId: string | null) => void
-  assigningCategory: boolean
   // Materials leftover only: close this drawer and open the return flow.
   onReturnStart?: () => void
-  // Budget cost items only: mark the item paid (records Money out, not Budget).
-  markPaid?: MarkPaidControls
-  // Confirmed leftovers only: move this material into the cross-job Workshop,
-  // or put back a mistaken terminal outcome.
   workshop?: WorkshopSourceControls
   move?: { type: MemoryType; label: string }
   onMove: (type: MemoryType) => void
@@ -84,7 +55,9 @@ export default function ItemActionDrawer({
 }) {
   const [sub, setSub] = useState<Sub>('actions')
   // Each time the drawer opens, start on the action list.
-  useEffect(() => { if (open) setSub('actions') }, [open])
+  useEffect(() => {
+    if (open) setSub('actions')
+  }, [open])
 
   // Close on a successful edit save: the edit sub-state initiates a save, and
   // when submitting settles with no error we dismiss; a failure keeps the form
@@ -102,14 +75,12 @@ export default function ItemActionDrawer({
   const back = () => setSub('actions')
 
   const sheetTitle =
-    sub === 'source' ? 'Source' :
-    sub === 'edit' ? 'Fix memory' :
-    sub === 'remove' ? 'Remove item' :
-    sub === 'category' ? 'Choose a category' :
-    title
+    sub === 'source' ? 'Source' : sub === 'edit' ? 'Fix memory' : sub === 'remove' ? 'Remove item' : title
 
   const BackRow = (
-    <button type="button" className="row-sheet-back" onClick={back}>‹ Back</button>
+    <button type="button" className="row-sheet-back" onClick={back}>
+      ‹ Back
+    </button>
   )
 
   return (
@@ -117,60 +88,22 @@ export default function ItemActionDrawer({
       {sub === 'actions' && (
         <>
           {meta && <p className="row-sheet-sub">{meta}</p>}
-          {costLine && <p className="row-sheet-cost">{costLine}</p>}
-          {/* Paid state is stated plainly, above the actions, so the drawer says
-              where the money is without turning Budget into a payments ledger. */}
-          {markPaid?.isPaid(item) && (
-            <p className="row-sheet-paid" role="status"><span aria-hidden="true">✓ </span>Paid — recorded in Money out</p>
-          )}
           <div className="row-sheet-actions">
-            {/* Mark as paid records actual Money out; it never changes Budget
-                cost. Only shown for an eligible, unpaid, trusted GBP cost item. */}
-            {markPaid && !markPaid.isPaid(item) && markPaid.canMarkPaid(item) && (
-              <button
-                type="button"
-                className="row-sheet-opt row-sheet-opt--pay"
-                disabled={markPaid.pendingItemId === item.id}
-                onClick={() => { markPaid.onMarkPaid(item); onClose() }}
-              >
-                {markPaid.pendingItemId === item.id ? 'Marking paid…' : 'Mark as paid'} <span aria-hidden="true">›</span>
-              </button>
-            )}
-            {/* Undo paid removes the linked Money out and leaves the Budget cost
-                unchanged — a Money-only correction owned by the Budget item. */}
-            {markPaid && markPaid.isPaid(item) && (
-              <button
-                type="button"
-                className="row-sheet-opt"
-                disabled={markPaid.pendingItemId === item.id}
-                onClick={() => { markPaid.onUndoPaid(item); onClose() }}
-              >
-                {markPaid.pendingItemId === item.id ? 'Undoing…' : 'Undo paid'} <span aria-hidden="true">›</span>
-              </button>
-            )}
-            {canPickCategory && (
-              <button type="button" className="row-sheet-opt" disabled={assigningCategory} onClick={() => setSub('category')}>
-                Choose category <span aria-hidden="true">›</span>
-              </button>
-            )}
-            {/* Moving a leftover to the Workshop is a classification of a
-                memory that already exists, so it is offered wherever that
-                leftover is — including on a Finished job, which it neither
-                reopens nor changes the status of. The consequence line is the
-                one routine place the money answer needs stating; nothing after
-                the move repeats it. */}
             {workshop && canMoveToWorkshop(item) && (
               <button
                 type="button"
                 className="row-sheet-opt row-sheet-opt--primary row-sheet-opt--stacked"
                 disabled={workshop.pendingItemId === item.id}
-                onClick={() => { workshop.onMoveToWorkshop(item); onClose() }}
+                onClick={() => {
+                  workshop.onMoveToWorkshop(item)
+                  onClose()
+                }}
               >
                 <span className="row-sheet-opt-main">
                   <span className="row-sheet-opt-label">
                     {workshop.pendingItemId === item.id ? 'Moving…' : 'Move to the Workshop'}
                   </span>
-                  <span className="row-sheet-opt-sub">No new cost. Budget and Money stay as they are.</span>
+                  <span className="row-sheet-opt-sub">Keep track of this material in the Workshop.</span>
                 </span>
                 <span aria-hidden="true">›</span>
               </button>
@@ -183,9 +116,13 @@ export default function ItemActionDrawer({
                 type="button"
                 className="row-sheet-opt"
                 disabled={workshop.pendingItemId === item.id}
-                onClick={() => { workshop.onPutBackInWorkshop(item); onClose() }}
+                onClick={() => {
+                  workshop.onPutBackInWorkshop(item)
+                  onClose()
+                }}
               >
-                {workshop.pendingItemId === item.id ? 'Putting back…' : 'Put back in the Workshop'} <span aria-hidden="true">›</span>
+                {workshop.pendingItemId === item.id ? 'Putting back…' : 'Put back in the Workshop'}{' '}
+                <span aria-hidden="true">›</span>
               </button>
             )}
             {onReturnStart && (
@@ -194,7 +131,15 @@ export default function ItemActionDrawer({
               </button>
             )}
             {move && (
-              <button type="button" className="row-sheet-opt" disabled={mutating} onClick={() => { onMove(move.type); onClose() }}>
+              <button
+                type="button"
+                className="row-sheet-opt"
+                disabled={mutating}
+                onClick={() => {
+                  onMove(move.type)
+                  onClose()
+                }}
+              >
                 {move.label} <span aria-hidden="true">›</span>
               </button>
             )}
@@ -209,12 +154,18 @@ export default function ItemActionDrawer({
               </button>
             )}
             {canRemove && (
-              <button type="button" className="row-sheet-opt row-sheet-opt--danger" onClick={() => setSub('remove')}>
+              <button
+                type="button"
+                className="row-sheet-opt row-sheet-opt--danger"
+                onClick={() => setSub('remove')}
+              >
                 Remove item <span aria-hidden="true">›</span>
               </button>
             )}
           </div>
-          <button type="button" className="row-sheet-cancel" onClick={onClose}>Cancel</button>
+          <button type="button" className="row-sheet-cancel" onClick={onClose}>
+            Cancel
+          </button>
         </>
       )}
 
@@ -227,7 +178,9 @@ export default function ItemActionDrawer({
             {item.source.transcriptText && (
               <>
                 <p className="mem-source-label">What the system heard</p>
-                <blockquote className="mem-source-quote">{item.source.transcriptText}</blockquote>
+                <blockquote className="mem-source-quote" data-builder-note>
+                  {item.source.transcriptText}
+                </blockquote>
               </>
             )}
           </div>
@@ -240,12 +193,17 @@ export default function ItemActionDrawer({
           <MemoryEditForm
             initial={memoryItemToEdit(item)}
             submitting={submitting}
-            categories={categories}
-            isPaid={markPaid?.isPaid(item) ?? false}
-            onSubmit={edit => { savingRef.current = true; onSave(edit) }}
+            onSubmit={(edit) => {
+              savingRef.current = true
+              onSave(edit)
+            }}
             onCancel={back}
           />
-          {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
+          {errorMsg && (
+            <p className="queue-item-error" role="alert">
+              {errorMsg}
+            </p>
+          )}
         </div>
       )}
 
@@ -254,29 +212,24 @@ export default function ItemActionDrawer({
           {BackRow}
           <div className="mem-remove-confirm">
             <p className="mem-remove-question">Remove this item?</p>
-            {removalConsequences(item).map(line => (
-              <p key={line} className="mem-remove-consequence">{line}</p>
+            {removalConsequences(item).map((line) => (
+              <p key={line} className="mem-remove-consequence">
+                {line}
+              </p>
             ))}
             <div className="mem-remove-actions">
               <button type="button" className="btn-mem-remove-confirm" disabled={mutating} onClick={onRemove}>
                 {mutating ? 'Removing…' : 'Remove'}
               </button>
-              <button type="button" className="btn-mem-cancel" disabled={mutating} onClick={back}>Cancel</button>
-            </div>
-            {errorMsg && <p className="queue-item-error" role="alert">{errorMsg}</p>}
-          </div>
-        </div>
-      )}
-
-      {sub === 'category' && (
-        <div className="row-sheet-substate">
-          {BackRow}
-          <div className="pick-cat-list">
-            {categories.map(c => (
-              <button key={c.id} type="button" className="pick-cat-opt" disabled={assigningCategory} onClick={() => { onAssignCategory(c.id); onClose() }}>
-                {c.name}
+              <button type="button" className="btn-mem-cancel" disabled={mutating} onClick={back}>
+                Cancel
               </button>
-            ))}
+            </div>
+            {errorMsg && (
+              <p className="queue-item-error" role="alert">
+                {errorMsg}
+              </p>
+            )}
           </div>
         </div>
       )}

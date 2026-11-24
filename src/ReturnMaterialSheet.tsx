@@ -32,20 +32,15 @@ function ReturnFields({ item, submitting, error, onSubmit, onCancel }: {
   // case, and a partial return is one edit away.
   const [quantity, setQuantity] = useState(item.quantity ?? '')
   const [supplier, setSupplier] = useState(item.supplierName ?? '')
-  const [refund, setRefund] = useState('')
   const [returnedDate, setReturnedDate] = useState(todayISODate())
 
-  const canSave = isPositive(quantity) && (refund.trim() === '' || isPositive(refund))
+  const canSave = isPositive(quantity)
 
   function build(): ReturnMaterialRequest {
-    const refundAmount = refund.trim() || null
     return {
       quantity: quantity.trim(),
       unit: item.unit,
       supplierName: supplier.trim() || null,
-      // No refund amount → returned, but nothing trusted to take off spend.
-      refundAmount,
-      refundCurrency: refundAmount ? 'GBP' : null,
       happenedAt: `${returnedDate}T12:00:00`,
     }
   }
@@ -65,15 +60,6 @@ function ReturnFields({ item, submitting, error, onSubmit, onCancel }: {
         <span className="queue-field-label">Took them back to (optional)</span>
         <input className="queue-field-input" name="supplierName" value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g. Jewson" />
       </label>
-      <label className="queue-field">
-        <span className="queue-field-label">Refund (£) — optional</span>
-        <input className="queue-field-input" name="refundAmount" inputMode="decimal" value={refund} onChange={e => setRefund(e.target.value)} placeholder="e.g. 80" />
-      </label>
-      {/* Says plainly what a refund does, so the spend total never moves
-          unexplained — and leaving it blank stays a legitimate answer. */}
-      <p className="return-form-hint">
-        A refund comes off your Budget. Leave it blank if you haven’t recorded one yet.
-      </p>
       <label className="queue-field">
         <span className="queue-field-label">Date returned</span>
         <input className="queue-field-input" type="date" name="happenedAt" value={returnedDate} onChange={e => setReturnedDate(e.target.value)} />
@@ -120,14 +106,7 @@ export default function ReturnMaterialSheet({ item, onReturn, controlledOpen, on
     setError(null)
     try {
       await onReturn(req)
-      // Say plainly what the return did to Money and to Budget. A trusted GBP
-      // refund is money in and comes off Budget; no refund means neither moved.
-      const refund = req.refundAmount && req.refundCurrency === 'GBP' ? req.refundAmount : null
-      if (refund) {
-        toast({ title: 'Marked returned', body: `Added £${refund} refund to Money in. Budget reduced by £${refund}.` })
-      } else {
-        toast({ title: 'Marked returned', body: 'No refund recorded. Money unchanged.', tone: 'plain' })
-      }
+      toast({ title: 'Marked returned', body: 'The returned material is saved.' })
       setOpen(false)
     } catch (err: unknown) {
       // A 400 here is nearly always over-returning, but the copy asks him to
