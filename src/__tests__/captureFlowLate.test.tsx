@@ -1,8 +1,18 @@
 import { expect, it, vi } from 'vitest'
-import { act, render, screen, fireEvent, within } from '@testing-library/react'
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import CaptureFlow from '../CaptureFlow'
 import * as api from '../api'
 import type { Job } from '../types'
+import { getAllNotes, saveNote } from '../db'
+import { beginSignedInSession, captureIdentity } from '../localOwner'
+import { makeNote } from './helpers'
 const state = vi.hoisted(() => ({
   flow: null as unknown,
   setFlow: vi.fn(),
@@ -16,6 +26,7 @@ vi.mock('../useLocalCaptures', () => ({
 vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
   fileCaptureNote: vi.fn(),
+  moveCaptureNote: vi.fn(),
 }))
 const job = (id: string, title: string): Job => ({
   id,
@@ -81,4 +92,51 @@ it('does not offer the job an item is already in when moving it', () => {
     dialog.queryByRole('button', { name: 'Garden Room' }),
   ).not.toBeInTheDocument()
   expect(dialog.getByRole('button', { name: 'Shed' })).toBeVisible()
+})
+
+it('still moves the phone copy when he closes Move before the server answers', async () => {
+  beginSignedInSession('a')
+  await saveNote(
+    makeNote({
+      ...captureIdentity(),
+      jobId: 'job',
+      serverJobId: 'job',
+      serverNoteId: 'srv',
+      localState: 'uploaded',
+    }),
+  )
+  state.setFlow.mockClear()
+  state.flow = {
+    mode: 'move',
+    target: {
+      kind: 'note',
+      serverId: 'srv',
+      jobId: 'job',
+      at: new Date().toISOString(),
+      context: 'job',
+    },
+  }
+  let finish!: () => void
+  vi.mocked(api.moveCaptureNote).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = () =>
+          resolve({ jobId: 'shed' } as Awaited<
+            ReturnType<typeof api.moveCaptureNote>
+          >)
+      }),
+  )
+  render(<CaptureFlow {...props} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Shed' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+  await act(async () => finish())
+  await waitFor(async () =>
+    expect((await getAllNotes())[0]).toMatchObject({
+      jobId: 'shed',
+      serverJobId: 'shed',
+    }),
+  )
+  expect(state.setFlow).not.toHaveBeenCalledWith(
+    expect.objectContaining({ mode: 'saved' }),
+  )
 })

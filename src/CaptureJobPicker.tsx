@@ -139,7 +139,9 @@ export default function CaptureJobPicker({
           })}
         {!other &&
           snapshot.some(
-            (j) => j.status === 'planning' || j.status === 'finished',
+            (j) =>
+              j.id !== excludeJobId &&
+              (j.status === 'planning' || j.status === 'finished'),
           ) && (
             <button
               className="capture-picker-action capture-picker-more"

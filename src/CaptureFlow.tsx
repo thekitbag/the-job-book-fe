@@ -96,12 +96,12 @@ export default function CaptureFlow({
     job = jobs.find((j) => j.id === jobId),
     title = job?.title ?? 'this job'
   const choose = async (selected: Job, method: 'picker' | 'new_job') => {
-    // A late response must not replace a sheet he has since closed or changed.
+    // Server changes are always applied on the phone; a late response just
+    // must not replace a sheet he has since closed or changed.
     const boundary = getCaptureSessionId(),
       startedFlow = currentFlow.current,
-      active = () =>
-        boundary === getCaptureSessionId() &&
-        currentFlow.current === startedFlow
+      sameAccount = () => boundary === getCaptureSessionId(),
+      active = () => sameAccount() && currentFlow.current === startedFlow
     setError('')
     if (flow.mode === 'move') {
       if (!serverId)
@@ -112,7 +112,7 @@ export default function CaptureFlow({
         const result = await (target.kind === 'note'
           ? moveCaptureNote(serverId, selected.id)
           : moveCapturePhoto(serverId, selected.id))
-        if (!active()) return
+        if (!sameAccount()) return
         const localItems =
           target.kind === 'note' ? await getAllNotes() : await getAllPhotos()
         for (const item of localItems) {
@@ -133,10 +133,11 @@ export default function CaptureFlow({
         }
         track('item_moved', { kind: target.kind })
         announceCaptureChange()
-        setFlow({
-          mode: 'saved',
-          target: { ...target, jobId: result.jobId, moved: true },
-        })
+        if (active())
+          setFlow({
+            mode: 'saved',
+            target: { ...target, jobId: result.jobId, moved: true },
+          })
       } catch (e) {
         if ((e as { code?: string }).code === 'NOTE_MOVE_BLOCKED')
           throw new Error((e as Error).message)
@@ -189,7 +190,7 @@ export default function CaptureFlow({
         } else throw e
       }
     }
-    if (!active()) return
+    if (!sameAccount()) return
     track('note_filed', {
       context: target.context,
       method: method === 'new_job' ? 'new_job' : (target.method ?? 'picker'),
@@ -202,7 +203,8 @@ export default function CaptureFlow({
             : '60s+',
     })
     announceCaptureChange()
-    setFlow({ mode: 'saved', target: { ...target, jobId: actual, method } })
+    if (active())
+      setFlow({ mode: 'saved', target: { ...target, jobId: actual, method } })
   }
   if (flow.mode === 'picker' || flow.mode === 'move')
     return (

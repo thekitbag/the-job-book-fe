@@ -280,10 +280,13 @@ export default function HomeScreen({
       {unmatched.length + unmatchedPhotos.length > 0 && (
         <section
           className="capture-unmatched"
-          aria-label="Unmatched recordings"
+          aria-label="Unmatched recordings and photos"
         >
-          <h2>Unmatched recordings</h2>
-          <p>These recordings have not been matched to a person.</p>
+          <h2>Unmatched recordings and photos</h2>
+          <p>
+            Saved on this phone before sign-in finished. Only claim what you
+            recorded or took.
+          </p>
           {unmatched.map((n) => (
             <article key={n.clientNoteId}>
               <p>

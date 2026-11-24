@@ -40,7 +40,12 @@ it('does not bring back an uploaded photo the server log no longer has', async (
   beginSignedInSession('a')
   const file = new File(['p'], 'p.jpg', { type: 'image/jpeg' })
   const removed = await createCapturedPhoto(file, 'job')
-  await savePhoto({ ...removed, localState: 'uploaded', serverPhotoId: 's1' })
+  await savePhoto({
+    ...removed,
+    localState: 'uploaded',
+    serverPhotoId: 's1',
+    serverJobId: 'job',
+  })
   const unsent = await createCapturedPhoto(file, 'job')
   await savePhoto(unsent)
   vi.mocked(api.getJobLog).mockReset().mockResolvedValue({ entries: [] })

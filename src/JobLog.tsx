@@ -43,7 +43,14 @@ export default function JobLog({
       () => new Set(),
     )
   uploadedPhotoIds.current = local.photos
-    .filter((p) => p.jobId === jobId && p.localState === 'uploaded')
+    // Only photos the server has confirmed are in this job (older phone
+    // records have no serverJobId and were uploaded straight to it).
+    .filter(
+      (p) =>
+        p.jobId === jobId &&
+        (p.serverJobId === undefined || p.serverJobId === jobId) &&
+        p.localState === 'uploaded',
+    )
     .map((p) => p.clientPhotoId)
   const load = useCallback(() => {
     const requestVersion = ++version.current,
@@ -93,8 +100,12 @@ export default function JobLog({
       !(p.localState === 'uploaded' && settledPhotos.has(p.clientPhotoId)) &&
       !entries.some((e) => e.kind === 'photo' && e.photoId === p.serverPhotoId),
   )
-  const uploadedKey = uploadedPhotoIds.current.join(',')
+  // Reload when a photo newly finishes uploading; the mount load covers the rest.
+  const uploadedKey = uploadedPhotoIds.current.join(','),
+    lastUploadedKey = useRef(uploadedKey)
   useEffect(() => {
+    if (uploadedKey === lastUploadedKey.current) return
+    lastUploadedKey.current = uploadedKey
     if (uploadedKey) load()
   }, [uploadedKey, load])
   useEffect(() => {
