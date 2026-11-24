@@ -3,6 +3,7 @@ import {
   getAllNotes,
   getAllPhotos,
   getUnmatchedNotes,
+  getUnmatchedPhotos,
   subscribeLocalCaptures,
 } from './db'
 import { getCaptureSessionId, subscribeLocalOwner } from './localOwner'
@@ -12,7 +13,8 @@ export function useLocalCaptures() {
     notes: LocalNote[]
     photos: LocalPhoto[]
     unmatched: LocalNote[]
-  }>({ notes: [], photos: [], unmatched: [] })
+    unmatchedPhotos: LocalPhoto[]
+  }>({ notes: [], photos: [], unmatched: [], unmatchedPhotos: [] })
   useEffect(() => {
     let active = true,
       version = 0
@@ -20,13 +22,14 @@ export function useLocalCaptures() {
       const request = ++version,
         boundary = getCaptureSessionId()
       try {
-        const [notes, photos, unmatched] = await Promise.all([
+        const [notes, photos, unmatched, unmatchedPhotos] = await Promise.all([
           getAllNotes(),
           getAllPhotos(),
           getUnmatchedNotes(),
+          getUnmatchedPhotos(),
         ])
         if (active && request === version && boundary === getCaptureSessionId())
-          setState({ notes, photos, unmatched })
+          setState({ notes, photos, unmatched, unmatchedPhotos })
       } catch {
         /* Save failures have their own visible retry notice. */
       }
@@ -36,7 +39,7 @@ export function useLocalCaptures() {
         void load()
       }),
       b = subscribeLocalOwner(() => {
-        setState({ notes: [], photos: [], unmatched: [] })
+        setState({ notes: [], photos: [], unmatched: [], unmatchedPhotos: [] })
         void load()
       })
     return () => {

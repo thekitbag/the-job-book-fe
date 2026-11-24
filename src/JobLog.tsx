@@ -36,8 +36,18 @@ export default function JobLog({
   const current = useRef(jobId)
   current.current = jobId
   const version = useRef(0)
+  // Uploaded photos the server log has already answered for. If the server
+  // omits one (for example it was removed), the phone copy must not resurrect it.
+  const uploadedPhotoIds = useRef<string[]>([]),
+    [settledPhotos, setSettledPhotos] = useState<ReadonlySet<string>>(
+      () => new Set(),
+    )
+  uploadedPhotoIds.current = local.photos
+    .filter((p) => p.jobId === jobId && p.localState === 'uploaded')
+    .map((p) => p.clientPhotoId)
   const load = useCallback(() => {
-    const requestVersion = ++version.current
+    const requestVersion = ++version.current,
+      uploadedAtStart = [...uploadedPhotoIds.current]
     const boundary = getCaptureSessionId()
     setState((previous) => (previous === 'ready' ? 'ready' : 'loading'))
     getJobLog(jobId)
@@ -47,6 +57,7 @@ export default function JobLog({
           requestVersion === version.current &&
           boundary === getCaptureSessionId()
         ) {
+          setSettledPhotos(new Set(uploadedAtStart))
           setEntries(res.entries)
           setState('ready')
         }
@@ -61,6 +72,7 @@ export default function JobLog({
       })
   }, [jobId])
   useEffect(() => {
+    setSettledPhotos(new Set())
     setEntries([])
     setFilter('all')
     setManagePhotos(false)
@@ -78,8 +90,13 @@ export default function JobLog({
   const localPhotos = local.photos.filter(
     (p) =>
       p.jobId === jobId &&
+      !(p.localState === 'uploaded' && settledPhotos.has(p.clientPhotoId)) &&
       !entries.some((e) => e.kind === 'photo' && e.photoId === p.serverPhotoId),
   )
+  const uploadedKey = uploadedPhotoIds.current.join(',')
+  useEffect(() => {
+    if (uploadedKey) load()
+  }, [uploadedKey, load])
   useEffect(() => {
     const pending =
       entries.some(
@@ -271,7 +288,9 @@ export default function JobLog({
                   {capture &&
                     entry.kind !== 'typed_note' &&
                     (entry.kind === 'voice_note' ||
-                      entry.fileKind === 'IMAGE') && (
+                      (entry.fileKind === 'IMAGE' &&
+                        // Receipts share the photo shape but cannot be moved.
+                        !entry.fileUrl.includes('/receipts/'))) && (
                       <button
                         type="button"
                         className="capture-link"

@@ -266,3 +266,78 @@ it('refreshes job readers when a successful Fix finishes after its sheet was clo
   )
   expect(revision.result.current).toBeGreaterThan(before)
 })
+
+it('keeps a ready draft open past the 20 second wait while he is fixing it', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  try {
+    vi.mocked(api.getCaptureDraft).mockResolvedValue(draft)
+    const close = vi.fn()
+    render(
+      <CaptureDraftSheet
+        noteId="n"
+        jobId="j"
+        onClose={close}
+        onOpenChecks={vi.fn()}
+      />,
+    )
+    await screen.findByText('about two sheets')
+    fireEvent.click(screen.getByRole('button', { name: 'Fix' }))
+    await act(async () => {
+      vi.advanceTimersByTime(25_000)
+    })
+    expect(close).not.toHaveBeenCalled()
+    expect(screen.getByText('about two sheets')).toBeVisible()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('says a saved fix is saved when only the refresh afterwards fails', async () => {
+  vi.mocked(api.getCaptureDraft)
+    .mockReset()
+    .mockResolvedValueOnce(draft)
+    .mockRejectedValue(new Error('offline'))
+  vi.mocked(api.submitQueueDecision).mockResolvedValue(
+    {} as Awaited<ReturnType<typeof api.submitQueueDecision>>,
+  )
+  render(
+    <CaptureDraftSheet
+      noteId="n"
+      jobId="j"
+      onClose={vi.fn()}
+      onOpenChecks={vi.fn()}
+    />,
+  )
+  await screen.findByText('about two sheets')
+  fireEvent.click(screen.getByRole('button', { name: 'Fix' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Drop Mike' }))
+  expect(await screen.findByText(/Your change is saved/)).toBeVisible()
+  expect(screen.queryByText(/Nothing changed/)).not.toBeInTheDocument()
+  expect(api.submitQueueDecision).toHaveBeenCalledOnce()
+})
+
+it('labels unclear values plainly', async () => {
+  vi.mocked(api.getCaptureDraft)
+    .mockReset()
+    .mockResolvedValue({
+      ...draft,
+      items: [{ ...hours, person: null, hours: null }],
+    })
+  render(
+    <CaptureDraftSheet
+      noteId="n"
+      jobId="j"
+      onClose={vi.fn()}
+      onOpenChecks={vi.fn()}
+    />,
+  )
+  expect(await screen.findByText('Hours unclear')).toBeVisible()
+  expect(screen.queryByText(/unclear hours/)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Fix' }))
+  expect(
+    screen.getByRole('button', { name: 'Edit unclear person' }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Drop unclear person' }),
+  ).toBeVisible()
+})

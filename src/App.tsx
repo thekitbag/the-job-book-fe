@@ -267,6 +267,7 @@ function AppContent() {
     loadJobs()
   }
 
+  const onBookHome = view === 'bookHome'
   useEffect(() => {
     if (signedOut || hasResetToken) return
     let active = true
@@ -300,6 +301,8 @@ function AppContent() {
     captureUpdate,
     currentUser?.id,
     foregroundRevision,
+    // Counts change elsewhere (checks, Workshop); refresh on each return Home.
+    onBookHome,
   ])
 
   async function openJobById(id: string, checks = false) {

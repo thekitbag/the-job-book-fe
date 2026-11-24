@@ -23,6 +23,10 @@ export async function syncNote(
     if (!note.ownerUserId) {
       if (!note.jobId) return
       const sent = note
+      track('note_upload_started', {
+        job_id: note.jobId,
+        mime_type_family: mimeTypeFamily(note.mimeType),
+      })
       const result = await api.uploadNote(note)
       if (!alive()) return
       await patchNote(id, {
@@ -32,6 +36,10 @@ export async function syncNote(
         lastErrorCode: null,
       })
       announceCaptureChange()
+      track('note_upload_succeeded', {
+        job_id: sent.jobId,
+        mime_type_family: mimeTypeFamily(sent.mimeType),
+      })
       return
     }
     try {

@@ -17,11 +17,16 @@ const materialLabel = {
   left_over: 'Left over',
   returned: 'Returned',
 }
+function itemName(item: CaptureDraftItem): string {
+  return item.kind === 'hours'
+    ? (item.person ?? 'unclear person')
+    : (item.item ?? 'unclear material')
+}
 export function DraftValues({ item }: { item: CaptureDraftItem }) {
   return item.kind === 'hours' ? (
     <>
       <strong>{item.person ?? 'Person unclear'}</strong>
-      <span>{item.hours ?? 'Hours unclear'} hours</span>
+      <span>{item.hours ? `${item.hours} hours` : 'Hours unclear'}</span>
       <span>{item.day}</span>
     </>
   ) : (
@@ -92,7 +97,8 @@ export default function CaptureDraftSheet({
       pm: ProposedMemory
     } | null>(null),
     [sure, setSure] = useState(false)
-  const locked = useRef(false),
+  const ready = useRef(false),
+    locked = useRef(false),
     mounted = useRef(true),
     closed = useRef(false),
     boundary = useRef(getCaptureSessionId()),
@@ -120,6 +126,7 @@ export default function CaptureDraftSheet({
   useEffect(() => {
     mounted.current = true
     closed.current = false
+    ready.current = false
     let polling = false
     const close = () => {
       if (closed.current) return
@@ -132,7 +139,8 @@ export default function CaptureDraftSheet({
         closed.current ||
         !navigator.onLine ||
         document.visibilityState === 'hidden' ||
-        locked.current
+        locked.current ||
+        ready.current
       )
         return
       polling = true
@@ -148,6 +156,8 @@ export default function CaptureDraftSheet({
             close()
           else {
             callbacks.current.onVisible?.(fresh.state === 'ready')
+            // Once the draft is on screen it stays until he dismisses it.
+            if (fresh.state === 'ready') ready.current = true
             setDraft(fresh)
           }
         }
@@ -161,7 +171,10 @@ export default function CaptureDraftSheet({
     const interval = setInterval(() => {
         void poll()
       }, 1500),
-      timeout = setTimeout(close, 20_000)
+      // Only limits waiting for a draft; never closes one he is reading.
+      timeout = setTimeout(() => {
+        if (!ready.current) close()
+      }, 20_000)
     const hidden = () => {
       if (document.visibilityState === 'hidden') close()
     }
@@ -217,14 +230,25 @@ export default function CaptureDraftSheet({
             }
           : {}),
       })
-      announceCaptureChange()
+    } catch {
+      if (active()) {
+        setError('Nothing changed. Refresh the draft and try again.')
+        setBusy(false)
+      }
+      locked.current = false
+      return
+    }
+    announceCaptureChange()
+    try {
       if (active()) {
         setEditing(null)
         await reread()
       }
     } catch {
       if (active())
-        setError('Nothing changed. Refresh the draft and try again.')
+        setError(
+          'Your change is saved, but this list didn’t refresh. Check Things to check for this job.',
+        )
     } finally {
       locked.current = false
       if (active()) setBusy(false)
@@ -344,7 +368,7 @@ export default function CaptureDraftSheet({
                         void edit(item)
                       }}
                     >
-                      Edit {item.kind === 'hours' ? item.person : item.item}
+                      Edit {itemName(item)}
                     </button>
                     <button
                       type="button"
@@ -352,7 +376,7 @@ export default function CaptureDraftSheet({
                       onClick={() => {
                         void decide(item)
                       }}
-                      aria-label={`Drop ${item.kind === 'hours' ? item.person : item.item}`}
+                      aria-label={`Drop ${itemName(item)}`}
                     >
                       Drop
                     </button>

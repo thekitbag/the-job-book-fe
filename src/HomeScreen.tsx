@@ -1,4 +1,4 @@
-import { claimUnmatchedNote } from './db'
+import { claimUnmatchedNote, claimUnmatchedPhoto } from './db'
 import { getLocalOwnerId } from './localOwner'
 import { useLocalCaptures } from './useLocalCaptures'
 import { formatDuration, formatJobDay, formatSavedStamp } from './SourceHistory'
@@ -83,7 +83,7 @@ export default function HomeScreen({
   supported?: boolean
   permissionError?: string | null
 }) {
-  const { unmatched } = useLocalCaptures(),
+  const { unmatched, unmatchedPhotos } = useLocalCaptures(),
     rows =
       home?.inProgressJobs ??
       jobs
@@ -277,7 +277,7 @@ export default function HomeScreen({
           </button>
         </section>
       )}
-      {unmatched.length > 0 && (
+      {unmatched.length + unmatchedPhotos.length > 0 && (
         <section
           className="capture-unmatched"
           aria-label="Unmatched recordings"
@@ -296,6 +296,22 @@ export default function HomeScreen({
                 disabled={!getLocalOwnerId()}
                 onClick={() => {
                   void claimUnmatchedNote(n.clientNoteId)
+                }}
+              >
+                This is mine
+              </button>
+            </article>
+          ))}
+          {unmatchedPhotos.map((p) => (
+            <article key={p.clientPhotoId}>
+              <p>Photo · {formatSavedStamp(p.capturedAt)}</p>
+              <button
+                type="button"
+                className="capture-link"
+                disabled={!getLocalOwnerId()}
+                aria-label={`This photo is mine, ${formatSavedStamp(p.capturedAt)}`}
+                onClick={() => {
+                  void claimUnmatchedPhoto(p.clientPhotoId)
                 }}
               >
                 This is mine

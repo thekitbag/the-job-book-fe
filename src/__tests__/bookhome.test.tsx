@@ -528,3 +528,17 @@ describe('Book Home and job navigation', () => {
     expect(localStorage.getItem(SELECTED_ID_KEY)).toBe(SAMMY.id)
   })
 })
+
+it('refreshes Home counts every time he comes back to Home', async () => {
+  mockGetJobs.mockResolvedValue(ALL)
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+  const api = await import('../api')
+  await launch()
+  const before = vi.mocked(api.getCaptureHome).mock.calls.length
+  await gotoBookHome(userEvent.setup())
+  await waitFor(() =>
+    expect(vi.mocked(api.getCaptureHome).mock.calls.length).toBeGreaterThan(
+      before,
+    ),
+  )
+})

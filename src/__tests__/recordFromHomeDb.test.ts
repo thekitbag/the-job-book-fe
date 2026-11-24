@@ -11,6 +11,8 @@ import {
   claimUnmatchedNote,
   savePhoto,
   getAllPhotos,
+  getUnmatchedPhotos,
+  claimUnmatchedPhoto,
 } from '../db'
 import { makeNote } from './helpers'
 import { createCapturedPhoto } from '../capturePersistence'
@@ -48,4 +50,25 @@ it('rejects a photo above 15 MiB before attempting to read or store its bytes', 
   } as unknown as File
   await expect(createCapturedPhoto(file, null)).rejects.toThrow(/15 MB/)
   expect(await getAllPhotos()).toEqual([])
+})
+
+it('lists ownerless photos from an earlier boundary, filed or not, until claimed', async () => {
+  clearLocalOwner()
+  const file = new File(['p'], 'p.jpg', { type: 'image/jpeg' })
+  const unfiled = await createCapturedPhoto(file, null)
+  const filed = await createCapturedPhoto(file, 'job')
+  await savePhoto(unfiled)
+  await savePhoto(filed)
+  beginSignedInSession('b')
+  expect(
+    (await getUnmatchedPhotos()).map((p) => p.clientPhotoId).sort(),
+  ).toEqual([unfiled.clientPhotoId, filed.clientPhotoId].sort())
+  await claimUnmatchedPhoto(filed.clientPhotoId)
+  expect((await getUnmatchedPhotos()).map((p) => p.clientPhotoId)).toEqual([
+    unfiled.clientPhotoId,
+  ])
+  expect(
+    (await getAllPhotos()).find((p) => p.clientPhotoId === filed.clientPhotoId)
+      ?.ownerUserId,
+  ).toBe('b')
 })

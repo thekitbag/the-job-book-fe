@@ -183,6 +183,35 @@ export async function getUnmatchedNotes(): Promise<LocalNote[]> {
       n.captureSessionId !== getCaptureSessionId(),
   )
 }
+export async function getUnmatchedPhotos(): Promise<LocalPhoto[]> {
+  const db = await getDb()
+  // Photos never sync without an owner, so any ownerless photo from an
+  // earlier boundary, filed or not, needs an explicit claim to be recovered.
+  return (await db.getAll('photos')).filter(
+    (p) => !p.ownerUserId && p.captureSessionId !== getCaptureSessionId(),
+  )
+}
+export async function claimUnmatchedPhoto(id: string): Promise<void> {
+  const owner = getLocalOwnerId(),
+    session = getCaptureSessionId()
+  if (!owner) return
+  const db = await getDb(),
+    tx = db.transaction('photos', 'readwrite'),
+    photo = await tx.store.get(id)
+  if (
+    photo &&
+    !photo.ownerUserId &&
+    getLocalOwnerId() === owner &&
+    getCaptureSessionId() === session
+  )
+    await tx.store.put({
+      ...photo,
+      ownerUserId: owner,
+      captureSessionId: session,
+    })
+  await tx.done
+  notify({ kind: 'ownership' })
+}
 export async function claimUnmatchedNote(id: string): Promise<void> {
   const owner = getLocalOwnerId(),
     session = getCaptureSessionId()

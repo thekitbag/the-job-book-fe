@@ -96,8 +96,12 @@ export default function CaptureFlow({
     job = jobs.find((j) => j.id === jobId),
     title = job?.title ?? 'this job'
   const choose = async (selected: Job, method: 'picker' | 'new_job') => {
+    // A late response must not replace a sheet he has since closed or changed.
     const boundary = getCaptureSessionId(),
-      active = () => boundary === getCaptureSessionId()
+      startedFlow = currentFlow.current,
+      active = () =>
+        boundary === getCaptureSessionId() &&
+        currentFlow.current === startedFlow
     setError('')
     if (flow.mode === 'move') {
       if (!serverId)
@@ -221,6 +225,7 @@ export default function CaptureFlow({
         lastActivity={Object.fromEntries(
           (home?.inProgressJobs ?? []).map((j) => [j.id, j.lastActivityAt]),
         )}
+        excludeJobId={flow.mode === 'move' ? (jobId ?? undefined) : undefined}
         onClose={close}
       />
     )

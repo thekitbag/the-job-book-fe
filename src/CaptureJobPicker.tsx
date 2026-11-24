@@ -14,6 +14,7 @@ export default function CaptureJobPicker({
   title = 'Which job?',
   savedLabel,
   lastActivity = {},
+  excludeJobId,
 }: {
   jobs: Job[]
   order: string[]
@@ -25,6 +26,7 @@ export default function CaptureJobPicker({
   title?: string
   savedLabel?: string
   lastActivity?: Record<string, string>
+  excludeJobId?: string
 }) {
   const initialOrder = useRef(order),
     initialLast = useRef(lastJobId)
@@ -102,7 +104,9 @@ export default function CaptureJobPicker({
       )}
       <div className="capture-picker-list">
         {snapshot
-          .filter((j) => j.status === 'started' || other)
+          .filter(
+            (j) => j.id !== excludeJobId && (j.status === 'started' || other),
+          )
           .map((job) => {
             const detail =
               job.status === 'planning'

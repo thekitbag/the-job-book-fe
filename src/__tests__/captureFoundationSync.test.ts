@@ -12,6 +12,11 @@ import {
   getCaptureSessionId,
 } from '../localOwner'
 import { makeNote } from './helpers'
+import { track } from '../analytics'
+vi.mock('../analytics', async (original) => ({
+  ...(await original<typeof import('../analytics')>()),
+  track: vi.fn(),
+}))
 vi.mock('../api', () => ({
   uploadNote: vi.fn(),
   uploadCaptureNote: vi.fn(async (n) => ({
@@ -77,12 +82,11 @@ it('uploads an owned null-job capture through the new unfiled route', async () =
   await db.saveNote(makeNote({ ...captureIdentity(), jobId: null }))
   vi.mocked(uploadNote).mockImplementation(async (n) => success(n))
   renderHook(() => useSync(vi.fn()))
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 30))
+  await waitFor(async () => {
+    expect((await db.getAllNotes())[0].localState).toBe('uploaded')
   })
   expect(uploadNote).not.toHaveBeenCalled()
   expect(uploadCaptureNote).toHaveBeenCalledOnce()
-  expect((await db.getAllNotes())[0].localState).toBe('uploaded')
 })
 it('does not upload or reset another account’s pending recordings', async () => {
   beginSignedInSession('a')
@@ -173,5 +177,19 @@ it('lists and uploads an ownerless job recording from any earlier boundary throu
   expect(vi.mocked(uploadNote).mock.calls[0][0].ownerUserId).toBeNull()
   await waitFor(async () =>
     expect((await db.getAllNotes())[0].localState).toBe('uploaded'),
+  )
+})
+
+it('reports upload analytics for ownerless job recordings too', async () => {
+  clearLocalOwner()
+  const note = makeNote({ ...captureIdentity(), jobId: 'job-1' })
+  await db.saveNote(note)
+  vi.mocked(uploadNote).mockImplementation(async (n) => success(n))
+  vi.mocked(track).mockClear()
+  renderHook(() => useSync(vi.fn()))
+  await waitFor(() =>
+    expect(vi.mocked(track).mock.calls.map((c) => c[0])).toEqual(
+      expect.arrayContaining(['note_upload_started', 'note_upload_succeeded']),
+    ),
   )
 })
