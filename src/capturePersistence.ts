@@ -58,6 +58,7 @@ export function createCapturedNote(
     uploadAttemptCount: 0,
     lastUploadAttemptAt: null,
     serverNoteId: null,
+    serverJobId: null,
     lastErrorCode: null,
     transcriptStatus: null,
     transcriptText: null,
@@ -69,6 +70,7 @@ export function createCapturedNote(
 export async function persistCapturedNote(note: LocalNote): Promise<boolean> {
   if (failed.get(note.clientNoteId)?.saving) return false
   latestSaved = null
+  latestPhoto = null
   emit()
   const previous = failed.get(note.clientNoteId)
   if (previous) {
@@ -101,10 +103,85 @@ export async function persistCapturedNote(note: LocalNote): Promise<boolean> {
 }
 export function dismissSavedCapture() {
   latestSaved = null
+  latestPhoto = null
   emit()
 }
 export function _resetCapturePersistenceForTesting() {
   failed.clear()
+  failedPhotos.clear()
+  latestPhoto = null
   latestSaved = null
   revision = 0
+}
+
+import type { LocalPhoto } from './types'
+import { savePhoto } from './db'
+let latestPhoto: LocalPhoto | null = null
+const failedPhotos = new Map<
+  string,
+  { photo: LocalPhoto; error: unknown; saving: boolean }
+>()
+export function getLatestSavedPhoto() {
+  return latestPhoto && canListCapture(latestPhoto) ? latestPhoto : null
+}
+export function getFailedPhotos() {
+  return [...failedPhotos.values()].filter((p) => canListCapture(p.photo))
+}
+export async function createCapturedPhoto(
+  file: File,
+  jobId: string | null,
+): Promise<LocalPhoto> {
+  if (file.size > 15 * 1024 * 1024)
+    throw new Error('Choose a photo smaller than 15 MB.')
+  const identity = captureIdentity(),
+    bytes = await file.arrayBuffer(),
+    blob = new Blob([bytes], { type: file.type })
+  return {
+    ...identity,
+    clientPhotoId: crypto.randomUUID(),
+    jobId,
+    captureContext: jobId ? 'job' : 'home',
+    capturedAt: new Date().toISOString(),
+    mimeType: file.type,
+    blob,
+    sizeBytes: blob.size,
+    localState: 'saved_local',
+    uploadAttemptCount: 0,
+    lastUploadAttemptAt: null,
+    lastErrorCode: null,
+    serverPhotoId: null,
+    serverJobId: null,
+  }
+}
+export async function persistCapturedPhoto(
+  photo: LocalPhoto,
+): Promise<boolean> {
+  if (failedPhotos.get(photo.clientPhotoId)?.saving) return false
+  latestSaved = null
+  latestPhoto = null
+  emit()
+  const previous = failedPhotos.get(photo.clientPhotoId)
+  if (previous) {
+    previous.saving = true
+    emit()
+  }
+  try {
+    if (
+      photo.ownerUserId === null &&
+      photo.captureSessionId === getCaptureSessionId()
+    )
+      photo = { ...photo, ownerUserId: getLocalOwnerId() }
+    await savePhoto(photo)
+    const owner = getLocalOwnerId()
+    if (owner && photo.captureSessionId === getCaptureSessionId())
+      await stampUnownedCaptures(owner, photo.captureSessionId).catch(() => {})
+    failedPhotos.delete(photo.clientPhotoId)
+    latestPhoto = photo
+    emit()
+    return true
+  } catch (error) {
+    failedPhotos.set(photo.clientPhotoId, { photo, error, saving: false })
+    emit()
+    return false
+  }
 }

@@ -50,6 +50,8 @@ export interface LocalPhoto {
   lastUploadAttemptAt: string | null
   lastErrorCode: string | null
   serverPhotoId: string | null
+  serverJobId?: string | null
+  captureContext?: 'home' | 'job'
 }
 
 export type JobType = 'garden_room' | 'extension' | 'other'

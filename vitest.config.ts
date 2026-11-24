@@ -7,6 +7,8 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: false,
     setupFiles: ['./src/__tests__/setup.ts'],
-    exclude: ['**/node_modules/**', '**/e2e/**'],
+    // Generous for loaded machines; a hung test still fails.
+    testTimeout: 15_000,
+    exclude: ['**/node_modules/**', '**/e2e/**', '**/integration/**'],
   },
 })

@@ -1,7 +1,8 @@
 import { it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import JobLog from '../JobLog'
-vi.mock('../api', () => ({
+vi.mock('../api', async (original) => ({
+  ...(await original<typeof import('../api')>()),
   getJobLog: vi.fn(async () => ({
     entries: [
       {
@@ -34,7 +35,13 @@ vi.mock('../api', () => ({
         text: null,
         linkedPhotoIds: [],
       },
-      { kind: 'typed_note', id: 't', memoryItemId: 't', at: '2026-11-18T12:00:00Z', text: 'Call tomorrow' },
+      {
+        kind: 'typed_note',
+        id: 't',
+        memoryItemId: 't',
+        at: '2026-11-18T12:00:00Z',
+        text: 'Call tomorrow',
+      },
       {
         kind: 'photo',
         id: 'r',
@@ -51,7 +58,9 @@ vi.mock('../api', () => ({
 }))
 it('keeps every recording including pending, failed and price-only notes; filters legacy files as photos', async () => {
   render(<JobLog jobId="j" />)
-  expect(await screen.findByText('Skip hire £250')).toHaveAttribute('data-builder-note')
+  expect(await screen.findByText('Skip hire £250')).toHaveAttribute(
+    'data-builder-note',
+  )
   expect(screen.getByText(/could not be transcribed/i)).toBeVisible()
   expect(screen.getByText(/transcript pending/i)).toBeVisible()
   expect(screen.getByText('Call tomorrow')).toBeVisible()
@@ -62,7 +71,9 @@ it('keeps every recording including pending, failed and price-only notes; filter
   fireEvent.click(screen.getByRole('tab', { name: 'Photos' }))
   expect(screen.queryByText('Call tomorrow')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('tab', { name: 'Notes' }))
-  expect(screen.queryByRole('link', { name: 'Open file' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: 'Open file' }),
+  ).not.toBeInTheDocument()
   expect(screen.getByText('Call tomorrow')).toBeVisible()
 })
 
@@ -93,7 +104,13 @@ it('does not restore stale log text when an earlier read finishes after an edit 
   await act(async () =>
     resolve({
       entries: [
-        { kind: 'typed_note', id: 't', memoryItemId: 't', at: '2026-11-21T12:00:00Z', text: 'Old note' },
+        {
+          kind: 'typed_note',
+          id: 't',
+          memoryItemId: 't',
+          at: '2026-11-21T12:00:00Z',
+          text: 'Old note',
+        },
       ],
     }),
   )

@@ -6,7 +6,10 @@ import type {
   QueueItem,
   ReviewQueue,
 } from '../../types'
-import { MEMORY_TYPE_TO_SECTION_KEY, SECTION_FULL_LABELS } from '../../memoryScan'
+import {
+  MEMORY_TYPE_TO_SECTION_KEY,
+  SECTION_FULL_LABELS,
+} from '../../memoryScan'
 import { mockSectionsFor, upsertMockItem } from './state'
 const FIXTURES: QueueItem[] = [
   {
@@ -35,7 +38,8 @@ const FIXTURES: QueueItem[] = [
         noteId: 'mock-note-001',
         transcriptId: 'mock-trans-001',
         capturedAt: '2026-11-22T16:24:25.503Z',
-        transcriptText: 'Bought 8 bags of hardcore from Jewson, five pounds each.',
+        transcriptText:
+          'Bought 8 bags of hardcore from Jewson, five pounds each.',
       },
     ],
   },
@@ -102,7 +106,8 @@ const FIXTURES: QueueItem[] = [
         noteId: 'mock-note-004',
         transcriptId: 'mock-trans-004',
         capturedAt: '2026-11-22T16:24:25.506Z',
-        transcriptText: 'Got six lengths of timber from Travis Perkins, twenty quid each.',
+        transcriptText:
+          'Got six lengths of timber from Travis Perkins, twenty quid each.',
       },
     ],
   },
@@ -204,7 +209,8 @@ const FIXTURES: QueueItem[] = [
         noteId: 'mock-note-006',
         transcriptId: 'mock-trans-006',
         capturedAt: '2026-11-22T16:24:25.506Z',
-        transcriptText: 'Tom did eight hours on electrics and paid Kurt £120 for fitting cladding.',
+        transcriptText:
+          'Tom did eight hours on electrics and paid Kurt £120 for fitting cladding.',
       },
     ],
   },
@@ -215,13 +221,17 @@ export function resetMockQueue(): void {
 }
 export function mockGetReviewQueue(jobId: string): ReviewQueue {
   if (!queues.has(jobId))
-    queues.set(jobId, jobId === 'job-pilot-garden-room-001' ? structuredClone(FIXTURES) : [])
+    queues.set(
+      jobId,
+      jobId === 'job-pilot-garden-room-001' ? structuredClone(FIXTURES) : [],
+    )
   const groups = new Map<string, QueueItem[]>()
   for (const item of queues.get(jobId)!) {
     const key =
       item.kind === 'unclear_prompt'
         ? 'unclear_items'
-        : (MEMORY_TYPE_TO_SECTION_KEY[item.proposedMemory.memoryType] ?? 'unclear_items')
+        : (MEMORY_TYPE_TO_SECTION_KEY[item.proposedMemory.memoryType] ??
+          'unclear_items')
     groups.set(key, [...(groups.get(key) ?? []), item])
   }
   return {
@@ -234,15 +244,26 @@ export function mockGetReviewQueue(jobId: string): ReviewQueue {
     })),
     alreadyRemembered: mockSectionsFor(jobId)
       .flatMap((s) => s.items)
-      .map((i) => ({ ...i, memoryItemId: i.id, memoryType: i.memoryType as MemoryType })),
+      .map((i) => ({
+        ...i,
+        memoryItemId: i.id,
+        memoryType: i.memoryType as MemoryType,
+      })),
   }
 }
-export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision): QueueDecisionResponse {
+export function mockSubmitQueueDecision(
+  jobId: string,
+  decision: QueueDecision,
+): QueueDecisionResponse {
   mockGetReviewQueue(jobId)
   const item = queues.get(jobId)!.find((i) => i.id === decision.queueItemId)
   if (!item) throw new Error('Not found')
   item.status =
-    decision.action === 'confirm' ? 'confirmed' : decision.action === 'correct' ? 'corrected' : 'dismissed'
+    decision.action === 'confirm'
+      ? 'confirmed'
+      : decision.action === 'correct'
+        ? 'corrected'
+        : 'dismissed'
   let memoryItemId: string | undefined
   if (decision.action !== 'dismiss') {
     const pm = decision.corrected ?? item.proposedMemory
@@ -256,7 +277,10 @@ export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision):
       updatedAt: now,
       sourceCandidateFactId: item.sourceCandidateFactIds[0] ?? null,
       reviewDecisionId: 'decision-' + item.id,
-      uncertaintyFlags: decision.uncertaintyResolution === 'still_unsure' ? item.uncertaintyFlags : [],
+      uncertaintyFlags:
+        decision.uncertaintyResolution === 'still_unsure'
+          ? item.uncertaintyFlags
+          : [],
       source: ctx
         ? {
             candidateFactId: ctx.candidateFactId,
@@ -276,4 +300,43 @@ export function mockSubmitQueueDecision(jobId: string, decision: QueueDecision):
     memoryItemId,
     sourceCandidateFactIds: item.sourceCandidateFactIds,
   }
+}
+
+export function mockAddCaptureChecks(jobId: string, noteId: string) {
+  mockGetReviewQueue(jobId)
+  const entries = queues.get(jobId)!
+  if (entries.some((i) => i.sourceContext.some((c) => c.noteId === noteId)))
+    return
+  const source = {
+    candidateFactId: 'fact-' + noteId,
+    sourceNoteId: noteId,
+    noteId,
+    transcriptId: 'transcript-' + noteId,
+    capturedAt: new Date().toISOString(),
+    transcriptText: 'Mike two hours. Bought about two sheets of OSB.',
+  }
+  const templates = [
+    FIXTURES.find((i) => i.proposedMemory.memoryType === 'labour'),
+    FIXTURES.find((i) => i.proposedMemory.memoryType === 'ordered_material'),
+  ].filter((i): i is QueueItem => !!i)
+  templates.forEach((template, index) =>
+    entries.push({
+      ...structuredClone(template),
+      id: `capture-${index}-${noteId}`,
+      status: 'draft',
+      kind: 'single',
+      sourceCandidateFactIds: [source.candidateFactId + index],
+      sourceContext: [
+        { ...source, candidateFactId: source.candidateFactId + index },
+      ],
+      uncertaintyFlags: index ? ['approximate_quantity'] : [],
+      proposedMemory: {
+        ...template.proposedMemory,
+        ...(index
+          ? { materialName: 'OSB', quantity: '2', unit: 'sheets' }
+          : { labourPerson: 'Mike', labourHours: '2' }),
+        summary: index ? 'About two sheets of OSB' : 'Mike two hours',
+      },
+    }),
+  )
 }

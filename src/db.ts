@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { LocalNote, LocalPhoto } from './types'
 import {
   canListCapture,
+  canSyncCapture,
   getCaptureSessionId,
   getLocalOwnerId,
 } from './localOwner'
@@ -113,7 +114,13 @@ export async function getAllNotes(): Promise<LocalNote[]> {
 }
 export async function getPendingNotes(): Promise<LocalNote[]> {
   return (await getAllNotes()).filter(
-    (n) => n.localState === 'saved_local' || n.localState === 'upload_failed',
+    (n) =>
+      n.localState === 'saved_local' ||
+      n.localState === 'upload_failed' ||
+      (n.localState === 'uploaded' &&
+        n.serverJobId !== undefined &&
+        n.jobId !== null &&
+        n.jobId !== n.serverJobId),
   )
 }
 export async function patchNote(
@@ -138,6 +145,94 @@ export async function savePhoto(photo: LocalPhoto): Promise<void> {
 export async function getAllPhotos(): Promise<LocalPhoto[]> {
   const db = await getDb()
   return (await db.getAll('photos')).filter(canListCapture)
+}
+export async function getPhoto(id: string): Promise<LocalPhoto | undefined> {
+  return (await getAllPhotos()).find((p) => p.clientPhotoId === id)
+}
+export async function patchPhoto(
+  id: string,
+  patch: Partial<Omit<LocalPhoto, 'clientPhotoId'>>,
+): Promise<void> {
+  const session = getCaptureSessionId(),
+    db = await getDb(),
+    tx = db.transaction('photos', 'readwrite'),
+    photo = await tx.store.get(id)
+  if (photo && session === getCaptureSessionId() && canListCapture(photo))
+    await tx.store.put({ ...photo, ...patch })
+  await tx.done
+  if (photo) notify({ kind: 'updated', jobChanged: 'jobId' in patch })
+}
+export async function getPendingPhotos(): Promise<LocalPhoto[]> {
+  return (await getAllPhotos()).filter(
+    (p) =>
+      canSyncCapture(p) &&
+      (p.localState === 'saved_local' ||
+        p.localState === 'upload_failed' ||
+        (p.localState === 'uploaded' &&
+          p.serverJobId !== undefined &&
+          p.jobId !== null &&
+          p.jobId !== p.serverJobId)),
+  )
+}
+export async function getUnmatchedNotes(): Promise<LocalNote[]> {
+  const db = await getDb()
+  return (await db.getAll('notes')).filter(
+    (n) =>
+      !n.ownerUserId &&
+      n.jobId === null &&
+      n.captureSessionId !== getCaptureSessionId(),
+  )
+}
+export async function getUnmatchedPhotos(): Promise<LocalPhoto[]> {
+  const db = await getDb()
+  // Photos never sync without an owner, so any ownerless photo from an
+  // earlier boundary, filed or not, needs an explicit claim to be recovered.
+  return (await db.getAll('photos')).filter(
+    (p) => !p.ownerUserId && p.captureSessionId !== getCaptureSessionId(),
+  )
+}
+export async function claimUnmatchedPhoto(id: string): Promise<void> {
+  const owner = getLocalOwnerId(),
+    session = getCaptureSessionId()
+  if (!owner) return
+  const db = await getDb(),
+    tx = db.transaction('photos', 'readwrite'),
+    photo = await tx.store.get(id)
+  if (
+    photo &&
+    !photo.ownerUserId &&
+    getLocalOwnerId() === owner &&
+    getCaptureSessionId() === session
+  )
+    await tx.store.put({
+      ...photo,
+      ownerUserId: owner,
+      captureSessionId: session,
+    })
+  await tx.done
+  notify({ kind: 'ownership' })
+}
+export async function claimUnmatchedNote(id: string): Promise<void> {
+  const owner = getLocalOwnerId(),
+    session = getCaptureSessionId()
+  if (!owner) return
+  const db = await getDb(),
+    tx = db.transaction('notes', 'readwrite'),
+    note = await tx.store.get(id)
+  if (
+    note &&
+    !note.ownerUserId &&
+    note.jobId === null &&
+    getLocalOwnerId() === owner &&
+    getCaptureSessionId() === session
+  )
+    await tx.store.put({
+      ...note,
+      ownerUserId: owner,
+      captureSessionId: session,
+    })
+  await tx.done
+  notify({ kind: 'ownership' })
 }
 export async function stampUnownedCaptures(
   ownerId: string,
@@ -171,9 +266,9 @@ export async function resetInterruptedUploads(
   skipIds: ReadonlySet<string> = new Set(),
 ): Promise<number> {
   const db = await getDb(),
-    tx = db.transaction('notes', 'readwrite')
+    tx = db.transaction(['notes', 'photos'], 'readwrite')
   let count = 0,
-    cursor = await tx.store.openCursor()
+    cursor = await tx.objectStore('notes').openCursor()
   while (cursor) {
     const note = cursor.value
     if (
@@ -185,6 +280,19 @@ export async function resetInterruptedUploads(
       count++
     }
     cursor = await cursor.continue()
+  }
+  let photoCursor = await tx.objectStore('photos').openCursor()
+  while (photoCursor) {
+    const p = photoCursor.value
+    if (
+      p.localState === 'uploading' &&
+      canListCapture(p) &&
+      !skipIds.has('photo:' + p.clientPhotoId)
+    ) {
+      await photoCursor.update({ ...p, localState: 'saved_local' })
+      count++
+    }
+    photoCursor = await photoCursor.continue()
   }
   await tx.done
   if (count) notify({ kind: 'updated' })

@@ -17,9 +17,15 @@ let initialized = false
 
 // Query strings can carry secrets (the password-reset link is `/?token=…`),
 // so no URL-valued property ever keeps one. Exported for tests.
-export function stripUrlQueryStrings(properties: Record<string, unknown>): Record<string, unknown> {
+export function stripUrlQueryStrings(
+  properties: Record<string, unknown>,
+): Record<string, unknown> {
   for (const [key, value] of Object.entries(properties)) {
-    if (typeof value === 'string' && /url|referrer|href/i.test(key) && (value.includes('?') || value.includes('#'))) {
+    if (
+      typeof value === 'string' &&
+      /url|referrer|href/i.test(key) &&
+      (value.includes('?') || value.includes('#'))
+    ) {
       properties[key] = value.split(/[?#]/)[0]
     }
   }
@@ -27,7 +33,10 @@ export function stripUrlQueryStrings(properties: Record<string, unknown>): Recor
 }
 
 export function isAnalyticsConfigured(): boolean {
-  return Boolean(import.meta.env.VITE_POSTHOG_PROJECT_TOKEN && import.meta.env.VITE_POSTHOG_HOST)
+  return Boolean(
+    import.meta.env.VITE_POSTHOG_PROJECT_TOKEN &&
+      import.meta.env.VITE_POSTHOG_HOST,
+  )
 }
 
 export function initAnalytics(): boolean {
@@ -71,13 +80,18 @@ const BLOCKED_KEY_PATTERN =
 // dropped even if its key looks safe.
 const MAX_STRING_VALUE_LENGTH = 64
 
-function isSafeValue(value: unknown): value is string | number | boolean | null {
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') return true
+function isSafeValue(
+  value: unknown,
+): value is string | number | boolean | null {
+  if (value === null || typeof value === 'number' || typeof value === 'boolean')
+    return true
   if (typeof value !== 'string') return false
   return value.length <= MAX_STRING_VALUE_LENGTH && !value.includes('@')
 }
 
-export function sanitizeProperties(properties?: Record<string, unknown>): Record<string, string | number | boolean | null> {
+export function sanitizeProperties(
+  properties?: Record<string, unknown>,
+): Record<string, string | number | boolean | null> {
   const safe: Record<string, string | number | boolean | null> = {}
   if (!properties) return safe
   for (const [key, value] of Object.entries(properties)) {
@@ -85,6 +99,10 @@ export function sanitizeProperties(properties?: Record<string, unknown>): Record
     // the presence flags the job-contacts spec asks for (has_phone, has_email)
     // would be dropped by name alone, and the events would say nothing. Only
     // true/false is exempt: a string under a blocked key is still dropped.
+    if (key === 'context' && (value === 'home' || value === 'job')) {
+      safe[key] = value
+      continue
+    }
     if (BLOCKED_KEY_PATTERN.test(key) && typeof value !== 'boolean') continue
     if (!isSafeValue(value)) continue
     safe[key] = value
@@ -92,14 +110,19 @@ export function sanitizeProperties(properties?: Record<string, unknown>): Record
   return safe
 }
 
-export function track(eventName: string, properties?: Record<string, unknown>): void {
+export function track(
+  eventName: string,
+  properties?: Record<string, unknown>,
+): void {
   if (!initialized) return
   posthog.capture(eventName, sanitizeProperties(properties))
 }
 
 // Identify by opaque user id and role only — never email or display name.
 // The property set is hard-coded here so a caller cannot widen it.
-export function identifyAnalyticsUser(user: Pick<AuthUser, 'id' | 'role'>): void {
+export function identifyAnalyticsUser(
+  user: Pick<AuthUser, 'id' | 'role'>,
+): void {
   if (!initialized) return
   posthog.identify(user.id, { role: user.role })
 }
@@ -113,14 +136,18 @@ export function resetAnalyticsUser(): void {
 // Raw durations/sizes are fine, but buckets are what the spec asks for and
 // they keep payloads boring.
 
-export function durationBucket(ms: number): '<30s' | '30-120s' | '2-5m' | '5m+' {
+export function durationBucket(
+  ms: number,
+): '<30s' | '30-120s' | '2-5m' | '5m+' {
   if (ms < 30_000) return '<30s'
   if (ms < 120_000) return '30-120s'
   if (ms < 300_000) return '2-5m'
   return '5m+'
 }
 
-export function sizeBucket(bytes: number): '<100KB' | '100KB-1MB' | '1-5MB' | '5MB+' {
+export function sizeBucket(
+  bytes: number,
+): '<100KB' | '100KB-1MB' | '1-5MB' | '5MB+' {
   if (bytes < 100_000) return '<100KB'
   if (bytes < 1_000_000) return '100KB-1MB'
   if (bytes < 5_000_000) return '1-5MB'

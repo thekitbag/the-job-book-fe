@@ -1,3 +1,4 @@
+import { openPilotJob } from './helpers'
 import { test, expect } from '@playwright/test'
 
 // 390×844, VITE_USE_MOCK_API=true — job status editing via the Change status
@@ -5,7 +6,7 @@ import { test, expect } from '@playwright/test'
 // 'started' renders to users as 'In progress'.
 
 async function gotoApp(page: import('@playwright/test').Page) {
-  await page.goto('/')
+  await openPilotJob(page)
   const explainer = page.getByRole('button', { name: /got it/i })
   if (await explainer.isVisible().catch(() => false)) await explainer.click()
   const passcode = page.getByLabel(/passcode/i)
@@ -18,7 +19,9 @@ async function gotoApp(page: import('@playwright/test').Page) {
 
 async function openStatusSheet(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /change job status/i }).click()
-  await expect(page.getByRole('dialog', { name: /change status/i })).toBeVisible()
+  await expect(
+    page.getByRole('dialog', { name: /change status/i }),
+  ).toBeVisible()
 }
 
 test.describe('Job status update', () => {
@@ -26,49 +29,77 @@ test.describe('Job status update', () => {
     await gotoApp(page)
   })
 
-  test('header shows STATUS label and the started job as "In progress"', async ({ page }) => {
+  test('header shows STATUS label and the started job as "In progress"', async ({
+    page,
+  }) => {
     await expect(page.locator('.ws-status-label')).toHaveText('Status')
     await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
   })
 
-  test('the chip opens a bottom sheet with three statuses and a separated archive action', async ({ page }) => {
+  test('the chip opens a bottom sheet with three statuses and a separated archive action', async ({
+    page,
+  }) => {
     await openStatusSheet(page)
     const sheet = page.getByRole('dialog', { name: /change status/i })
     for (const label of ['Planning', 'In progress', 'Finished']) {
       await expect(sheet.getByRole('button', { name: label })).toBeVisible()
     }
-    await expect(sheet.getByRole('button', { name: /archive job…/i })).toBeVisible()
+    await expect(
+      sheet.getByRole('button', { name: /archive job…/i }),
+    ).toBeVisible()
     // current status is marked
-    await expect(sheet.getByRole('button', { name: /in progress/i })).toHaveAttribute('aria-pressed', 'true')
+    await expect(
+      sheet.getByRole('button', { name: /in progress/i }),
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('changing status to Planning updates the header and keeps Record visible', async ({ page }) => {
+  test('changing status to Planning updates the header and keeps Record visible', async ({
+    page,
+  }) => {
     await openStatusSheet(page)
-    await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Planning', exact: true })
+      .click()
     await page.waitForTimeout(500)
 
     await expect(page.locator('.ws-status-chip')).toHaveText(/Planning/)
-    await expect(page.getByRole('dialog', { name: /change status/i })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
+    await expect(
+      page.getByRole('dialog', { name: /change status/i }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: /start recording/i }),
+    ).toBeVisible()
   })
 
-  test('a planning job stays visible and selectable in the jobs index', async ({ page }) => {
+  test('a planning job stays visible and selectable in the jobs index', async ({
+    page,
+  }) => {
     await openStatusSheet(page)
-    await page.getByRole('dialog').getByRole('button', { name: 'Planning', exact: true }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Planning', exact: true })
+      .click()
     await page.waitForTimeout(500)
 
     // Book Home counts the states; the index behind its Jobs row is where the
     // job itself now shows, under the group its new status puts it in.
     await page.getByRole('button', { name: /the job book/i }).click()
-    await expect(page.getByRole('button', { name: /^Jobs/ })).toContainText('3 planning')
-    await page.getByRole('button', { name: /^Jobs/ }).click()
+    await page.getByRole('button', { name: /Other jobs/ }).click()
     const planning = page.getByRole('region', { name: 'Planning' })
-    await expect(planning.getByRole('button', { name: /Garden Room/ })).toBeVisible()
+    await expect(
+      planning.getByRole('button', { name: /Garden Room/ }),
+    ).toBeVisible()
   })
 
-  test('changing status to Finished keeps the job selected', async ({ page }) => {
+  test('changing status to Finished keeps the job selected', async ({
+    page,
+  }) => {
     await openStatusSheet(page)
-    await page.getByRole('dialog').getByRole('button', { name: 'Finished', exact: true }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Finished', exact: true })
+      .click()
     await page.waitForTimeout(500)
 
     await expect(page.locator('.ws-status-chip')).toHaveText(/Finished/)
@@ -78,15 +109,21 @@ test.describe('Job status update', () => {
   test('closing the sheet makes no change', async ({ page }) => {
     await openStatusSheet(page)
     await page.getByRole('button', { name: /^close$/i }).click()
-    await expect(page.getByRole('dialog', { name: /change status/i })).toHaveCount(0)
+    await expect(
+      page.getByRole('dialog', { name: /change status/i }),
+    ).toHaveCount(0)
     await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
   })
 
-  test('archiving requires confirmation — cancelling leaves the job unchanged', async ({ page }) => {
+  test('archiving requires confirmation — cancelling leaves the job unchanged', async ({
+    page,
+  }) => {
     await openStatusSheet(page)
     await page.getByRole('button', { name: /archive job…/i }).click()
     // confirmation step, no request yet
-    await expect(page.getByText(/removed from your normal job list/i)).toBeVisible()
+    await expect(
+      page.getByText(/removed from your normal job list/i),
+    ).toBeVisible()
     await page.getByRole('button', { name: /cancel/i }).click()
     // back on the options; close and confirm nothing changed
     await page.getByRole('button', { name: /^close$/i }).click()
@@ -95,7 +132,9 @@ test.describe('Job status update', () => {
     await expect(page.locator('.ws-status-chip')).toHaveText(/In progress/)
   })
 
-  test('archiving with confirmation removes the job from the book and moves to another job', async ({ page }) => {
+  test('archiving with confirmation removes the job from the book and moves to another job', async ({
+    page,
+  }) => {
     await openStatusSheet(page)
     await page.getByRole('button', { name: /archive job…/i }).click()
     await page.getByRole('button', { name: 'Archive job', exact: true }).click()
@@ -103,9 +142,13 @@ test.describe('Job status update', () => {
 
     // moved to the other seeded job, not stuck on a broken/archived view
     await expect(page.locator('.ws-job-title')).toHaveText('Kitchen Extension')
-    await expect(page.getByRole('button', { name: /start recording/i })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: /start recording/i }),
+    ).toBeVisible()
 
     await page.getByRole('button', { name: /the job book/i }).click()
-    await expect(page.getByRole('button', { name: /Garden Room/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Garden Room/ })).toHaveCount(
+      0,
+    )
   })
 })

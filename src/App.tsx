@@ -24,7 +24,14 @@ import { identifyAnalyticsUser, resetAnalyticsUser, track } from './analytics'
 import CurrentJobWorkspace from './CurrentJobWorkspace'
 import AuthScreen, { getResetToken } from './AuthScreen'
 import ReviewQueueScreen from './ReviewQueueScreen'
-import BookHomeScreen from './BookHomeScreen'
+import HomeScreen from './HomeScreen'
+import CaptureFlow from './CaptureFlow'
+import UnfiledScreen from './UnfiledScreen'
+import NewJobSheet from './NewJobSheet'
+import { useLocalCaptures } from './useLocalCaptures'
+import { useCaptureUpdates } from './captureEvents'
+import type { CaptureHome } from './captureTypes'
+import { getCaptureHome, getJob } from './api'
 import AllJobsScreen from './AllJobsScreen'
 import WorkshopScreen from './WorkshopScreen'
 import type { AuthUser, Job, WorkshopResponse } from './types'
@@ -49,6 +56,8 @@ function loadSelectedJobId(): string | null {
 // Never leave another account's job data visible/cached after logout or a
 // session lapsing mid-use (401 from any core data load).
 function clearLocalJobData() {
+  const owner = getLocalOwnerId()
+  if (owner) localStorage.removeItem('job-book-capture-home:' + owner)
   clearLocalOwner()
   localStorage.removeItem(CACHED_JOBS_KEY)
   localStorage.removeItem(SELECTED_JOB_ID_KEY)
@@ -69,12 +78,22 @@ function pickJob(jobs: Job[], storedId: string | null): Job | null {
 }
 
 type AppState = 'ready' | 'unauthenticated' | 'noJobs'
-// The app still launches into the last selected Job Home. Book Home is the
-// level above it, reached from a job — never the default screen.
-type AppView = 'workspace' | 'reviewQueue' | 'bookHome' | 'allJobs' | 'workshop'
+// Cold launches start on Home; recording continues across screen changes.
+type AppView =
+  | 'workspace'
+  | 'reviewQueue'
+  | 'bookHome'
+  | 'allJobs'
+  | 'workshop'
+  | 'unfiled'
 
 function AppContent() {
-  const { setSyncEnabled } = useCaptureContext()!
+  const capture = useCaptureContext()!
+  const { setSyncEnabled } = capture
+  const local = useLocalCaptures(),
+    captureUpdate = useCaptureUpdates()
+  const [home, setHome] = useState<CaptureHome | null>(null),
+    [newJobOpen, setNewJobOpen] = useState(false)
   // A password-reset link must work even for a browser that still has a valid
   // session (an old tab left open, a stale cookie, etc.) — always defer to
   // AuthScreen's reset-confirm flow when the URL carries a reset token.
@@ -90,8 +109,9 @@ function AppContent() {
     'loading' | 'ready' | 'error'
   >(() => (loadCachedJobs().length ? 'ready' : 'loading'))
   const [errorMsg, setErrorMsg] = useState('')
-  const [view, setView] = useState<AppView>('workspace')
+  const [view, setView] = useState<AppView>('bookHome')
   const [online, setOnline] = useState(navigator.onLine)
+  const [foregroundRevision, setForegroundRevision] = useState(0)
   const [workshopData, setWorkshopData] = useState<WorkshopResponse | null>(
     null,
   )
@@ -104,11 +124,20 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
 
   useEffect(() => {
-    const setOn = () => setOnline(true)
+    const setOn = () => {
+      setOnline(true)
+      setForegroundRevision((v) => v + 1)
+    }
+    const foreground = () => {
+      if (document.visibilityState === 'visible')
+        setForegroundRevision((v) => v + 1)
+    }
     const setOff = () => setOnline(false)
+    document.addEventListener('visibilitychange', foreground)
     window.addEventListener('online', setOn)
     window.addEventListener('offline', setOff)
     return () => {
+      document.removeEventListener('visibilitychange', foreground)
       window.removeEventListener('online', setOn)
       window.removeEventListener('offline', setOff)
     }
@@ -125,7 +154,8 @@ function AppContent() {
     setSelectedJob(null)
     setCurrentUser(null)
     setWorkshopData(null)
-    setView('workspace')
+    setHome(null)
+    setView('bookHome')
     setAppState('unauthenticated')
   }, [setSyncEnabled])
 
@@ -174,6 +204,11 @@ function AppContent() {
     if (!hasResetToken) loadJobs()
   }, [loadJobs, hasResetToken])
 
+  useEffect(() => {
+    if (foregroundRevision && !hasResetToken && appState !== 'unauthenticated')
+      loadJobs()
+  }, [foregroundRevision, hasResetToken, appState, loadJobs])
+
   const signedOut = appState === 'unauthenticated'
 
   // Identity lookup is independent of jobs: a hung jobs request must not delay
@@ -194,7 +229,8 @@ function AppContent() {
           setJobsLoadState('loading')
           setSelectedJob(null)
           setWorkshopData(null)
-          setView('workspace')
+          setView('bookHome')
+          setHome(null)
           setAppState('noJobs')
           loadJobs()
         } else {
@@ -222,12 +258,70 @@ function AppContent() {
     setJobsLoadState('loading')
     setSelectedJob(null)
     setWorkshopData(null)
-    setView('workspace')
+    setHome(null)
+    setView('bookHome')
     setCurrentUser(user)
     setAppState('noJobs')
     setSyncEnabled(true)
     setHasResetToken(false)
     loadJobs()
+  }
+
+  const onBookHome = view === 'bookHome'
+  useEffect(() => {
+    if (signedOut || hasResetToken) return
+    let active = true
+    const boundary = getCaptureSessionId(),
+      owner = getLocalOwnerId(),
+      key = owner ? 'job-book-capture-home:' + owner : null
+    if (key && !home) {
+      try {
+        const cached = localStorage.getItem(key)
+        if (cached) setHome(JSON.parse(cached) as CaptureHome)
+      } catch {
+        /* Cache is best effort. */
+      }
+    }
+    void getCaptureHome()
+      .then((fresh) => {
+        if (!active || boundary !== getCaptureSessionId()) return
+        setHome(fresh)
+        if (key) localStorage.setItem(key, JSON.stringify(fresh))
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+    // Local sync and explicit decisions refresh Home independently of job loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    signedOut,
+    hasResetToken,
+    capture.revision,
+    captureUpdate,
+    currentUser?.id,
+    foregroundRevision,
+    // Counts change elsewhere (checks, Workshop); refresh on each return Home.
+    onBookHome,
+  ])
+
+  async function openJobById(id: string, checks = false) {
+    const boundary = getCaptureSessionId()
+    try {
+      const job = jobs.find((j) => j.id === id) ?? (await getJob(id))
+      if (boundary !== getCaptureSessionId()) return
+      handleSelectJob(job)
+      if (checks) setView('reviewQueue')
+    } catch {
+      setErrorMsg('Could not open that job. Try again when there’s signal.')
+    }
+  }
+  function registerJob(job: Job) {
+    setJobs((previous) => {
+      const next = [job, ...previous.filter((j) => j.id !== job.id)]
+      localStorage.setItem(CACHED_JOBS_KEY, JSON.stringify(next))
+      return next
+    })
   }
 
   // Workshop is availability memory changed from two places — the Workshop page
@@ -357,60 +451,105 @@ function AppContent() {
       )}
       <AuxiliaryCaptureControls
         workspaceVisible={workspaceVisible}
-        allowIdle={!selectedJob}
+        allowIdle={false}
       />
+      {capture.message && (
+        <div className="capture-neutral" role="status">
+          <p>{capture.message}</p>
+          <button
+            className="capture-link"
+            type="button"
+            onClick={() => capture.setMessage('')}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      {capture.photoError && (
+        <p className="capture-neutral" role="alert">
+          {capture.photoError}
+        </p>
+      )}
       {renderScreen()}
+      <input
+        id="capture-home-photo"
+        type="file"
+        accept="image/*"
+        className="capture-hidden-input"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) void capture.pickPhoto(file)
+        }}
+      />
+      <CaptureFlow
+        jobs={jobs}
+        home={home}
+        online={online}
+        onJobAdded={registerJob}
+        onOpenJob={(id) => {
+          void openJobById(id)
+        }}
+        onOpenChecks={(id) => {
+          void openJobById(id, true)
+        }}
+      />
+      {newJobOpen && (
+        <NewJobSheet
+          online={online}
+          onClose={() => setNewJobOpen(false)}
+          onAdded={(job) => {
+            registerJob(job)
+            setNewJobOpen(false)
+            handleSelectJob(job, 'created')
+          }}
+        />
+      )}
     </>
   )
 
   function renderScreen() {
-    if (!selectedJob && view === 'workspace') {
+    if (view === 'bookHome' || (!selectedJob && view === 'workspace')) {
+      const unfiledNotes = local.notes.filter((n) => n.jobId === null),
+        unfiledPhotos = local.photos.filter((p) => p.jobId === null)
+      const localUnfiled =
+        unfiledNotes.filter((n) => !n.serverNoteId).length +
+        unfiledPhotos.filter((p) => !p.serverPhotoId).length
+      const localUploadedUnfiled =
+        unfiledNotes.filter((n) => !!n.serverNoteId).length +
+        unfiledPhotos.filter((p) => !!p.serverPhotoId).length
       return (
-        <>
-          {/* Internal accounts often have no jobs of their own — keep the
-            Support entry reachable from the first-job screen too. */}
-          {currentUser?.role === 'INTERNAL' && (
-            <div className="support-entry-bar">
-              <a className="btn-support-entry" href="/internal/support">
-                Founder support ›
-              </a>
-            </div>
-          )}
-          {/* An empty book still opens on All Jobs rather than a special
-          first-run screen: it already carries the one route that matters
-          (New job), and it is the same page Mike will use ever after. */}
-          {jobsLoadState !== 'ready' ? (
-            <div className="app-loading">
-              <p role="status">
-                {jobsLoadState === 'loading'
-                  ? 'Loading your jobs…'
-                  : 'Your jobs aren’t available yet.'}
-              </p>
-            </div>
-          ) : (
-            <AllJobsScreen
-              jobs={[]}
-              online={online}
-              hideBack={true}
-              onOpenJob={handleSelectJob}
-              onJobAdded={handleJobAdded}
-              onBack={() => {}}
-            />
-          )}
-        </>
-      )
-    }
-
-    if (view === 'bookHome') {
-      return (
-        <BookHomeScreen
+        <HomeScreen
+          supported={capture.supported}
+          permissionError={capture.recorder.permissionError}
           jobs={jobs}
-          workshop={workshopData?.bookHome ?? null}
+          home={home}
+          known={jobsLoadState === 'ready' || !!home}
+          online={online}
+          onRecord={() => {
+            void capture.record({ jobId: null, title: null })
+          }}
+          recording={capture.recorder.state !== 'idle'}
+          recordingTitle={capture.recordingTitle}
+          onPhoto={() => document.getElementById('capture-home-photo')?.click()}
+          onOpenJob={(id) => {
+            void openJobById(id)
+          }}
           onOpenAllJobs={() => setView('allJobs')}
-          onOpenWorkshop={openWorkshop}
+          onNewJob={() => setNewJobOpen(true)}
+          onOpenUnfiled={() => setView('unfiled')}
+          onWorkshop={openWorkshop}
+          onLogout={() => {
+            void handleLogout()
+          }}
+          user={currentUser}
+          localUnfiled={localUnfiled}
+          localUploadedUnfiled={localUploadedUnfiled}
         />
       )
     }
+    if (view === 'unfiled')
+      return <UnfiledScreen onBack={() => setView('bookHome')} />
 
     if (view === 'workshop') {
       return (

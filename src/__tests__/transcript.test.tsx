@@ -2,22 +2,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import CurrentJobWorkspace from '../CurrentJobWorkspace'
 import { saveNote } from '../db'
-import { getJobNoteStatuses, getNoteTranscript, getDraftFacts, getReviewQueue } from '../api'
+import {
+  getJobNoteStatuses,
+  getNoteTranscript,
+  getDraftFacts,
+  getReviewQueue,
+} from '../api'
 import { makeNote } from './helpers'
 import type { UseRecorderReturn } from '../useRecorder'
 
-vi.mock('../api', () => ({
+vi.mock('../api', async (original) => ({
+  ...(await original<typeof import('../api')>()),
   getCurrentJob: vi.fn(),
   uploadNote: vi.fn(),
   getJobNoteStatuses: vi.fn(),
   getNoteTranscript: vi.fn(),
   getDraftFacts: vi.fn(() => Promise.resolve([])),
   getReviewQueue: vi.fn(),
-  getMemoryView: vi.fn(() => Promise.resolve({ job: { id: 'job-test-001' }, generatedAt: '', sections: [], hours: { totalHours: '0', people: [], days: [] }, stillToCheck: { count: 0, items: [] } })),
+  getMemoryView: vi.fn(() =>
+    Promise.resolve({
+      job: { id: 'job-test-001' },
+      generatedAt: '',
+      sections: [],
+      hours: { totalHours: '0', people: [], days: [] },
+      stillToCheck: { count: 0, items: [] },
+    }),
+  ),
   getBudgetSummary: vi.fn(() => Promise.reject(new Error('no budget'))),
-  getJobLog: vi.fn(() => Promise.resolve({entries:[]})),
-    getJobPhotos: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', photos: [] })),
-  getJobReceipts: vi.fn(() => Promise.resolve({ jobId: 'job-test-001', receipts: [] })),
+  getJobLog: vi.fn(() => Promise.resolve({ entries: [] })),
+  getJobPhotos: vi.fn(() =>
+    Promise.resolve({ jobId: 'job-test-001', photos: [] }),
+  ),
+  getJobReceipts: vi.fn(() =>
+    Promise.resolve({ jobId: 'job-test-001', receipts: [] }),
+  ),
 }))
 
 vi.mock('../useRecorder', () => {
@@ -36,7 +54,9 @@ vi.mock('../useRecorder', () => {
   }
 })
 
-vi.mock('../useSync', () => ({ useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }) }))
+vi.mock('../useSync', () => ({
+  useSync: () => ({ syncAll: vi.fn(), retryNote: vi.fn() }),
+}))
 
 const JOB = {
   id: 'job-test-001',
@@ -56,18 +76,29 @@ describe('transcript visibility', () => {
   beforeEach(() => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     mockGetDraftFacts.mockResolvedValue([])
-    vi.mocked(getReviewQueue).mockResolvedValue({ jobId: 'job-test-001', generatedAt: '', sections: [], alreadyRemembered: [] })
+    vi.mocked(getReviewQueue).mockResolvedValue({
+      jobId: 'job-test-001',
+      generatedAt: '',
+      sections: [],
+      alreadyRemembered: [],
+    })
   })
 
   it('shows Show transcript toggle when transcript is ready, hides text by default', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-001',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-001',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-001',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'ready', extractionStatus: null },
+      },
+    ])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-001',
       status: 'ready',
@@ -75,23 +106,40 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /show transcript/i }),
+      ).toBeInTheDocument()
     })
-    expect(screen.queryByText('Two bags of sand and one tonne of gravel.')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Two bags of sand and one tonne of gravel.'),
+    ).not.toBeInTheDocument()
   })
 
   it('reveals transcript text on Show transcript click', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001b' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-001b',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-001b',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-001b',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'ready', extractionStatus: null },
+      },
+    ])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-001b',
       status: 'ready',
@@ -99,23 +147,42 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
-    await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
+    await waitFor(() =>
+      screen.getByRole('button', { name: /show transcript/i }),
+    )
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
-    expect(screen.getByText('Two bags of sand and one tonne of gravel.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /hide transcript/i })).toBeInTheDocument()
+    expect(
+      screen.getByText('Two bags of sand and one tonne of gravel.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /hide transcript/i }),
+    ).toBeInTheDocument()
   })
 
   it('collapses transcript again on Hide transcript click', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-001c' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-001c',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-001c',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-001c',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'ready', extractionStatus: null },
+      },
+    ])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-001c',
       status: 'ready',
@@ -123,25 +190,49 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
-    await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
+    await waitFor(() =>
+      screen.getByRole('button', { name: /show transcript/i }),
+    )
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
     fireEvent.click(screen.getByRole('button', { name: /hide transcript/i }))
-    expect(screen.queryByText('Two bags of sand and one tonne of gravel.')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Two bags of sand and one tonne of gravel.'),
+    ).not.toBeInTheDocument()
   })
 
   it('fetches text via the individual endpoint only for ready/failed, not for waiting', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-002' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-002',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-002',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'waiting', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-002',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'waiting', extractionStatus: null },
+      },
+    ])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
       expect(screen.getByText(/waiting for transcript/i)).toBeInTheDocument()
@@ -152,16 +243,29 @@ describe('transcript visibility', () => {
   })
 
   it('fetches text via the individual endpoint only for ready/failed, not for transcribing', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-003' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-003',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-003',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'transcribing', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-003',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'transcribing', extractionStatus: null },
+      },
+    ])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
       expect(screen.getByText(/transcribing/i)).toBeInTheDocument()
@@ -171,14 +275,20 @@ describe('transcript visibility', () => {
   })
 
   it('shows transcription failed without implying the recording was lost', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-004' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-004',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-004',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'failed', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-004',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'failed', extractionStatus: null },
+      },
+    ])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-004',
       status: 'failed',
@@ -186,7 +296,14 @@ describe('transcript visibility', () => {
       errorCode: 'PROVIDER_ERROR',
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
       expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
@@ -205,10 +322,19 @@ describe('transcript visibility', () => {
     })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /show transcript/i }),
+      ).toBeInTheDocument()
     })
     expect(screen.queryByText(/confirmed memory/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/trusted memory/i)).not.toBeInTheDocument()
@@ -225,59 +351,110 @@ describe('transcript visibility', () => {
     })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /show transcript/i }),
+      ).toBeInTheDocument()
     })
-    expect(screen.queryByText('Cached transcript text.')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Cached transcript text.'),
+    ).not.toBeInTheDocument()
     expect(mockGetStatuses).not.toHaveBeenCalled()
     expect(mockGetTranscript).not.toHaveBeenCalled()
   })
 
   it('does not show a transcript section for notes not yet uploaded', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'saved_local', serverNoteId: null })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'saved_local',
+      serverNoteId: null,
+    })
     await saveNote(note)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
-      expect(screen.getByText(/saved on phone/i)).toBeInTheDocument()
+      expect(screen.getByText(/saved on (?:this )?phone/i)).toBeInTheDocument()
     })
     expect(screen.queryByText(/what the system heard/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/waiting for transcript/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/waiting for transcript/i),
+    ).not.toBeInTheDocument()
   })
 
   it('does not poll when all notes already have a final transcript status', async () => {
     const ready = makeNote({
-      jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-007',
-      transcriptStatus: 'ready', transcriptText: 'Done.', extractionStatus: 'ready',
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-007',
+      transcriptStatus: 'ready',
+      transcriptText: 'Done.',
+      extractionStatus: 'ready',
     })
     const failed = makeNote({
-      jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-008',
-      transcriptStatus: 'failed', extractionStatus: null,
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-008',
+      transcriptStatus: 'failed',
+      extractionStatus: null,
     })
     await saveNote(ready)
     await saveNote(failed)
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     // Both notes have final status; failed note always shows its message without a toggle
     await waitFor(() => {
       expect(screen.getByText(/transcription failed/i)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /show transcript/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /show transcript/i }),
+      ).toBeInTheDocument()
     })
     expect(mockGetStatuses).not.toHaveBeenCalled()
     expect(mockGetTranscript).not.toHaveBeenCalled()
   })
 
   it('polls the list endpoint with the correct jobId', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-009' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-009',
+    })
     await saveNote(note)
 
     mockGetStatuses.mockResolvedValue([])
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
     await waitFor(() => {
       expect(mockGetStatuses).toHaveBeenCalledWith(JOB.id)
@@ -287,14 +464,20 @@ describe('transcript visibility', () => {
   })
 
   it('matches server rows by id, not noteId', async () => {
-    const note = makeNote({ jobId: JOB.id, localState: 'uploaded', serverNoteId: 'srv-010' })
+    const note = makeNote({
+      jobId: JOB.id,
+      localState: 'uploaded',
+      serverNoteId: 'srv-010',
+    })
     await saveNote(note)
 
-    mockGetStatuses.mockResolvedValue([{
-      id: 'srv-010',
-      clientNoteId: note.clientNoteId,
-      transcript: { status: 'ready', extractionStatus: null },
-    }])
+    mockGetStatuses.mockResolvedValue([
+      {
+        id: 'srv-010',
+        clientNoteId: note.clientNoteId,
+        transcript: { status: 'ready', extractionStatus: null },
+      },
+    ])
     mockGetTranscript.mockResolvedValue({
       noteId: 'srv-010',
       status: 'ready',
@@ -302,9 +485,18 @@ describe('transcript visibility', () => {
       errorCode: null,
     })
 
-    render(<CurrentJobWorkspace job={JOB} onOpenReviewQueue={() => {}} onOpenBookHome={() => {}} />)
+    render(
+      <CurrentJobWorkspace
+        job={JOB}
+        onOpenReviewQueue={() => {}}
+        onOpenBookHome={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Job log' }))
 
-    await waitFor(() => screen.getByRole('button', { name: /show transcript/i }))
+    await waitFor(() =>
+      screen.getByRole('button', { name: /show transcript/i }),
+    )
     fireEvent.click(screen.getByRole('button', { name: /show transcript/i }))
     expect(screen.getByText('Matched by id.')).toBeInTheDocument()
   })

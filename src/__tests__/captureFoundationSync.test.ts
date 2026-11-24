@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import * as db from '../db'
 import { useSync } from '../useSync'
-import { uploadNote } from '../api'
+import { uploadNote, uploadCaptureNote } from '../api'
 import { ApiError } from '../api/client'
 import {
   beginSignedInSession,
@@ -12,7 +12,23 @@ import {
   getCaptureSessionId,
 } from '../localOwner'
 import { makeNote } from './helpers'
-vi.mock('../api', () => ({ uploadNote: vi.fn() }))
+import { track } from '../analytics'
+vi.mock('../analytics', async (original) => ({
+  ...(await original<typeof import('../analytics')>()),
+  track: vi.fn(),
+}))
+vi.mock('../api', () => ({
+  uploadNote: vi.fn(),
+  uploadCaptureNote: vi.fn(async (n) => ({
+    id: 'server-' + n.clientNoteId,
+    clientNoteId: n.clientNoteId,
+    jobId: n.jobId,
+    filedAt: null,
+    captureContext: 'home',
+    serverStatus: 'UPLOADED',
+  })),
+  fileCaptureNote: vi.fn(),
+}))
 beforeEach(() => {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
 })
@@ -61,16 +77,16 @@ it('rereads after upload and preserves a concurrent job choice with the server i
     'server-' + note.clientNoteId,
   )
 })
-it('holds a null-job capture locally in PR 1, never uploading to a /null job', async () => {
+it('uploads an owned null-job capture through the new unfiled route', async () => {
   beginSignedInSession('a')
   await db.saveNote(makeNote({ ...captureIdentity(), jobId: null }))
   vi.mocked(uploadNote).mockImplementation(async (n) => success(n))
   renderHook(() => useSync(vi.fn()))
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 30))
+  await waitFor(async () => {
+    expect((await db.getAllNotes())[0].localState).toBe('uploaded')
   })
   expect(uploadNote).not.toHaveBeenCalled()
-  expect((await db.getAllNotes())[0].localState).toBe('saved_local')
+  expect(uploadCaptureNote).toHaveBeenCalledOnce()
 })
 it('does not upload or reset another account’s pending recordings', async () => {
   beginSignedInSession('a')
@@ -111,8 +127,8 @@ it('starts syncing same-session captures once a successful user lookup stamps th
     establishLocalOwner('a', session)
     await db.stampUnownedCaptures('a', session)
   })
-  await waitFor(() => expect(uploadNote).toHaveBeenCalledOnce())
-  expect(vi.mocked(uploadNote).mock.calls[0][0].ownerUserId).toBe('a')
+  await waitFor(() => expect(uploadCaptureNote).toHaveBeenCalledOnce())
+  expect(vi.mocked(uploadCaptureNote).mock.calls[0][0].ownerUserId).toBe('a')
 })
 it('syncs on foreground return without needing a job screen or a new online event', async () => {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
@@ -161,5 +177,19 @@ it('lists and uploads an ownerless job recording from any earlier boundary throu
   expect(vi.mocked(uploadNote).mock.calls[0][0].ownerUserId).toBeNull()
   await waitFor(async () =>
     expect((await db.getAllNotes())[0].localState).toBe('uploaded'),
+  )
+})
+
+it('reports upload analytics for ownerless job recordings too', async () => {
+  clearLocalOwner()
+  const note = makeNote({ ...captureIdentity(), jobId: 'job-1' })
+  await db.saveNote(note)
+  vi.mocked(uploadNote).mockImplementation(async (n) => success(n))
+  vi.mocked(track).mockClear()
+  renderHook(() => useSync(vi.fn()))
+  await waitFor(() =>
+    expect(vi.mocked(track).mock.calls.map((c) => c[0])).toEqual(
+      expect.arrayContaining(['note_upload_started', 'note_upload_succeeded']),
+    ),
   )
 })

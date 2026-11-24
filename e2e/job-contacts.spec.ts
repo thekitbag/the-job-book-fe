@@ -1,3 +1,4 @@
+import { openPilotJob } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
 
 // 390×844, VITE_USE_MOCK_API=true — Job details: site address + job contacts.
@@ -10,7 +11,7 @@ import { test, expect, type Page } from '@playwright/test'
 // than automatic actions, and job home never grows a Contacts card.
 
 async function gotoApp(page: Page) {
-  await page.goto('/')
+  await openPilotJob(page)
   const explainer = page.getByRole('button', { name: /got it/i })
   if (await explainer.isVisible().catch(() => false)) await explainer.click()
   const passcode = page.getByLabel(/passcode/i)

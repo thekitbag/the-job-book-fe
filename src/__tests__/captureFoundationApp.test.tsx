@@ -22,6 +22,23 @@ vi.mock('../useRecorder', () => ({
 vi.mock('../api', async (original) => ({
   ...(await original<typeof api>()),
   getJobs: vi.fn(),
+  getCaptureHome: vi.fn(() => new Promise(() => {})),
+  uploadCaptureNote: vi.fn(async (n) => ({
+    id: 'server-id',
+    clientNoteId: n.clientNoteId,
+    jobId: n.jobId,
+    filedAt: 'now',
+    captureContext: 'job',
+    serverStatus: 'UPLOADED',
+  })),
+  getCaptureDraft: vi.fn(async () => ({
+    noteId: 'server-id',
+    jobId: JOB.id,
+    state: 'extracting',
+    transcriptText: null,
+    items: [],
+    moreToCheckCount: 0,
+  })),
   getCurrentUser: vi.fn(async () => ({
     id: 'builder-a',
     name: 'Mike',
@@ -122,6 +139,7 @@ it('shows a failed save and retains the exact blob for retry across screen navig
     new DOMException('Full', 'QuotaExceededError'),
   )
   render(<App />)
+  fireEvent.click(await screen.findByRole('button', { name: /^Garden Room/ }))
   await screen.findByRole('heading', { name: JOB.title })
   fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
   await waitFor(() => expect(recorder.complete).toBeTruthy())
@@ -149,9 +167,7 @@ it('keeps a 401 as sign-in and clears the cached owner', async () => {
     new api.ApiError('Unauthenticated', 401),
   )
   render(<App />)
-  expect(
-    await screen.findByRole('heading', { name: /the job book/i }),
-  ).toBeVisible()
+  expect(await screen.findByRole('form', { name: /Log in/i })).toBeVisible()
   await waitFor(() =>
     expect(localStorage.getItem('job-book-owner-user-id')).toBeNull(),
   )
@@ -162,16 +178,17 @@ it('keeps a 401 as sign-in and clears the cached owner', async () => {
 
 it('does not reopen an acknowledged save when returning to the job', async () => {
   render(<App />)
+  fireEvent.click(await screen.findByRole('button', { name: /^Garden Room/ }))
   await screen.findByRole('heading', { name: JOB.title })
   fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
   await waitFor(() => expect(recorder.complete).toBeTruthy())
   await act(async () => {
     await recorder.complete!(result)
   })
-  await screen.findByRole('dialog', { name: 'Recording saved' })
+  await screen.findByText('Saved to Garden Room')
   fireEvent.click(screen.getByRole('button', { name: 'Done' }))
   fireEvent.click(screen.getByRole('button', { name: /the job book/i }))
-  fireEvent.click(await screen.findByRole('button', { name: /^jobs/i }))
+  fireEvent.click(await screen.findByRole('button', { name: /Other jobs/ }))
   fireEvent.click(screen.getByRole('button', { name: /garden room/i }))
   await screen.findByRole('heading', { name: JOB.title })
   expect(
@@ -197,8 +214,6 @@ it('keeps Record available without presenting pending jobs as an empty book', as
   fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
   await waitFor(() => expect(recorder.start).toHaveBeenCalledOnce())
   await act(async () => finish([]))
-  expect(
-    await screen.findByRole('heading', { name: /^All jobs/ }),
-  ).toBeVisible()
+  expect(await screen.findByRole('button', { name: 'New job' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'New job' })).toBeVisible()
 })

@@ -49,6 +49,10 @@ export default function RecordingControls({
         </button>
       ) : (
         <div className="ws-recording-active">
+          <div className="capture-recording-destination">
+            <strong>Recording</strong>
+            <span>{jobTitle ? `to ${jobTitle}` : 'Not filed yet'}</span>
+          </div>
           <span className="ws-rec-dot" aria-hidden="true" />
           <span
             className="ws-rec-elapsed"

@@ -79,7 +79,9 @@ describe('analytics init gating', () => {
       logs: { captureConsoleLogs: false },
     })
     // URL auto-properties are sanitized so the reset-token query string never leaves the app
-    expect((config as { sanitize_properties?: unknown }).sanitize_properties).toBe(stripUrlQueryStrings)
+    expect(
+      (config as { sanitize_properties?: unknown }).sanitize_properties,
+    ).toBe(stripUrlQueryStrings)
   })
 
   it('stripUrlQueryStrings removes the reset token from URL-shaped auto properties', () => {
@@ -114,14 +116,25 @@ describe('identify and reset', () => {
   it('identifies with user id and role only — never email or name', () => {
     identifyAnalyticsUser({ id: 'user-123', role: 'PILOT' })
     expect(posthog.identify).toHaveBeenCalledWith('user-123', { role: 'PILOT' })
-    const props = vi.mocked(posthog.identify).mock.calls[0][1] as Record<string, unknown>
+    const props = vi.mocked(posthog.identify).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
     expect(Object.keys(props)).toEqual(['role'])
   })
 
   it('identify ignores extra fields on the user object', () => {
-    const user = { id: 'user-123', role: 'INTERNAL', email: 'mike@example.com', name: 'Mike' }
+    const user = {
+      id: 'user-123',
+      role: 'INTERNAL',
+      email: 'mike@example.com',
+      name: 'Mike',
+    }
     identifyAnalyticsUser(user as never)
-    const props = vi.mocked(posthog.identify).mock.calls[0][1] as Record<string, unknown>
+    const props = vi.mocked(posthog.identify).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
     expect(props).toEqual({ role: 'INTERNAL' })
   })
 
@@ -175,7 +188,9 @@ describe('track sanitization', () => {
       roughLocationOrLabel: 'Mrs Patel - back garden',
       customerName: 'Mrs Patel',
     })
-    expect(posthog.capture).toHaveBeenCalledWith('job_created', { job_id: 'j1' })
+    expect(posthog.capture).toHaveBeenCalledWith('job_created', {
+      job_id: 'j1',
+    })
   })
 
   it('drops non-primitive values and long or email-like strings even under safe keys', () => {
@@ -212,16 +227,25 @@ describe('sanitizeProperties directly', () => {
   })
 
   it('keeps null, numbers, and booleans', () => {
-    expect(sanitizeProperties({ a: null, b: 3, c: true })).toEqual({ a: null, b: 3, c: true })
+    expect(sanitizeProperties({ a: null, b: 3, c: true })).toEqual({
+      a: null,
+      b: 3,
+      c: true,
+    })
   })
 
   // Presence flags (job contacts: has_phone / has_email) are the whole point of
   // the event, and a boolean cannot carry content whatever its key says. A
   // string under the same key is still dropped.
   it('keeps booleans under blocked keys but never strings', () => {
-    expect(sanitizeProperties({
-      has_phone: true, has_email: false, phone: '07700 900118', email: 'mike@example.com',
-    })).toEqual({ has_phone: true, has_email: false })
+    expect(
+      sanitizeProperties({
+        has_phone: true,
+        has_email: false,
+        phone: '07700 900118',
+        email: 'mike@example.com',
+      }),
+    ).toEqual({ has_phone: true, has_email: false })
   })
 })
 
@@ -251,8 +275,18 @@ describe('bucket helpers', () => {
   it('safeErrorKind passes CODE_LIKE tokens and collapses free text', () => {
     expect(safeErrorKind('HTTP_500')).toBe('HTTP_500')
     expect(safeErrorKind('UPLOAD_FAILED')).toBe('UPLOAD_FAILED')
-    expect(safeErrorKind('Failed to fetch: https://api/x?token=abc')).toBe('UNKNOWN')
+    expect(safeErrorKind('Failed to fetch: https://api/x?token=abc')).toBe(
+      'UNKNOWN',
+    )
     expect(safeErrorKind(null)).toBe('UNKNOWN')
     expect(safeErrorKind(undefined)).toBe('UNKNOWN')
   })
+})
+
+it('keeps only the approved capture context enums despite the free-text blocklist', () => {
+  expect(sanitizeProperties({ context: 'home' })).toEqual({ context: 'home' })
+  expect(sanitizeProperties({ context: 'job' })).toEqual({ context: 'job' })
+  expect(sanitizeProperties({ context: 'private transcript words' })).toEqual(
+    {},
+  )
 })
